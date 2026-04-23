@@ -644,7 +644,7 @@ function mission!(pari, parg, parm, para, pare, Ldebug)#, iairf, initeng, ipc1)
 
       # Descent
       ## Dual Fuel Injection Modification #1
-      flagDualFuel = true
+      flagDualFuel = false
       if (flagDualFuel)
             print("Dual fuel activated")
             baseFuel = pari[iifuel]*1
@@ -838,23 +838,16 @@ function mission!(pari, parg, parm, para, pare, Ldebug)#, iairf, initeng, ipc1)
       end
       ## Dual Fuel Injection Modification Over #2
 
-      # mission fuel fractions and weights
-      fracWa = para[iafracW, ipclimb1]
-      fracWe = para[iafracW, ipdescentn]
-      freserve = parg[igfreserve]
-      fburn = fracWa - fracWe
-      ffuel = fburn * (1.0 + freserve)
-      Wfuel = WMTO * ffuel
-      WTO = Wzero + Wfuel
-
-      parm[imWTO] = WTO
-      parm[imWfuel] = Wfuel
-
       # mission PFEI
-      Wburn = WMTO * fburn
-      parm[imPFEI] = Wburn/gee * pare[iehfuel, ipcruise1] / (parm[imWpay] * parm[imRange])
-
-
+      energyFlight = 0 #Total flight fuel energy (Piecewise integration with heating value)
+      for ip = 1:(ipdescentn-1)
+            energyFlight += 0.5*(pare[iehfuel, ip]+pare[iehfuel, ip+1])*
+            (para[iafracW, ip]-para[iafracW, ip+1])*WMTO/gee
+      end
+      parm[imPFEI] = energyFlight/(parm[imWpay] * parm[imRange])
+      # mission fuel weight and total takeoff weight
+      parm[imWfuel] = WMTO * (para[iafracW, 1]-para[iafracW, ipdescentn]) * (1.0+parg[igfreserve])
+      parm[imWTO] = Wzero + parm[imWfuel]
 
       return t_prop
 end

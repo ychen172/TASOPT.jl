@@ -34,11 +34,11 @@ end
 # 2) Include input file for desired aircraft/
 nameAircraftModel = "../src/IO/experiment_input_1500.toml"
 ac = read_aircraft_model(nameAircraftModel) # MODIFY <path> appropriately
-saveName = savedir*"EthaJet3000"
-x = [11.767524327190367, 28084.037784162752, 0.5818414565848145, 27.700212481634704, 0.9300673536492501, 0.107470417949662, 0.14761018071108312, 0.12914782388715706, 1.0792445068013392, 0.9980608775454582, 1797.21150483555, 14.989353182560986, 1.8997543951239186]
+saveName = savedir*"Ethanol3000"
+x = [11.972782021599212, 26855.31676655534, 0.5897546909709177, 27.934121648805956, 0.9083625579263621, 0.10038536693707056, 0.148118228816289, 0.133653028913655, 1.1045845807165509, 0.9991970828125056, 1763.2463808321709, 14.991966665820446, 1.8797278394132353]
 # 2.5) Change fuel type
-ac.pari[iifuel] = 322429 #(JetA:25 Ethanol:32 JetAEtha29%Blend: 322429 JetAEtha71%Blend: 322471)
-ac.parg[igrhofuel] = 805.649 #(JetA:817.0 Ethanol:789.0 JetAEtha29%Blend: 805.649 JetAEtha71%Blend: 794.504)
+ac.pari[iifuel] = 32 #(JetA:25 Ethanol:32 JetAEtha29%Blend: 322429 JetAEtha71%Blend: 322471)
+ac.parg[igrhofuel] = 789.0 #(JetA:817.0 Ethanol:789.0 JetAEtha29%Blend: 805.649 JetAEtha71%Blend: 794.504)
 # 3) Set the parameters based on optimization result
 ac.parg[igAR] = x[1] # Aspect Ratio 
 ac.para[iaalt, ipcruise1, :] .=  x[2] * ft_to_m # Cruise Altitude
