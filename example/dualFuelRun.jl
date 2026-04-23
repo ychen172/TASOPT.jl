@@ -62,10 +62,11 @@ parmDes = ac.parm[:,1]
 paraDes = ac.para[:,:,1]
 pareDes = ac.pare[:,:,1]
 # 4) Offdesign Ranges
-rangesOff = [2444.0, 3000.0, 1500.0]*1852.0 #Offdesign range [m]
+rangesOff = [2444.0, 500.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0]*1852.0 #Offdesign range [m]
 parmOffDes = Any[]
 paraOffDes = Any[]
 pareOffDes = Any[]
+# This data is collected for sanity check as this object should stay unaltered during offdesign
 for idxOff=1:length(rangesOff)
     ac.parm[imRange, 2] = rangesOff[idxOff]
     TASOPT.woper(ac, 2; itermax = 500, initeng = true, saveOffDesign = true)
@@ -73,6 +74,9 @@ for idxOff=1:length(rangesOff)
     push!(paraOffDes, ac.para[:,:,2])
     push!(pareOffDes, ac.pare[:,:,2])
 end
+pargOffDes = ac.parg
+println("Offdesign does not alter airplane design: ",isequal(pargDes, pargOffDes))
+println("Offdesign does not alter parameters of airplane design: ",pargDes==pargOffDes)
 
 # 4) Collect data for designed missions
 PFEIRec       = [parmDes[imPFEI]] #PFEI (J/J)
@@ -99,7 +103,7 @@ numEngine     = [pargDes[igneng]] #Number of engine
 WEngine       = [pargDes[igWeng]/(gee*1000.0)/pargDes[igneng]] #[Ton]Total Engine Weight for each engine
 #
 FnTotCRRec    = [pareDes[ieFe,ipcruise1]] #Cruise Thrust (N)
-TSFC0         = [pareDes[ieTSFC,ipstatic]*3600.0] #Starting TSFC [1/hr]
+TSFC0         = [pareDes[ieTSFC,ipclimb1]*3600.0] #Starting TSFC [1/hr]
 #
 WEmpRec       = [WMTORec - WFuelRec - WPayRec] #Empty weight (Ton)
 EFuelRec      = [PFEIRec.*WPayRec.*gee.*RanRec.*nmi_to_m.*1000.0] #Joul
@@ -134,6 +138,9 @@ if length(pareOffDes)>0
     phases  = phases[maskRep]
     print("Reported Phases Are:", phases,"\n")
 
+    #Create container to collect missions level information
+    RangeCal = Float64[] #From TASOPT
+    RangeEst = Float64[] #Use Bréguet range equation
     for im = 1:length(pareOffDes)
         #Aero data
         timeOptMiss = paraOffDes[im][iatime,maskRep]  #second
@@ -141,9 +148,11 @@ if length(pareOffDes)>0
         altOptMiss  = paraOffDes[im][iaalt,maskRep]   #meter
         machOptMiss = paraOffDes[im][iaMach,maskRep]
         weiOptMiss  = paraOffDes[im][iafracW,maskRep]*(parmOffDes[im][imWTO]/gee) #kg
+        fracFuelWeightMiss = paraOffDes[im][iafracW,maskRep] #Fractional fuel weight over total weight
         gamOptMiss  = paraOffDes[im][iagamV,maskRep]./deg_to_rad #deg
         LDROptMiss  = paraOffDes[im][iaCL,maskRep]./paraOffDes[im][iaCD,maskRep] #Lift to drag ratio
         #Engine data
+        velOptMiss   = pareOffDes[im][ieu0,maskRep] #m/s flight velocity 
         hfOptMiss    = pareOffDes[im][iehfuel,maskRep] #J/kg equivalent heating value
         TfuelOptMiss = pareOffDes[im][ieTfuel,maskRep] #K fuel temperature
         Tt3OptMiss   = pareOffDes[im][ieTt3,maskRep] #K
@@ -158,12 +167,26 @@ if length(pareOffDes)>0
         # ffbMiss      = (CpaMiss.*(Tt4OptMiss.-Tt3OptMiss))./(hfOptMiss.*ac.pare[ieetab,maskRep,ip].-CpaMiss.*(Tt4OptMiss.-TfuelOptMiss))
         # mdot3OptMiss = mdotFuelMiss./ffbMiss #kg/s for each engines air flow into the combustor (exclude bypass cooling flow)
         #Print out data
-        output_ip = (Phase=phases,Time=timeOptMiss,Range=ranOptMiss,Altitude=altOptMiss,MachNumber=machOptMiss,Weight=weiOptMiss
+        missionOutput = (Phase=phases,Time=timeOptMiss,Range=ranOptMiss,Altitude=altOptMiss,MachNumber=machOptMiss,velFlight=velOptMiss,Weight=weiOptMiss
                     ,ClimbAngle=gamOptMiss,LiftDragRatio=LDROptMiss,HeatingValue=hfOptMiss,FuelTemp=TfuelOptMiss
                     ,Tt3=Tt3OptMiss,Pt3=Pt3OptMiss,Tt4=Tt4OptMiss,Pt4=Pt4OptMiss,Thrust=FnOptMiss,TSFC=TSFCMiss
-                    ,mdotFuel=mdotFuelMiss,mdot3=mdot3Miss)
-        CSV.write("$(saveName)MissDetail_Miss$(im).csv", output_ip; writeheader=true)
-        end
+                    ,mdotFuel=mdotFuelMiss,mdot3=mdot3Miss,fracFuelW=fracFuelWeightMiss)
+        CSV.write("$(saveName)MissDetail_Miss$(im).csv", missionOutput; writeheader=true)
+        
+        ## Use Bréguet range equation to estimate flight range
+        velHorCruise = 0.5 * (cos(paraOffDes[im][iagamV, ipcruise1])*pareOffDes[im][ieu0, ipcruise1] + 
+                        cos(paraOffDes[im][iagamV, ipcruise2])*pareOffDes[im][ieu0, ipcruise2]) #(m/s) Averaged cruise horizontal velocity
+        LDRatioCruise = 0.5 * (paraOffDes[im][iaCL, ipcruise1]/paraOffDes[im][iaCD, ipcruise1] + 
+                        paraOffDes[im][iaCL, ipcruise2]/paraOffDes[im][iaCD, ipcruise2]) #Lift Drag Ratio
+        TSFCCruise = 0.5 * (pareOffDes[im][ieTSFC, ipcruise1] + pareOffDes[im][ieTSFC, ipcruise2]) / gee #(kg/s/N)
+        WRatioIni2Fin = paraOffDes[im][iafracW,ipclimb1]/paraOffDes[im][iafracW,ipdescentn] #WIni/WFin
+        println("velHorCruise: $(velHorCruise), LDRatioCruise: $(LDRatioCruise), TSFCCruise: $(TSFCCruise), WRatioIni2Fin: $(WRatioIni2Fin)")
+        push!(RangeEst, ((velHorCruise*LDRatioCruise)/(gee*TSFCCruise))*log(WRatioIni2Fin)/nmi_to_m ) #nmi estimated range
+        push!(RangeCal, paraOffDes[im][iaRange,ipdescentn]/nmi_to_m)
+    end
+    errorRange = abs.(RangeEst.-RangeCal)./RangeCal
+    rangeCompare = (RangeCal=RangeCal,RangeEst=RangeEst,errorRange=errorRange)
+    CSV.write("$(saveName)Compare_range_Breguet.csv", rangeCompare; writeheader=true)
 end
 
 #Plot Plane

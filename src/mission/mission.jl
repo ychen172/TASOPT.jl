@@ -840,13 +840,13 @@ function mission!(pari, parg, parm, para, pare, Ldebug)#, iairf, initeng, ipc1)
 
       # mission PFEI
       energyFlight = 0 #Total flight fuel energy (Piecewise integration with heating value)
-      for ip = 1:(ipdescentn-1)
+      for ip = ipclimb1:(ipdescentn-1)
             energyFlight += 0.5*(pare[iehfuel, ip]+pare[iehfuel, ip+1])*
             (para[iafracW, ip]-para[iafracW, ip+1])*WMTO/gee
       end
       parm[imPFEI] = energyFlight/(parm[imWpay] * parm[imRange])
       # mission fuel weight and total takeoff weight
-      parm[imWfuel] = WMTO * (para[iafracW, 1]-para[iafracW, ipdescentn]) * (1.0+parg[igfreserve])
+      parm[imWfuel] = WMTO * (para[iafracW, ipclimb1]-para[iafracW, ipdescentn]) * (1.0+parg[igfreserve])
       parm[imWTO] = Wzero + parm[imWfuel]
 
       return t_prop
