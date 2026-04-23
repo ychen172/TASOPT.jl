@@ -33,67 +33,91 @@ if !isdir(savedir)
 end
 # 2) Include input file for desired aircraft/
 nameAircraftModel = "../src/IO/experiment_input_1500.toml"
-ac = read_aircraft_model(nameAircraftModel) # MODIFY <path> appropriately
+ac = read_aircraft_model(nameAircraftModel,nMissOverWrite=2) # MODIFY <path> appropriately
 saveName = savedir*"JetFuel2444"
 x = [12.0, 29036.283196079105, 0.5847390857049931, 27.536926874931076, 0.9455429779743656, 0.11162958807659483, 0.14804764447122798, 0.12667338569408848, 1.052751755460775, 0.9837147694563335, 1789.0037092463112, 14.995243338018897, 1.3567628966201042]
 # 2.5) Change fuel type
-ac.pari[iifuel] = 25 #(JetA:25 Ethanol:32 JetAEtha29%Blend: 322429 JetAEtha71%Blend: 322471)
+ac.pari[iifuel]    = 25 #(JetA:25 Ethanol:32 JetAEtha29%Blend: 322429 JetAEtha71%Blend: 322471)
 ac.parg[igrhofuel] = 817.0 #(JetA:817.0 Ethanol:789.0 JetAEtha29%Blend: 805.649 JetAEtha71%Blend: 794.504)
 # 3) Set the parameters based on optimization result
-ac.parg[igAR] = x[1] # Aspect Ratio 
-ac.para[iaalt, ipcruise1, :] .=  x[2] * ft_to_m # Cruise Altitude
-ac.para[iaCL, ipclimb1+1:ipdescentn-1, :] .= x[3] # CL
-ac.parg[igsweep] = x[4] # Wing sweep 
+ac.parm[imRange, :] .= 2444.0*1852.0 #Design range [m]
+ac.parg[igAR]      = x[1] # Aspect Ratio 
+ac.parg[igsweep]   = x[4] # Wing sweep 
 ac.parg[iglambdas] = x[5] #inner_panel_taper_ratio
 ac.parg[iglambdat] = x[6] #outer_panel_taper_ratio
-ac.parg[ighboxo] = x[7] #root_thickness_to_chord
-ac.parg[ighboxs] = x[8] #spanbreak_thickness_to_chord
+ac.parg[ighboxo]   = x[7] #root_thickness_to_chord
+ac.parg[ighboxs]   = x[8] #spanbreak_thickness_to_chord
+ac.para[iaalt, ipcruise1, :]                  .=  x[2] * ft_to_m # Cruise Altitude
+ac.para[iaCL, ipclimb1+1:ipdescentn-1, :]     .= x[3] # CL
 ac.para[iarcls, ipclimb1+1 : ipdescentn-1, :] .= x[9]   #  rcls    break/root cl ratio = cls/clo
 ac.para[iarclt, ipclimb1+1 : ipdescentn-1, :] .= x[10]   #  rclt    tip  /root cl ratio = clt/clo
-ac.pare[ieTt4, ipcruise1:ipcruise2, :] .= x[11] # Tt4
-ac.pare[iepihc, ipclimb1+1 : ipdescentn-1, :] .= x[12] # High Pressure Compressor Pressure Ratio
-ac.pare[iepif, ipclimbn, :] .= x[13] #Fan PR 
-ac.pare[iepilc, :, :] .= 3 # Low Pressure Compressure Pressure Ratio set to 3
-ac.parm[imRange, :] .= 2444*1852 #range [m]
+ac.pare[ieTt4, ipcruise1:ipcruise2, :]           .= x[11] # Tt4
+ac.pare[iepihc, ipclimb1+1 : ipdescentn-1, :]    .= x[12] # High Pressure Compressor Pressure Ratio
+ac.pare[iepif, ipclimbn, :]                      .= x[13] #Fan PR 
+ac.pare[iepilc, :, :]                            .= 3 # Low Pressure Compressure Pressure Ratio set to 3
 # 3) Size aircraft
 TASOPT.size_aircraft!(ac, iter =500, printiter=true)
-# 4) Collect data
-AltRec        = [x[2]] #ft
-RanRec        = [ac.parg[igRange]./1852.0] #nmi
-WMTORec       = [ac.parg[igWMTO]./(9.81*1000)] #Ton (metric)
-WFuelRec      = [ac.parg[igWfuel]./(9.81*1000)] #Ton (metric)
-WPayRec       = [ac.parg[igWpay]./(9.81*1000)] #Ton (metric)
-PFEIRec       = [ac.parm[imPFEI,1]] #(J/J)
-WTO_WTOmaxRec = [ac.parm[imWTO,1]/ac.parg[igWMTO]] #N/N
-Wf_WfmaxRec   = [ac.parg[igWfuel]/ac.parg[igWfmax]] #N/N
-areaWingRec   = [ac.parg[igS]] #m2
-ARWingRec     = [ac.parg[igAR]] #Aspect ratio
-spanWingRec   = [ac.parg[igb]] #m
-diaFanRec     = [ac.parg[igdfan]] #m
-FnTotCRRec    = [ac.pare[ieFe,ipcruise1,1]] #N
-WEmpRec       = [WMTORec - WFuelRec - WPayRec] # Ton Metric
-EFuelRec      = [PFEIRec.*WPayRec*1000*9.81.*RanRec*1852.0] #Joul
-SweepRec      = [ac.parg[igsweep]] #deg
-numPass       = [ac.parm[imWpay, 1]/ac.parm[imWperpax, 1]] #Number of passenger at the sizing mission
-weiPass       = [ac.parm[imWperpax, 1]/gee] #(kg)Weight of passenger at the sizing mission
-TempTakeoff   = [ac.parm[imT0TO, 1]] #Takeoff Temperature (K)
-WZero         = [(ac.parm[imWTO,1] - ac.parm[imWfuel,1])/(gee*1000.0)] #[Ton] zero Fuel weight at the sizing mission
-numEngine     = [ac.parg[igneng]] #Number of engine
-WEngine       = [ac.parg[igWeng]/(gee*1000.0)/ac.parg[igneng]] #[Ton]Total Engine Weight for each engine
-TSFC0         = [ac.pare[ieTSFC,1,1]*3600.0] #Starting TSFC [1/hr]
-## Add additional output on cargo bay fuel volume
-Wfmax = ac.parg[igWfmax]
-Wf    = ac.parg[igWfuel]
-# Compute the additional fuel tank volume available from the cargo bay
-AFuse = ac.parg[igAfuse] #fuselage crosssection area [m2]
-lShell = ac.parg[igxshell2]-ac.parg[igxshell1] #length of the cylindrical sector [m]
-WCargo = AFuse*0.45*lShell*ac.parg[igrhofuel]*9.81 #[N]
-# Finish additional fuel tank calculation
-if ((Wf-Wfmax)>0)
-    fCargoFuel = [(Wf - Wfmax)/WCargo] #Percentage volume taken in cargo space of fuel storage
-else
-    fCargoFuel = [0.0]
+pargDes = ac.parg #Independent of mission
+parmDes = ac.parm[:,1]
+paraDes = ac.para[:,:,1]
+pareDes = ac.pare[:,:,1]
+# 4) Offdesign Ranges
+rangesOff = [2444.0, 3000.0, 1500.0]*1852.0 #Offdesign range [m]
+parmOffDes = Any[]
+paraOffDes = Any[]
+pareOffDes = Any[]
+for idxOff=1:length(rangesOff)
+    ac.parm[imRange, 2] = rangesOff[idxOff]
+    TASOPT.woper(ac, 2; itermax = 500, initeng = true, saveOffDesign = true)
+    push!(parmOffDes, ac.parm[:,2])
+    push!(paraOffDes, ac.para[:,:,2])
+    push!(pareOffDes, ac.pare[:,:,2])
 end
+
+# 4) Collect data for designed missions
+PFEIRec       = [parmDes[imPFEI]] #PFEI (J/J)
+WTO_WTOmaxRec = [parmDes[imWTO]/pargDes[igWMTO]] #WTO/WMTO (N/N)
+numPass       = [parmDes[imWpay]/parmDes[imWperpax]] #Number of passenger at the sizing mission
+weiPass       = [parmDes[imWperpax]/gee] #Weight of passenger at the sizing mission (kg)
+TempTakeoff   = [parmDes[imT0TO]] #Takeoff Ambient Temperature (K)
+WZero         = [(parmDes[imWTO] - parmDes[imWfuel])/(gee*1000.0)] #Zero Fuel weight (Ton)
+#
+AltRec        = [paraDes[iaalt,ipcruise1]/0.3048] #Start of Cruise altitude ft
+#
+RanRec        = [pargDes[igRange]./nmi_to_m] #Range (nmi)
+WMTORec       = [pargDes[igWMTO]./(gee*1000)] #Maximum takeoff weight (Ton)
+WFuelRec      = [pargDes[igWfmax]./(gee*1000)] #Maximum fuel weight (Ton)
+Wf_WfmaxRec   = [pargDes[igWfuel]/pargDes[igWfmax]] #N/N
+WPayRec       = [pargDes[igWpay]./(gee*1000)] #Payload weight (Ton)
+areaWingRec   = [pargDes[igS]] #Total wing area (m2)
+ARWingRec     = [pargDes[igAR]] #Wing aspect ratio
+spanWingRec   = [pargDes[igb]] #Wing span (m)
+diaFanRec     = [pargDes[igdfan]] #Fan diameter (m)
+SweepRec      = [pargDes[igsweep]] #deg
+#
+numEngine     = [pargDes[igneng]] #Number of engine
+WEngine       = [pargDes[igWeng]/(gee*1000.0)/pargDes[igneng]] #[Ton]Total Engine Weight for each engine
+#
+FnTotCRRec    = [pareDes[ieFe,ipcruise1]] #Cruise Thrust (N)
+TSFC0         = [pareDes[ieTSFC,ipstatic]*3600.0] #Starting TSFC [1/hr]
+#
+WEmpRec       = [WMTORec - WFuelRec - WPayRec] #Empty weight (Ton)
+EFuelRec      = [PFEIRec.*WPayRec.*gee.*RanRec.*nmi_to_m.*1000.0] #Joul
+
+#### Calculate additional fuel tank information 
+    ## Add additional output on cargo bay fuel volume
+    Wfmax     = pargDes[igWfmax]
+    Wf        = pargDes[igWfuel]
+    # Compute the additional fuel tank volume available from the cargo bay
+    AFuse     = pargDes[igAfuse] #fuselage crosssection area [m2]
+    lShell    = pargDes[igxshell2] - pargDes[igxshell1] #length of the cylindrical sector [m]
+    WCargo    = AFuse*0.45*lShell*pargDes[igrhofuel]*gee #[N]
+    # Finish additional fuel tank calculation
+    if ((Wf-Wfmax)>0)
+        fCargoFuel = [(Wf - Wfmax)/WCargo] #Percentage volume taken in cargo space of fuel storage
+    else
+        fCargoFuel = [0.0]
+    end
 
 outputTup = (AltRec=AltRec,RanRec=RanRec,WMTORec=WMTORec,WFuelRec=WFuelRec
              ,WPayRec=WPayRec,PFEIRec=PFEIRec,WTO_WTOmaxRec=WTO_WTOmaxRec
@@ -102,42 +126,46 @@ outputTup = (AltRec=AltRec,RanRec=RanRec,WMTORec=WMTORec,WFuelRec=WFuelRec
              ,WEmpRec=WEmpRec,EFuelRec=EFuelRec,SweepRec=SweepRec,fCargoFuel=fCargoFuel
              ,numPass=numPass,weiPass=weiPass,TempTakeoff=TempTakeoff,WZero=WZero,numEngine=numEngine
              ,WEngine=WEngine,TSFC0=TSFC0)
-CSV.write(saveName*"MissDetail.csv",  outputTup, writeheader=true)
+CSV.write(saveName*"DesignMissDetails.csv",  outputTup, writeheader=true)
 ##Create a mask to mask out unreported phases
-maskRep = ac.pare[ieFe,:,1].>0 #Reported Phase has non zero thrust
-phases = ["ST","RO","TO","CB","B1","B2","B3","B4","B5","C1","C2","D1","D2","D3","D4","D5","Test"]
-phases = phases[maskRep]
-print("Reported Phases Are:", phases,"\n")
-##Read out other parameters
-###Aero Parameters
-timeOptMiss = ac.para[iatime,maskRep,1] #second
-ranOptMiss = ac.para[iaRange,maskRep,1] #meter
-altOptMiss = ac.para[iaalt,maskRep,1] #meter
-machOptMiss = ac.para[iaMach,maskRep,1]
-weiOptMiss = ac.para[iafracW,maskRep,1]*(ac.parm[imWTO,1]/9.81) #kg
-gamOptMiss = ac.para[iagamV,maskRep,1] #rad
-LDROptMiss = ac.para[iaCL,maskRep,1]./ac.para[iaCD,maskRep,1] #Lift to drag ratio
-###Engine Parameters
-hfOptMiss = ac.pare[iehfuel,maskRep,1] #J/kg equivalent heating value
-TfuelOptMiss = ac.pare[ieTfuel,maskRep,1] #K fuel temperature
-Tt3OptMiss = ac.pare[ieTt3,maskRep,1] #K
-Pt3OptMiss = ac.pare[iept3,maskRep,1] #Pa 
-Tt4OptMiss = ac.pare[ieTt4,maskRep,1] #K
-Pt4OptMiss = ac.pare[iept4,maskRep,1] #Pa
-FnOptMiss  = ac.pare[ieFe,maskRep,1] #N Total Thrust for each engines
-TSFCMiss   = ac.pare[ieTSFC,maskRep,1].*3600.0 #1/hr TSFC
-mdotFuelMiss = ac.pare[iemcore,maskRep,1].*ac.pare[ieff,maskRep,1] #kg/s for single engine
-mdot3Miss    = ac.pare[iemcore,maskRep,1].-ac.pare[iemofft,maskRep,1] #kg/s for single engine
-mdotfOptMiss = ac.pare[iemcore,maskRep,1].*ac.pare[ieff,maskRep,1] #kg/s for eacg engines
-Cpa = 0.5.*(ac.pare[iecpt3,maskRep,1].+ac.pare[iecpt4,maskRep,1])
-ffbMiss   = (Cpa.*(Tt4OptMiss.-Tt3OptMiss))./(hfOptMiss.*ac.pare[ieetab,maskRep,1].-Cpa.*(Tt4OptMiss.-TfuelOptMiss))
-mdot3OptMiss = mdotfOptMiss./ffbMiss #kg/s for each engines air flow into the combustor (exclude bypass cooling flow)
-#Output Additional Data at the optimal mission
-outputTup = (Phase=phases,Time=timeOptMiss,Range=ranOptMiss,Altitude=altOptMiss,MachNumber=machOptMiss,Weight=weiOptMiss
-            ,ClimbAngle=gamOptMiss,LiftDragRatio=LDROptMiss,HeatingValue=hfOptMiss,FuelTemp=TfuelOptMiss
-            ,Tt3=Tt3OptMiss,Pt3=Pt3OptMiss,Tt4=Tt4OptMiss,Pt4=Pt4OptMiss,Thrust=FnOptMiss,TSFC=TSFCMiss
-            ,mdotFuel=mdotfOptMiss,mdot3=mdot3OptMiss,mdotFuelV2=mdotFuelMiss,mdot3V2=mdot3Miss)
-CSV.write(saveName*"MissDetail2.csv",  outputTup, writeheader=true)
+if length(pareOffDes)>0
+    maskRep = pareOffDes[1][ieFe,:].>0 #Reported Phase has non zero thrust
+    phases  = ["ST","RO","TO","CB","B1","B2","B3","B4","B5","C1","C2","D1","D2","D3","D4","D5","Test"]
+    phases  = phases[maskRep]
+    print("Reported Phases Are:", phases,"\n")
+
+    for im = 1:length(pareOffDes)
+        #Aero data
+        timeOptMiss = paraOffDes[im][iatime,maskRep]  #second
+        ranOptMiss  = paraOffDes[im][iaRange,maskRep]./nmi_to_m #nmi
+        altOptMiss  = paraOffDes[im][iaalt,maskRep]   #meter
+        machOptMiss = paraOffDes[im][iaMach,maskRep]
+        weiOptMiss  = paraOffDes[im][iafracW,maskRep]*(parmOffDes[im][imWTO]/gee) #kg
+        gamOptMiss  = paraOffDes[im][iagamV,maskRep]./deg_to_rad #deg
+        LDROptMiss  = paraOffDes[im][iaCL,maskRep]./paraOffDes[im][iaCD,maskRep] #Lift to drag ratio
+        #Engine data
+        hfOptMiss    = pareOffDes[im][iehfuel,maskRep] #J/kg equivalent heating value
+        TfuelOptMiss = pareOffDes[im][ieTfuel,maskRep] #K fuel temperature
+        Tt3OptMiss   = pareOffDes[im][ieTt3,maskRep] #K
+        Pt3OptMiss   = pareOffDes[im][iept3,maskRep] #Pa 
+        Tt4OptMiss   = pareOffDes[im][ieTt4,maskRep] #K
+        Pt4OptMiss   = pareOffDes[im][iept4,maskRep] #Pa
+        FnOptMiss    = pareOffDes[im][ieFe,maskRep] #N Total Thrust for each engines
+        TSFCMiss     = pareOffDes[im][ieTSFC,maskRep].*3600.0 #1/hr TSFC
+        mdotFuelMiss = pareOffDes[im][iemcore,maskRep].*pareOffDes[im][ieff,maskRep] #kg/s for single engine
+        mdot3Miss    = pareOffDes[im][iemcore,maskRep].-pareOffDes[im][iemofft,maskRep] #kg/s for single engine
+        # CpaMiss      = 0.5.*(ac.pare[iecpt3,maskRep,ip].+ac.pare[iecpt4,maskRep,ip]) #J/kg/K averaged cp value    
+        # ffbMiss      = (CpaMiss.*(Tt4OptMiss.-Tt3OptMiss))./(hfOptMiss.*ac.pare[ieetab,maskRep,ip].-CpaMiss.*(Tt4OptMiss.-TfuelOptMiss))
+        # mdot3OptMiss = mdotFuelMiss./ffbMiss #kg/s for each engines air flow into the combustor (exclude bypass cooling flow)
+        #Print out data
+        output_ip = (Phase=phases,Time=timeOptMiss,Range=ranOptMiss,Altitude=altOptMiss,MachNumber=machOptMiss,Weight=weiOptMiss
+                    ,ClimbAngle=gamOptMiss,LiftDragRatio=LDROptMiss,HeatingValue=hfOptMiss,FuelTemp=TfuelOptMiss
+                    ,Tt3=Tt3OptMiss,Pt3=Pt3OptMiss,Tt4=Tt4OptMiss,Pt4=Pt4OptMiss,Thrust=FnOptMiss,TSFC=TSFCMiss
+                    ,mdotFuel=mdotFuelMiss,mdot3=mdot3Miss)
+        CSV.write("$(saveName)MissDetail_Miss$(im).csv", output_ip; writeheader=true)
+        end
+end
+
 #Plot Plane
 TASOPT.stickfig(ac, label_fs = 8)
 plt.savefig(saveName*"MissDetail3.png")
