@@ -34,11 +34,11 @@ end
 # 2) Include input file for desired aircraft/
 nameAircraftModel = "../src/IO/experiment_input_1500.toml"
 ac = read_aircraft_model(nameAircraftModel) # MODIFY <path> appropriately
-saveName = savedir*"Ethanol3000"
-x = [11.972782021599212, 26855.31676655534, 0.5897546909709177, 27.934121648805956, 0.9083625579263621, 0.10038536693707056, 0.148118228816289, 0.133653028913655, 1.1045845807165509, 0.9991970828125056, 1763.2463808321709, 14.991966665820446, 1.8797278394132353]
+saveName = savedir*"JetFuel2444"
+x = [12.0, 29036.283196079105, 0.5847390857049931, 27.536926874931076, 0.9455429779743656, 0.11162958807659483, 0.14804764447122798, 0.12667338569408848, 1.052751755460775, 0.9837147694563335, 1789.0037092463112, 14.995243338018897, 1.3567628966201042]
 # 2.5) Change fuel type
-ac.pari[iifuel] = 32 #(JetA:25 Ethanol:32 JetAEtha29%Blend: 322429 JetAEtha71%Blend: 322471)
-ac.parg[igrhofuel] = 789.0 #(JetA:817.0 Ethanol:789.0 JetAEtha29%Blend: 805.649 JetAEtha71%Blend: 794.504)
+ac.pari[iifuel] = 25 #(JetA:25 Ethanol:32 JetAEtha29%Blend: 322429 JetAEtha71%Blend: 322471)
+ac.parg[igrhofuel] = 817.0 #(JetA:817.0 Ethanol:789.0 JetAEtha29%Blend: 805.649 JetAEtha71%Blend: 794.504)
 # 3) Set the parameters based on optimization result
 ac.parg[igAR] = x[1] # Aspect Ratio 
 ac.para[iaalt, ipcruise1, :] .=  x[2] * ft_to_m # Cruise Altitude
@@ -54,7 +54,7 @@ ac.pare[ieTt4, ipcruise1:ipcruise2, :] .= x[11] # Tt4
 ac.pare[iepihc, ipclimb1+1 : ipdescentn-1, :] .= x[12] # High Pressure Compressor Pressure Ratio
 ac.pare[iepif, ipclimbn, :] .= x[13] #Fan PR 
 ac.pare[iepilc, :, :] .= 3 # Low Pressure Compressure Pressure Ratio set to 3
-ac.parm[imRange, :] .= 3000*1852 #range [m]
+ac.parm[imRange, :] .= 2444*1852 #range [m]
 # 3) Size aircraft
 TASOPT.size_aircraft!(ac, iter =500, printiter=true)
 # 4) Collect data
@@ -74,6 +74,13 @@ FnTotCRRec    = [ac.pare[ieFe,ipcruise1,1]] #N
 WEmpRec       = [WMTORec - WFuelRec - WPayRec] # Ton Metric
 EFuelRec      = [PFEIRec.*WPayRec*1000*9.81.*RanRec*1852.0] #Joul
 SweepRec      = [ac.parg[igsweep]] #deg
+numPass       = [ac.parm[imWpay, 1]/ac.parm[imWperpax, 1]] #Number of passenger at the sizing mission
+weiPass       = [ac.parm[imWperpax, 1]/gee] #(kg)Weight of passenger at the sizing mission
+TempTakeoff   = [ac.parm[imT0TO, 1]] #Takeoff Temperature (K)
+WZero         = [(ac.parm[imWTO,1] - ac.parm[imWfuel,1])/(gee*1000.0)] #[Ton] zero Fuel weight at the sizing mission
+numEngine     = [ac.parg[igneng]] #Number of engine
+WEngine       = [ac.parg[igWeng]/(gee*1000.0)/ac.parg[igneng]] #[Ton]Total Engine Weight for each engine
+TSFC0         = [ac.pare[ieTSFC,1,1]*3600.0] #Starting TSFC [1/hr]
 ## Add additional output on cargo bay fuel volume
 Wfmax = ac.parg[igWfmax]
 Wf    = ac.parg[igWfuel]
@@ -91,7 +98,10 @@ end
 outputTup = (AltRec=AltRec,RanRec=RanRec,WMTORec=WMTORec,WFuelRec=WFuelRec
              ,WPayRec=WPayRec,PFEIRec=PFEIRec,WTO_WTOmaxRec=WTO_WTOmaxRec
              ,Wf_WfmaxRec=Wf_WfmaxRec,areaWingRec=areaWingRec,ARWingRec=ARWingRec
-             ,spanWingRec=spanWingRec,diaFanRec=diaFanRec,FnTotCRRec=FnTotCRRec,WEmpRec=WEmpRec,EFuelRec=EFuelRec,SweepRec=SweepRec,fCargoFuel=fCargoFuel)
+             ,spanWingRec=spanWingRec,diaFanRec=diaFanRec,FnTotCRRec=FnTotCRRec
+             ,WEmpRec=WEmpRec,EFuelRec=EFuelRec,SweepRec=SweepRec,fCargoFuel=fCargoFuel
+             ,numPass=numPass,weiPass=weiPass,TempTakeoff=TempTakeoff,WZero=WZero,numEngine=numEngine
+             ,WEngine=WEngine,TSFC0=TSFC0)
 CSV.write(saveName*"MissDetail.csv",  outputTup, writeheader=true)
 ##Create a mask to mask out unreported phases
 maskRep = ac.pare[ieFe,:,1].>0 #Reported Phase has non zero thrust
@@ -114,7 +124,10 @@ Tt3OptMiss = ac.pare[ieTt3,maskRep,1] #K
 Pt3OptMiss = ac.pare[iept3,maskRep,1] #Pa 
 Tt4OptMiss = ac.pare[ieTt4,maskRep,1] #K
 Pt4OptMiss = ac.pare[iept4,maskRep,1] #Pa
-FnOptMiss = ac.pare[ieFe,maskRep,1] #N Total Thrust for each engines
+FnOptMiss  = ac.pare[ieFe,maskRep,1] #N Total Thrust for each engines
+TSFCMiss   = ac.pare[ieTSFC,maskRep,1].*3600.0 #1/hr TSFC
+mdotFuelMiss = ac.pare[iemcore,maskRep,1].*ac.pare[ieff,maskRep,1] #kg/s for single engine
+mdot3Miss    = ac.pare[iemcore,maskRep,1].-ac.pare[iemofft,maskRep,1] #kg/s for single engine
 mdotfOptMiss = ac.pare[iemcore,maskRep,1].*ac.pare[ieff,maskRep,1] #kg/s for eacg engines
 Cpa = 0.5.*(ac.pare[iecpt3,maskRep,1].+ac.pare[iecpt4,maskRep,1])
 ffbMiss   = (Cpa.*(Tt4OptMiss.-Tt3OptMiss))./(hfOptMiss.*ac.pare[ieetab,maskRep,1].-Cpa.*(Tt4OptMiss.-TfuelOptMiss))
@@ -122,7 +135,8 @@ mdot3OptMiss = mdotfOptMiss./ffbMiss #kg/s for each engines air flow into the co
 #Output Additional Data at the optimal mission
 outputTup = (Phase=phases,Time=timeOptMiss,Range=ranOptMiss,Altitude=altOptMiss,MachNumber=machOptMiss,Weight=weiOptMiss
             ,ClimbAngle=gamOptMiss,LiftDragRatio=LDROptMiss,HeatingValue=hfOptMiss,FuelTemp=TfuelOptMiss
-            ,Tt3=Tt3OptMiss,Pt3=Pt3OptMiss,Tt4=Tt4OptMiss,Pt4=Pt4OptMiss,Thrust=FnOptMiss,mdotFuel=mdotfOptMiss,mdot3=mdot3OptMiss)
+            ,Tt3=Tt3OptMiss,Pt3=Pt3OptMiss,Tt4=Tt4OptMiss,Pt4=Pt4OptMiss,Thrust=FnOptMiss,TSFC=TSFCMiss
+            ,mdotFuel=mdotfOptMiss,mdot3=mdot3OptMiss,mdotFuelV2=mdotFuelMiss,mdot3V2=mdot3Miss)
 CSV.write(saveName*"MissDetail2.csv",  outputTup, writeheader=true)
 #Plot Plane
 TASOPT.stickfig(ac, label_fs = 8)
