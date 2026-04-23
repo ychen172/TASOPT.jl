@@ -644,12 +644,13 @@ function mission!(pari, parg, parm, para, pare, Ldebug)#, iairf, initeng, ipc1)
 
       # Descent
       ## Dual Fuel Injection Modification #1
-      flagDualFuel = false
+      flagDualFuel = true
       if (flagDualFuel)
+            print("Dual fuel activated")
             baseFuel = pari[iifuel]*1
             baseRhoFuel = parg[igrhofuel]*1.0
             pari[iifuel] = 32 #(JetA:25 Ethanol:32)
-            parg[igrhofuel] = 805.649 #(JetA:817.0 Ethanol:789.0 JetAEtha29%Blend: 805.649 JetAEtha71%Blend: 794.504)
+            parg[igrhofuel] = 789.0 #(JetA:817.0 Ethanol:789.0 JetAEtha29%Blend: 805.649 JetAEtha71%Blend: 794.504)
       end
       ## Dual Fuel Injection Modification Over #1
       ip = ipdescent1
