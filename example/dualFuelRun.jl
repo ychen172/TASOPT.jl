@@ -62,9 +62,9 @@ parmDes = ac.parm[:,1]
 paraDes = ac.para[:,:,1]
 pareDes = ac.pare[:,:,1]
 # 4) Offdesign Ranges
-rangesOff = [500.0, 1000.0, 1500.0, 2000.0, 2444.0, 500.0, 1000.0, 1500.0]*1852.0 #Offdesign range [m]
-idxFuelOff = [25, 25, 25, 25, 25, 32, 32, 32] #Offdesign fuel type
-rhoFuelOff = [817.0, 817.0, 817.0, 817.0, 817.0, 789.0, 789.0, 789.0] #Offdesign fuel density
+rangesOff = [500.0, 750.0, 1000.0, 1250.0, 1500.0, 2000.0, 2444.0, 500.0, 750.0, 1000.0, 1250.0, 1500.0]*1852.0 #Offdesign range [m]
+idxFuelOff = [25, 25, 25, 25, 25, 25, 25, 32, 32, 32, 32, 32] #Offdesign fuel type
+rhoFuelOff = [817.0, 817.0, 817.0, 817.0, 817.0, 817.0, 817.0, 789.0, 789.0, 789.0, 789.0, 789.0] #Offdesign fuel density
 parmOffDes = Any[]
 paraOffDes = Any[]
 pareOffDes = Any[]
@@ -158,6 +158,7 @@ if length(pareOffDes)>0
     T3T2Cruise_Rec = Float64[] #Tt3/Tt2 at cruise
     T4T2Cruise_Rec = Float64[] #Tt3/Tt2 at cruise
     PFEI_Rec = Float64[] #PFEI J/J
+    gamCruClim_Rec = Float64[] #Cruise climb angle (deg)
     for im = 1:length(pareOffDes)
         #Aero data
         timeOptMiss = paraOffDes[im][iatime,maskRep]  #second
@@ -213,6 +214,7 @@ if length(pareOffDes)>0
         push!(T3T2Cruise_Rec, T3T2Cruise)
         push!(T4T2Cruise_Rec, T4T2Cruise)
         push!(PFEI_Rec, parmOffDes[im][imPFEI]) #PFEI J/J 
+        push!(gamCruClim_Rec, 0.5*(paraOffDes[im][iagamV,ipcruise1] + paraOffDes[im][iagamV,ipcruise2])/deg_to_rad) #CruiseClimbAngle (Deg)
         ## Collect other missions level information
         push!(weiOptMiss_Direct, parmOffDes[im][imWTO] / gee / 1000.0 ) #Airplane total weight at takeoff (Ton)
         push!(weiFueMiss_Direct, parmOffDes[im][imWfuel] / gee / 1000.0 ) #Mission fuel weight (Ton)
@@ -225,7 +227,8 @@ if length(pareOffDes)>0
     rangeCompare = (RangeCal=RangeCal,RangeEst=RangeEst,errorRange=errorRange,weiOptMiss=weiOptMiss_Direct
                     ,weiFueMiss=weiFueMiss_Direct,weiZeroFue_Der=weiZeroFue_Derive,weiZeroFue_Dir=weiZeroFue_Direct
                     ,weiEmpty_Der=weiEmpty_Derive,weiEmpty_Dir=weiEmpty_Direct,LHVCruise=LHVCruise_Rec,TSECCruise=TSECCruise_Rec
-                    ,LDCruise=LDCruise_Rec, FnCruise=FnCruise_Rec,T3T2Cruise=T3T2Cruise_Rec,T4T2Cruise=T4T2Cruise_Rec, PFEI=PFEI_Rec)
+                    ,LDCruise=LDCruise_Rec, FnCruise=FnCruise_Rec,T3T2Cruise=T3T2Cruise_Rec,T4T2Cruise=T4T2Cruise_Rec, PFEI=PFEI_Rec
+                    ,gamCruClim=gamCruClim_Rec)
     CSV.write("$(saveName)Compare_range_Breguet.csv", rangeCompare; writeheader=true)
 end
 
