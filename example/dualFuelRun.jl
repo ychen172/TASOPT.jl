@@ -32,9 +32,9 @@ if !isdir(savedir)
     mkdir(savedir)
 end
 # 2) Include input file for desired aircraft/
-nameAircraftModel = "../src/IO/experiment_input_1500.toml"
+nameAircraftModel = "../src/IO/baseline.toml"
 ac = read_aircraft_model(nameAircraftModel,nMissOverWrite=2) # MODIFY <path> appropriately
-saveName = savedir*"JetFuel2444"
+saveName = savedir*"JetFueltoEthanolinOff"
 x = [12.0, 29036.283196079105, 0.5847390857049931, 27.536926874931076, 0.9455429779743656, 0.11162958807659483, 0.14804764447122798, 0.12667338569408848, 1.052751755460775, 0.9837147694563335, 1789.0037092463112, 14.995243338018897, 1.3567628966201042]
 # 2.5) Change fuel type
 ac.pari[iifuel]    = 25 #(JetA:25 Ethanol:32 JetAEtha29%Blend: 322429 JetAEtha71%Blend: 322471)
@@ -62,13 +62,17 @@ parmDes = ac.parm[:,1]
 paraDes = ac.para[:,:,1]
 pareDes = ac.pare[:,:,1]
 # 4) Offdesign Ranges
-rangesOff = [400.0, 600.0, 800.0, 1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0, 2200.0, 2400.0, 2600.0]*1852.0 #Offdesign range [m]
+rangesOff = [500.0, 1000.0, 1500.0, 2000.0, 2444.0, 500.0, 1000.0, 1500.0]*1852.0 #Offdesign range [m]
+idxFuelOff = [25, 25, 25, 25, 25, 32, 32, 32] #Offdesign fuel type
+rhoFuelOff = [817.0, 817.0, 817.0, 817.0, 817.0, 789.0, 789.0, 789.0] #Offdesign fuel density
 parmOffDes = Any[]
 paraOffDes = Any[]
 pareOffDes = Any[]
 # This data is collected for sanity check as this object should stay unaltered during offdesign
 for idxOff=1:length(rangesOff)
     ac.parm[imRange, 2] = rangesOff[idxOff]
+    ac.pari[iifuel] = idxFuelOff[idxOff]
+    ac.parg[igrhofuel] = rhoFuelOff[idxOff]
     TASOPT.woper(ac, 2; itermax = 500, initeng = true, saveOffDesign = true)
     push!(parmOffDes, ac.parm[:,2])
     push!(paraOffDes, ac.para[:,:,2])
@@ -147,6 +151,13 @@ if length(pareOffDes)>0
     weiZeroFue_Direct = Float64[] #Zero fuel directly computed from airplane design point
     weiEmpty_Derive = Float64[] #Empty weight from the derived zero fuel weight and airplane mission payload
     weiEmpty_Direct = Float64[] #Direct emtpy weight from the airplane design data
+    TSECCruise_Rec = Float64[] #Thrust specific energy consumption at cruise (J/s/N)
+    LHVCruise_Rec = Float64[] #Cruise heating value (J/kg)
+    LDCruise_Rec = Float64[] #Cruise lift to drag ratio
+    FnCruise_Rec = Float64[] #Cruise Thrust level
+    T3T2Cruise_Rec = Float64[] #Tt3/Tt2 at cruise
+    T4T2Cruise_Rec = Float64[] #Tt3/Tt2 at cruise
+    PFEI_Rec = Float64[] #PFEI J/J
     for im = 1:length(pareOffDes)
         #Aero data
         timeOptMiss = paraOffDes[im][iatime,maskRep]  #second
@@ -188,6 +199,20 @@ if length(pareOffDes)>0
         WRatioIni2Fin = paraOffDes[im][iafracW,ipclimb1]/paraOffDes[im][iafracW,ipdescentn] #WIni/WFin
         push!(RangeEst, ((velHorCruise*LDRatioCruise)/(gee*TSFCCruise))*log(WRatioIni2Fin)/nmi_to_m ) #nmi estimated range
         push!(RangeCal, paraOffDes[im][iaRange,ipdescentn]/nmi_to_m)
+        ## Compare the thrust specific energy consumption and lift to drag ratio
+        LHVCruise = 0.5 * (pareOffDes[im][iehfuel,ipcruise1] + pareOffDes[im][iehfuel,ipcruise2]) #J/kg cruise heating value
+        TSECCruise = TSFCCruise*LHVCruise #Cruise thrust specific energy consumption (J/s/N)
+        push!(LHVCruise_Rec, LHVCruise)
+        push!(TSECCruise_Rec, TSECCruise)
+        push!(LDCruise_Rec, LDRatioCruise)
+        push!(FnCruise_Rec, 0.5*(pareOffDes[im][ieFe,ipcruise1]+pareOffDes[im][ieFe,ipcruise1]))
+        T3T2Cruise = 0.5*(pareOffDes[im][ieTt3,ipcruise1]/pareOffDes[im][ieTt2,ipcruise1] + 
+                        pareOffDes[im][ieTt3,ipcruise2]/pareOffDes[im][ieTt2,ipcruise2])
+        T4T2Cruise = 0.5*(pareOffDes[im][ieTt4,ipcruise1]/pareOffDes[im][ieTt2,ipcruise1] + 
+                        pareOffDes[im][ieTt4,ipcruise2]/pareOffDes[im][ieTt2,ipcruise2])
+        push!(T3T2Cruise_Rec, T3T2Cruise)
+        push!(T4T2Cruise_Rec, T4T2Cruise)
+        push!(PFEI_Rec, parmOffDes[im][imPFEI]) #PFEI J/J 
         ## Collect other missions level information
         push!(weiOptMiss_Direct, parmOffDes[im][imWTO] / gee / 1000.0 ) #Airplane total weight at takeoff (Ton)
         push!(weiFueMiss_Direct, parmOffDes[im][imWfuel] / gee / 1000.0 ) #Mission fuel weight (Ton)
@@ -199,7 +224,8 @@ if length(pareOffDes)>0
     errorRange = abs.(RangeEst.-RangeCal)./RangeCal
     rangeCompare = (RangeCal=RangeCal,RangeEst=RangeEst,errorRange=errorRange,weiOptMiss=weiOptMiss_Direct
                     ,weiFueMiss=weiFueMiss_Direct,weiZeroFue_Der=weiZeroFue_Derive,weiZeroFue_Dir=weiZeroFue_Direct
-                    ,weiEmpty_Der=weiEmpty_Derive,weiEmpty_Dir=weiEmpty_Direct)
+                    ,weiEmpty_Der=weiEmpty_Derive,weiEmpty_Dir=weiEmpty_Direct,LHVCruise=LHVCruise_Rec,TSECCruise=TSECCruise_Rec
+                    ,LDCruise=LDCruise_Rec, FnCruise=FnCruise_Rec,T3T2Cruise=T3T2Cruise_Rec,T4T2Cruise=T4T2Cruise_Rec, PFEI=PFEI_Rec)
     CSV.write("$(saveName)Compare_range_Breguet.csv", rangeCompare; writeheader=true)
 end
 
