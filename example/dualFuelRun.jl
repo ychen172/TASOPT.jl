@@ -62,7 +62,7 @@ parmDes = ac.parm[:,1]
 paraDes = ac.para[:,:,1]
 pareDes = ac.pare[:,:,1]
 # 4) Offdesign Ranges
-rangesOff = [2444.0, 500.0, 1000.0, 1500.0, 2000.0, 2500.0, 3000.0]*1852.0 #Offdesign range [m]
+rangesOff = [400.0, 600.0, 800.0, 1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0, 2200.0, 2400.0, 2600.0]*1852.0 #Offdesign range [m]
 parmOffDes = Any[]
 paraOffDes = Any[]
 pareOffDes = Any[]
@@ -141,13 +141,19 @@ if length(pareOffDes)>0
     #Create container to collect missions level information
     RangeCal = Float64[] #From TASOPT
     RangeEst = Float64[] #Use Bréguet range equation
+    weiOptMiss_Direct = Float64[] #Collected airplane weight at takeoff
+    weiFueMiss_Direct = Float64[] #Collected mission fuel for the missions
+    weiZeroFue_Derive = Float64[] #Derived zero fuel weight from the difference
+    weiZeroFue_Direct = Float64[] #Zero fuel directly computed from airplane design point
+    weiEmpty_Derive = Float64[] #Empty weight from the derived zero fuel weight and airplane mission payload
+    weiEmpty_Direct = Float64[] #Direct emtpy weight from the airplane design data
     for im = 1:length(pareOffDes)
         #Aero data
         timeOptMiss = paraOffDes[im][iatime,maskRep]  #second
         ranOptMiss  = paraOffDes[im][iaRange,maskRep]./nmi_to_m #nmi
         altOptMiss  = paraOffDes[im][iaalt,maskRep]   #meter
         machOptMiss = paraOffDes[im][iaMach,maskRep]
-        weiOptMiss  = paraOffDes[im][iafracW,maskRep]*(parmOffDes[im][imWTO]/gee) #kg
+        weiOptMiss  = paraOffDes[im][iafracW,maskRep] * pargDes[igWMTO] / gee /1000.0  #Airplane total weight (Ton)
         fracFuelWeightMiss = paraOffDes[im][iafracW,maskRep] #Fractional fuel weight over total weight
         gamOptMiss  = paraOffDes[im][iagamV,maskRep]./deg_to_rad #deg
         LDROptMiss  = paraOffDes[im][iaCL,maskRep]./paraOffDes[im][iaCD,maskRep] #Lift to drag ratio
@@ -180,12 +186,20 @@ if length(pareOffDes)>0
                         paraOffDes[im][iaCL, ipcruise2]/paraOffDes[im][iaCD, ipcruise2]) #Lift Drag Ratio
         TSFCCruise = 0.5 * (pareOffDes[im][ieTSFC, ipcruise1] + pareOffDes[im][ieTSFC, ipcruise2]) / gee #(kg/s/N)
         WRatioIni2Fin = paraOffDes[im][iafracW,ipclimb1]/paraOffDes[im][iafracW,ipdescentn] #WIni/WFin
-        println("velHorCruise: $(velHorCruise), LDRatioCruise: $(LDRatioCruise), TSFCCruise: $(TSFCCruise), WRatioIni2Fin: $(WRatioIni2Fin)")
         push!(RangeEst, ((velHorCruise*LDRatioCruise)/(gee*TSFCCruise))*log(WRatioIni2Fin)/nmi_to_m ) #nmi estimated range
         push!(RangeCal, paraOffDes[im][iaRange,ipdescentn]/nmi_to_m)
+        ## Collect other missions level information
+        push!(weiOptMiss_Direct, parmOffDes[im][imWTO] / gee / 1000.0 ) #Airplane total weight at takeoff (Ton)
+        push!(weiFueMiss_Direct, parmOffDes[im][imWfuel] / gee / 1000.0 ) #Mission fuel weight (Ton)
+        push!(weiZeroFue_Derive, weiOptMiss_Direct[im] - weiFueMiss_Direct[im]) #Derived zero fuel weight (Ton)
+        push!(weiZeroFue_Direct, (pargDes[igWMTO]-pargDes[igWfuel]-pargDes[igWpay]+parmOffDes[im][imWpay]) / gee / 1000.0) #Expected zero fuel weight (Ton)
+        push!(weiEmpty_Derive, weiZeroFue_Derive[im]-(parmOffDes[im][imWpay]/gee/1000.0)) #Airplane empty weight mission (Ton)
+        push!(weiEmpty_Direct, (pargDes[igWMTO]-pargDes[igWfuel]-pargDes[igWpay])/gee/1000.0) #Airplane empty weight designed (Ton)
     end
     errorRange = abs.(RangeEst.-RangeCal)./RangeCal
-    rangeCompare = (RangeCal=RangeCal,RangeEst=RangeEst,errorRange=errorRange)
+    rangeCompare = (RangeCal=RangeCal,RangeEst=RangeEst,errorRange=errorRange,weiOptMiss=weiOptMiss_Direct
+                    ,weiFueMiss=weiFueMiss_Direct,weiZeroFue_Der=weiZeroFue_Derive,weiZeroFue_Dir=weiZeroFue_Direct
+                    ,weiEmpty_Der=weiEmpty_Derive,weiEmpty_Dir=weiEmpty_Direct)
     CSV.write("$(saveName)Compare_range_Breguet.csv", rangeCompare; writeheader=true)
 end
 
