@@ -76,7 +76,7 @@ Cruise Mach = 0.8
 """
 function read_aircraft_model(
     datafile=joinpath(TASOPT.__TASOPTroot__, "IO/default_input.toml"); 
-    defaultfile = joinpath(TASOPT.__TASOPTroot__, "IO/default_input.toml"))
+    defaultfile = joinpath(TASOPT.__TASOPTroot__, "IO/default_input.toml"),nMissOverWrite=-1)
 
 data = TOML.parsefile(datafile)
 default = TOML.parsefile(defaultfile)
@@ -91,9 +91,16 @@ readmis(x::String) = read_input(x, mis, dmis)
 nmisx = readmis("N_missions")
 pari = zeros(Int64, iitotal)
 parg = zeros(Float64, igtotal)
-parm = zeros(Float64, (imtotal, nmisx))
-para = zeros(Float64, (iatotal, iptotal, nmisx))
-pare = zeros(Float64, (ietotal, iptotal, nmisx))
+if nMissOverWrite>0
+    print("Overwrite the number of missions to: $(nMissOverWrite)")
+    parm = zeros(Float64, (imtotal, nMissOverWrite))
+    para = zeros(Float64, (iatotal, iptotal, nMissOverWrite))
+    pare = zeros(Float64, (ietotal, iptotal, nMissOverWrite))
+else
+    parm = zeros(Float64, (imtotal, nmisx))
+    para = zeros(Float64, (iatotal, iptotal, nmisx))
+    pare = zeros(Float64, (ietotal, iptotal, nmisx))
+end
 
 # Setup option variables
 options = read_input("Options", data, default)
@@ -146,6 +153,18 @@ elseif uppercase(fueltype) == "CH4"
     
 elseif uppercase(fueltype) == "JET-A"
     pari[iifuel] = 24
+
+    pare[ieTft, :, :] .= readfuel("fuel_temp") #Temperature of fuel in fuel tank
+    pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank
+    parg[igrhofuel] = readfuel("fuel_density")
+elseif uppercase(fueltype) == "ETHANOL"
+    pari[iifuel] = 32
+
+    pare[ieTft, :, :] .= readfuel("fuel_temp") #Temperature of fuel in fuel tank
+    pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank
+    parg[igrhofuel] = readfuel("fuel_density")
+elseif uppercase(fueltype) == "ETHANOL_JETA_31Blend"
+    pari[iifuel] = 322431
 
     pare[ieTft, :, :] .= readfuel("fuel_temp") #Temperature of fuel in fuel tank
     pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank

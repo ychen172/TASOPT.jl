@@ -388,7 +388,9 @@
       const igmdotboiloff = 309
       const igrhofuelgas = 310
 
-      const igtotal    = 310
+      const igAfuse    = 311
+
+      const igtotal    = 311
 
 # indices for turbo-electric systems - really just the electrical machines
       const ite_ratSM   = 1
@@ -819,9 +821,9 @@
 
       ieEINOx1     = 210
       ieEINOx2     = 211
-      ieFAR        = 212
+      ieFAR        = 212 #Not Active Currently
       ieOPR        = 213
-      ieWc3        = 214
+      ieWc3        = 214 #Not Active Currently
       
       # Heat rejection:
       ieHrejmot   = 215

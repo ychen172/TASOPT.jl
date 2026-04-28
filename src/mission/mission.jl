@@ -643,6 +643,16 @@ function mission!(pari, parg, parm, para, pare, Ldebug)#, iairf, initeng, ipc1)
       end
 
       # Descent
+      ## Dual Fuel Injection Modification #1
+      flagDualFuel = false
+      if (flagDualFuel)
+            print("Dual fuel activated")
+            baseFuel = pari[iifuel]*1
+            baseRhoFuel = parg[igrhofuel]*1.0
+            pari[iifuel] = 32 #(JetA:25 Ethanol:32)
+            parg[igrhofuel] = 789.0 #(JetA:817.0 Ethanol:789.0 JetAEtha29%Blend: 805.649 JetAEtha71%Blend: 794.504)
+      end
+      ## Dual Fuel Injection Modification Over #1
       ip = ipdescent1
       pare[iep0, ip] = pare[iep0, ipcruisen]
       pare[ieT0, ip] = pare[ieT0, ipcruisen]
@@ -821,23 +831,23 @@ function mission!(pari, parg, parm, para, pare, Ldebug)#, iairf, initeng, ipc1)
             end
       end
 
-      # mission fuel fractions and weights
-      fracWa = para[iafracW, ipclimb1]
-      fracWe = para[iafracW, ipdescentn]
-      freserve = parg[igfreserve]
-      fburn = fracWa - fracWe
-      ffuel = fburn * (1.0 + freserve)
-      Wfuel = WMTO * ffuel
-      WTO = Wzero + Wfuel
-
-      parm[imWTO] = WTO
-      parm[imWfuel] = Wfuel
+      ## Dual Fuel Injection Modification #2
+      if (flagDualFuel)
+            pari[iifuel] = baseFuel
+            parg[igrhofuel] = baseRhoFuel
+      end
+      ## Dual Fuel Injection Modification Over #2
 
       # mission PFEI
-      Wburn = WMTO * fburn
-      parm[imPFEI] = Wburn/gee * pare[iehfuel, ipcruise1] / (parm[imWpay] * parm[imRange])
-
-
+      energyFlight = 0 #Total flight fuel energy (Piecewise integration with heating value)
+      for ip = ipclimb1:(ipdescentn-1)
+            energyFlight += 0.5*(pare[iehfuel, ip]+pare[iehfuel, ip+1])*
+            (para[iafracW, ip]-para[iafracW, ip+1])*WMTO/gee
+      end
+      parm[imPFEI] = energyFlight/(parm[imWpay] * parm[imRange])
+      # mission fuel weight and total takeoff weight
+      parm[imWfuel] = WMTO * (para[iafracW, ipclimb1]-para[iafracW, ipdescentn]) * (1.0+parg[igfreserve])
+      parm[imWTO] = Wzero + parm[imWfuel]
 
       return t_prop
 end
