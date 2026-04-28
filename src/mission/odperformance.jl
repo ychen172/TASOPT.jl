@@ -1,11 +1,17 @@
 """
 `odperf!` runs the aircraft in off-design mode to generate a `BADA`-like 
 `PTF` file for use in `AEIC`.
+
+!!! compat "Future Changes"
+    This function will be overhauled and renamed in an upcoming revision. Neither NPSS nor turboelectric compatibility are currently in the scope.
+
 """
 function odperf!(pari, parg, parm, para, pare, Wfrac, FL, 
     NPSS_TS::Base.Process, 
     NPSS_Fan::Base.Process, 
     NPSS_AftFan::Base.Process, Ldebug, ifirst, NPSS_PT, NPSS::Base.Process)
+
+@warn "The function `odperf!` will be overhauled and renamed in an upcoming revision. Neither NPSS nor turboelectric compatibility are currently in the scope."
 
 calc_ipc1 = true
 # ifirst = true
@@ -63,7 +69,12 @@ Tt4crz   = zeros(Float64, N)
 Tt4crzmax   = zeros(Float64, N)
 
 @inbounds for i =1:N
-    T0s[i], p0s[i], ρ0s[i], a0s[i], μ0s[i] = atmos(alts[i]/1000)
+    atmos_state = atmos(alts[i])
+    T0s[i] = atmos_state.T
+    p0s[i] = atmos_state.p
+    ρ0s[i] = atmos_state.ρ
+    a0s[i] = atmos_state.a
+    μ0s[i] = atmos_state.μ
     rhocab = max( parg[igpcabin] , p0s[i] ) / (RSL*TSL) #Should be T0s to be more accurate?
     Wbouys[i] = (rhocab-ρ0s[i])*gee*parg[igcabVol]
 end
@@ -136,20 +147,21 @@ for   i = 1:N
         # Set pitch trim by adjusting CLh
         Wf = W - Wzero
         rfuel = Wf/parg[igWfuel]*0
-        itrim = 1
-        balance(pari, parg, view(para, :, ip), rfuel, rpay, ξpay, itrim)
+        opt_trim_var = TrimVar.CLHtail
+        balance_aircraft!(pari, parg, view(para, :, ip), rfuel, rpay, ξpay, opt_trim_var; 
+                        Ldebug = Ldebug)
 
         
         # Calculate Drag
         if (i == 1)
-            icdfun = 0
+            computes_wing_direct = false
         else 
-            icdfun = 1
+            computes_wing_direct = true
         end
         if CL > 0.9
-            icdfun = 0
+            computes_wing_direct = false
         end
-        cdsum!(pari, parg, view(para, :, ip), view(pare, :, ip), icdfun)
+        aircraft_drag!(pari, parg, view(para, :, ip), view(pare, :, ip), computes_wing_direct)
 
         #BLI parameters
         ρ0 = pare[ierho0, ip]
@@ -239,15 +251,16 @@ for   i = 1:N
         rfuel = Wf/parg[igWfuel]*0
 
         #Trim aircraft
-        itrim = 1
-        balance(pari, parg, view(para, :, ip), rfuel, rpay, ξpay, itrim)
-        icdfun = 1
+        opt_trim_var = TrimVar.CLHtail
+        balance_aircraft!(pari, parg, view(para, :, ip), rfuel, rpay, ξpay, opt_trim_var; 
+                        Ldebug = Ldebug)
+        computes_wing_direct = true
         if CL > 1.0
             println("CL during cruise is $CL")
-            icdfun = 0
+            computes_wing_direct = false
         end
         #Get Drag
-        cdsum!(pari, parg, view(para, :, ip), view(pare, :, ip), icdfun)
+        aircraft_drag!(pari, parg, view(para, :, ip), view(pare, :, ip), computes_wing_direct)
         DoL = para[iaCD, ip]/ para[iaCL, ip]
 
         F  = BW*(DoL) #zero climb angle for cruise
@@ -347,7 +360,11 @@ function get_cruisespeed(h, MNcr)
     h_ft = h/0.3048
     Vcr2 = 280/1.944 # From BADA 737__.APF
     htrans_ft = Hptrans(Vcr2, 0.8)
-    T, P, ρ,  a = atmos(h/1000)
+    atmos_state = atmos(h)
+    T = atmos_state.T
+    P = atmos_state.p
+    ρ = atmos_state.ρ
+    a = atmos_state.a
     TAS = MNcr*a
     if h_ft<3000
         CAS = 170/1.944
@@ -372,7 +389,11 @@ end
 
 function get_climbspeed(h,MNcr)
     h_ft = h/0.3048
-    T, P, ρ,  a = atmos(h/1000)
+    atmos_state = atmos(h)
+    T = atmos_state.T
+    P = atmos_state.p
+    ρ = atmos_state.ρ
+    a = atmos_state.a
     TAS = a*MNcr
     Vcl1 = 300/1.944 # From BADA 737__.APF
     Vcl2 = 300/1.944 # From BADA 737__.APF
@@ -421,7 +442,11 @@ end
 
 function get_descentspeed(h,MNcr)
     h_ft = h/0.3048
-    T, P, ρ,  a = atmos(h/1000)
+    atmos_state = atmos(h)
+    T = atmos_state.T
+    P = atmos_state.p
+    ρ = atmos_state.ρ
+    a = atmos_state.a
     TAS = a*MNcr
     Vdes1 = 290/1.944 # From BADA 737__.APF
     Vdes2 = 290/1.944 # From BADA 737__.APF
@@ -484,7 +509,11 @@ function Hptrans(CAS, MNcr)
 end
 
 function CAS_TAS(CAS, h)
-    T, P, ρ,  a = atmos(h/1000) 
+    atmos_state = atmos(h)
+    T = atmos_state.T
+    P = atmos_state.p
+    ρ = atmos_state.ρ
+    a = atmos_state.a
     gam = gamSL
     gmi = gam - 1
     k = gmi/gam
@@ -496,7 +525,11 @@ function CAS_TAS(CAS, h)
 end
 
 function TAS_CAS(TAS, h)
-    T, P, ρ,  a = atmos(h/1000) 
+    atmos_state = atmos(h)
+    T = atmos_state.T
+    P = atmos_state.p
+    ρ = atmos_state.ρ
+    a = atmos_state.a
     gam = gamSL
     gmi = gam - 1
     k = gmi/gam
@@ -507,13 +540,17 @@ function TAS_CAS(TAS, h)
     return CAS
 end
 
-function show_ff_sens(ff, H; ax = nothing)
-
-    if ax === nothing
-        fig, ax = plt.subplots()
-    end
-    ffnorm = ff'./minimum.(eachcol(ff))
-
-    ax.plot(ffnorm', H)
-
+using Plots 
+function show_ff_sens(ff, H)
+    # Normalize `ff` by dividing each column by its minimum
+    ffnorm = ff' ./ minimum.(eachcol(ff))
+    
+    # Create the plot
+    plot(
+        ffnorm', H,
+        xlabel = "Normalized ff",
+        ylabel = "H",
+        legend = false,
+        grid = true
+    )
 end

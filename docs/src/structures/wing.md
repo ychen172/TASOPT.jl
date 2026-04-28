@@ -13,18 +13,14 @@ using Markdown
 Markdown.parse_file(joinpath("../..", "src/structures","theory_wingstruct.md"))
 ```
 
-
 ```@docs
 
-structures.surfw(po,b,bs,bo,co,zs,
-	lambdat,lambdas,gammat,gammas,
-	Nload,iwplan,We,neout, dyeout, neinn, dyeinn,
-	Winn,Wout,dyWinn,dyWout,
-	sweep,wbox,hboxo,hboxs,rh, fLt,
-	tauweb,sigcap,sigstrut,Ecap,Eweb,Gcap,Gweb,
-	rhoweb,rhocap,rhostrut,rhofuel)
+structures.WingSectionDimensions
 
-structures.tailpo(S, AR, λa, qne, CLmax)
+structures.size_wing_section!(section, sweep, sigfac)
 
-structures.surfdx(b, bs, bo, λt, λs, sweep)
+structures.wing_weights!(wing, po, gammat, gammas, 
+       Nload, We, neout, dyeout, neinn, dyeinn, sigfac, rhofuel; n_wings=2.0)
+
+structures.calculate_centroid_offset(b, bs, bo, λt, λs, sweep)
 ```

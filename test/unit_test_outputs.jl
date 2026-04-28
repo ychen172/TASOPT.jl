@@ -29,13 +29,24 @@
 
     @testset "output plots" begin
         
-        TASOPT.stickfig(ac)
-        @test 1 == 1
-        TASOPT.high_res_airplane_plot(ac)
-        @test 2 == 2
-        TASOPT.plot_details(ac)
-        @test 3 == 3
-
+        p1 = TASOPT.stickfig(ac)
+        @test p1 isa Plots.Plot
+        p2 = TASOPT.plot_details(ac)
+        @test p2 isa Plots.Plot
+        p3 = TASOPT.plot737compare(ac)
+        @test p3 isa Plots.Plot
+        p4 = TASOPT.MomentShear(ac)
+        @test p4 isa Plots.Plot
+        p5 = TASOPT.PayloadRange(ac)
+        @test p5 isa Plots.Plot
+        p6 = DragPolar(ac)
+        @test p6 isa Plots.Plot
+        p7 = plot_airf(ac)
+        @test p7 isa Plots.Plot
+        p8 = plot_drag_breakdown(ac, show_values=true)
+        p9 = plot_drag_breakdown(ac, ip = :, show_fractions=false)
+        @test p8 isa Plots.Plot
+        @test p9 isa Plots.Plot
     end
 
 end

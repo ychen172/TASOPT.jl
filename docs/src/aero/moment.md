@@ -1,5 +1,6 @@
 # Pitching moment
-The pitching moments of lifting surfaces are computed by integration of the wing loading with reference to a prescribable wing axis.
+
+The pitching moments of lifting surfaces are computed by integration of the wing loading with reference to a prescribable wing axis. Aircraft stability and balance considerations are detailed [here](@ref stability).
 
 ```@eval
 using Markdown
@@ -7,7 +8,7 @@ Markdown.parse_file(joinpath("../..", "src/aero","theory_pitching.md"))
 ```
 
 ```@docs
-aerodynamics.surfcm(b,bs,bo, sweep, Xaxis,
-                       λt,λs,γt,γs,
-                       AR,fLo,fLt,cmpo,cmps,cmpt)
+aerodynamics.wing_CM(b,bs,bo, sweep, Xaxis,
+                       λt, λs, γt, γs,
+                       AR, fLo, fLt, cmpo, cmps, cmpt)
 ```

@@ -5,11 +5,10 @@ TASOPT.atmos
 ```
 This function can be used to return the atmospheric properties at a given altitude as follows:
 ```@setup atmos
-include("../../../src/atmos/atmos.jl")
-using .atmosphere
+using TASOPT.atmosphere
 ```
 ```@example atmos
-h = 10.0 # km
-T,p,ρ,a,μ = atmos(h)
-T,p,ρ,a,μ
+h = 10_000.0 # m
+atmos_state = atmos(h)
+(atmos_state.T, atmos_state.p, atmos_state.ρ, atmos_state.a, atmos_state.μ)
 ```

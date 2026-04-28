@@ -18,7 +18,7 @@ The easiest way to run `TASOPT.jl` would be to add the package using the julia p
 
 You can do this by starting a Julia session and then activating the package manager by typing `]` and then entering:
 ```julia-repl
-pkg> add git@github.com:MIT-LAE/TASOPT.jl.git
+pkg> add TASOPT
 ```
 
 You can then import `TASOPT` as you would with any Julia package:
@@ -61,7 +61,7 @@ We'd suggest starting with [the examples](@ref firstexample).
 
 All dimensional quantities are treated internally as SI.
 
-Refer to `/src/IO/default_input.toml` for the input file's conversion capability and formatting. It's also useful for typical values and explaining inputs.
+Refer to `/example/defaults/default_input.toml` for the input file's conversion capability and formatting. It's also useful for typical values and explaining inputs.
 
 Non-dimensionalization follows the Drela conventions (see [TASOPT Technical Description](@ref dreladocs)).
 
