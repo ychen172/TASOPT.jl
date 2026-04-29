@@ -292,6 +292,11 @@ end
 @define_gas_method gas_C8H18 C8H18
 @define_gas_method gas_C14H30 C14H30
 @define_gas_method gas_H2 H2
+@define_gas_method gas_C2H5OH C2H5OH
+@define_gas_method gas_JetFuel JetFuel
+@define_gas_method gas_C2H5OHJetA31Blend C2H5OHJetA31Blend
+@define_gas_method gas_C2H5OHJetA29Blend C2H5OHJetA29Blend
+@define_gas_method gas_C2H5OHJetA71Blend C2H5OHJetA71Blend
 
 """
     findsegment(x::T, xarr::Vector{T})
