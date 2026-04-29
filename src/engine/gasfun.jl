@@ -54,6 +54,16 @@ function gasfun(igas, t)
         s, h, cp, r = gas_C14H30(t)
     elseif (igas == 40)
         s, h, cp, r = gas_H2(t)
+    elseif (igas == 25)
+        s, h, cp, r = gas_JetFuel(t)
+    elseif (igas == 32)
+        s, h, cp, r = gas_C2H5OH(t)
+    elseif (igas == 322431)
+        s, h, cp, r = gas_C2H5OHJetA31Blend(t)
+    elseif (igas == 322429)
+        s, h, cp, r = gas_C2H5OHJetA29Blend(t)
+    elseif (igas == 322471)
+        s, h, cp, r = gas_C2H5OHJetA71Blend(t)
     else
         error("GASFUN: undefined gas index: ", igas, " & code=0")
     end
@@ -121,6 +131,29 @@ function gaschem(igas)
     elseif (igas == 40)  #   H2
         buf[kc] = 0
         buf[kh] = 2
+    elseif (igas == 25)  #   Jet Fuel
+        buf[kc] = 16
+        buf[kh] = 31
+    elseif (igas == 32)  #   C2H5OH
+        buf[kc] = 2
+        buf[kh] = 6
+        buf[ko] = 1
+        buf[kn] = 0
+    elseif (igas == 322431)   #   Fuel 32 blend with fuel 24 with 31% blend of fuel 32
+        buf[kc] = 6
+        buf[kh] = 14
+        buf[ko] = 1
+        buf[kn] = 0
+    elseif (igas == 322429)   #   Fuel 32 blend with fuel 24 with 29% blend of fuel 32
+        buf[kc] = 7  
+        buf[kh] = 16 
+        buf[ko] = 1  
+        buf[kn] = 0  
+    elseif (igas == 322471)   #   Fuel 32 blend with fuel 24 with 71% blend of fuel 32
+        buf[kc] = 6  
+        buf[kh] = 15 
+        buf[ko] = 2  
+        buf[kn] = 0  
     else
         error("GASFUN: undefined gas index: ", igas, " & code=0")
     end
@@ -200,6 +233,36 @@ function gas_H2(t1, t, tl, cp, cpt, h, s)
     hform = 0.0000
     get_thermo(r, hform, t1, t, tl, cp, cpt, h, s)
 end # gas_H2
+
+function gas_C2H5OH(t1, t, tl, cp, cpt, h, s)
+    r = 180.4784
+    hform = -5101283.614
+    get_thermo(r, hform, t1, t, tl, cp, cpt, h, s)
+end # gas_C2H5OH
+
+function gas_JetFuel(t1, t, tl, cp, cpt, h, s)
+    r = 53.33614299319143
+    hform = -1402203.5095183833
+    get_thermo(r, hform, t1, t, tl, cp, cpt, h, s)
+end # gas_JetFuel
+
+function gas_C2H5OHJetA31Blend(t1, t, tl, cp, cpt, h, s)
+    r = 106.73789310438235
+    hform = -2955875.301364105
+    get_thermo(r, hform, t1, t, tl, cp, cpt, h, s)
+end # gas_C2H5OHJetA31Blend
+
+function gas_C2H5OHJetA29Blend(t1, t, tl, cp, cpt, h, s)
+    r = 103.81184477059274
+    hform = -2870744.7813283317
+    get_thermo(r, hform, t1, t, tl, cp, cpt, h, s)
+end # gas_C2H5OHJetA29Blend
+
+function gas_C2H5OHJetA71Blend(t1, t, tl, cp, cpt, h, s)
+    r = 154.77421805454426
+    hform = -4353445.285561333
+    get_thermo(r, hform, t1, t, tl, cp, cpt, h, s)
+end # gas_C2H5OHJetA71Blend
 
 macro define_gas_method(func_name, gas_name)
     func_symbol = esc(func_name)
