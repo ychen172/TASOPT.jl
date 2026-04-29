@@ -21,3 +21,5 @@ docs/build/*
 .vscode/*
 .CondaPkg/*
 __pycache__/*
+
+example/Movie/*.csv
