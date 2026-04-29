@@ -1269,6 +1269,11 @@ function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Integer, rhoFuel::Flo
     RangeArray =  ac.parm[imRange,1] * sort([LinRange(0.1,2.0,Rpts-1); 1.0]) #This ensures design range is always shown
     tolweight = 1.0 #One newton tolerance for weight checks
 
+    #Save previous fuel state to change back later
+    idxFuelBase = ac.options.ifuel
+    rhoFuelBase = ac.parg[igrhofuel]
+    LHVaporFuelBase = ac.pare[iehvap, :, :]
+
     for Range = RangeArray
         if maxPay == 0
             break
@@ -1284,6 +1289,11 @@ function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Integer, rhoFuel::Flo
             ac.para[iaCL,ipcruise1,2] = ac.para[iaCL,ipcruise1,1]
             
             ac.parm[imWpay,2] = mWpay
+
+            ac.options.ifuel = idxFuel
+            ac.parg[igrhofuel] = rhoFuel
+            ac.pare[iehvap, :, :] .= LHVaporFuel #Maybe unused but still change
+            ac.pare[iehvapcombustor, :, :] .= LHVaporFuel
             try
                 fly_mission!(ac, 2; itermax = itermax, initializes_engine = initializes_engine, opt_prescribed_cruise_parameter = opt_prescribed_cruise_parameter)
                 # fly_mission! success: store maxPay, break loop
@@ -1319,6 +1329,12 @@ function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Integer, rhoFuel::Flo
     end
     Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
     mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
+
+    #Change the fuel state back
+    ac.options.ifuel = idxFuelBase
+    ac.parg[igrhofuel] = rhoFuelBase
+    ac.pare[iehvap, :, :] .= LHVaporFuelBase
+    ac.pare[iehvapcombustor, :, :] .= LHVaporFuelBase
     
     return mPay_Lst, Ranges_Lst, PFEIs_Lst
 end
