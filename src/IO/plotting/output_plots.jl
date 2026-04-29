@@ -1388,6 +1388,9 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     PFEIs_Lst = []
     mPay_Lst = []
     PFEICur = 0.0
+    EneTO_Lst = []
+    EneCR_Lst = []
+    EneDE_Lst = []
 
     tolweight = 1.0 #One newton tolerance for weight checks
 
@@ -1429,9 +1432,21 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
             if Ldebug println("This specified case did not converge") end
             PFEICur = 0.0
         end
+        ##Compare the relative energy consumption for the three phases
+        fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
+        fracW_StaCru = ac.para[iafracW, ipcruise1, 2]
+        fracW_StaDes = ac.para[iafracW, ipdescent1, 2]
+        fracW_EndMis = ac.para[iafracW, ipdescentn, 2]
+        EneTO = Wmax * (fracW_StaMis-fracW_StaCru) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Takeoff energy
+        EneCR = Wmax * (fracW_StaCru-fracW_StaDes) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Cruise energy
+        EneDE = Wmax * (fracW_StaDes-fracW_EndMis) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Descent energy
+        ##Store Output Data
         append!(Ranges_Lst, ranCur) #[m]
         append!(PFEIs_Lst, PFEICur)
         append!(mPay_Lst, wPayCur) #[N]
+        append!(EneTO_Lst, EneTO) #[J]
+        append!(EneCR_Lst, EneCR) #[J]
+        append!(EneDE_Lst, EneDE) #[J]
     end
     Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
     mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
@@ -1442,7 +1457,7 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     ac.pare[iehvap, :, :] .= LHVaporFuelBase
     ac.pare[iehvapcombustor, :, :] .= LHVaporFuelBase
     
-    return mPay_Lst, Ranges_Lst, PFEIs_Lst
+    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst
 end
 
 """
