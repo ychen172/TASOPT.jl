@@ -1387,6 +1387,7 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     Ranges_Lst = []
     PFEIs_Lst = []
     mPay_Lst = []
+    PFEICur = 0.0
 
     tolweight = 1.0 #One newton tolerance for weight checks
 
