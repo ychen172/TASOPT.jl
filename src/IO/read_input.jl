@@ -216,6 +216,16 @@ if compare_strings(fueltype, "JET-A")
     pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank
     parg[igrhofuel] = readfuel("fuel_density")
     ifuel = 24
+if compare_strings(fueltype, "C2H5OH")
+    pare[ieTft, :, :] .= readfuel("fuel_temp") #Temperature of fuel in fuel tank
+    pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank
+    parg[igrhofuel] = readfuel("fuel_density")
+    ifuel = 32
+if compare_strings(fueltype, "JET-FUEL-25")
+    pare[ieTft, :, :] .= readfuel("fuel_temp") #Temperature of fuel in fuel tank
+    pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank
+    parg[igrhofuel] = readfuel("fuel_density")
+    ifuel = 25
 elseif compare_strings(fueltype, "LH2") 
     ifuel = 40
 elseif compare_strings(fueltype, "CH4")
