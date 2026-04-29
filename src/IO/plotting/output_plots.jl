@@ -1233,7 +1233,7 @@ Function to extract a payload range information for an aircraft offdesign to dif
     - `opt_prescribed_cruise_parameter::String`: option for whether cruise altitude(`altitude`) or lift coefficient(`CL`)
     - `Ldebug::Bool`: verbosity flag. false by default, hiding outputs as PR sweeps progress (Optional).
 """
-function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Integer, rhoFuel::Float64, LHVaporFuel::Float64; 
+function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, LHVaporFuel::Float64; 
     Rpts::Integer = 20, Ppts::Integer = 21, itermax::Int64 = 35, 
     initializes_engine::Bool = true, opt_prescribed_cruise_parameter::String = "CL",
     Ldebug::Bool = false)
