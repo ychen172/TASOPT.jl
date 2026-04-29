@@ -1189,6 +1189,56 @@ function gasPr(gas, T)
             
             igas = 40
             s, s_t, h, h_t, cp, R = gasfun(igas, T)
+      elseif (gas == "JetFuel")
+            #parameters from CRECK butanol reac mech retrofitting using cantera standard deviation 1% for mu and 400% for k
+            μ0 = 4.640123140750564e-06
+            S_μ = 496.02948495995196
+            K0 = 0.0085067816129475
+            S_k = 13921.574721656047
+            T0 = 273.0
+
+            igas = 25
+            s, s_t, h, h_t, cp, R = gasfun(igas, T)
+      elseif (gas == "c2h5oh")
+            #parameters from CRECK butanol reac mech retrofitting using cantera standard deviation 1% for mu and 400% for k
+            μ0 = 2.9695883616251595e-05
+            S_μ = 511.663010893506
+            K0 = 0.13116847332218173
+            S_k = 2815.4154552730597
+            T0 = 1200.0
+
+            igas = 32
+            s, s_t, h, h_t, cp, R = gasfun(igas, T)
+      elseif (gas == "c2h5ohjeta31blend") #Fuel 32 blend with fuel 24 with 31% blend of the first fuel
+            #parameters from CRECK butanol reac mech retrofitting using cantera
+            μ0 = 1.6770364610876922e-05
+            S_μ = 586.0218729827322 #standard deviation 2.88%
+            K0 = 0.06908955086552288
+            S_k = 3255.3981354849107 #standard deviation 565%
+            T0 = 800.0
+
+            igas = 322431
+            s, s_t, h, h_t, cp, R = gasfun(igas, T)
+      elseif (gas == "c2h5ohjeta29blend") #Fuel 32 blend with fuel 24 with 29% blend of the first fuel
+            #parameters from CRECK butanol reac mech retrofitting using cantera
+            μ0 = 5.982012001829641e-06
+            S_μ = 478.0105412614093 #standard deviation 10.59%
+            K0 = 0.011289920499604143
+            S_k = -11221.00027920075 #standard deviation -1296%
+            T0 = 273.0
+
+            igas = 322429
+            s, s_t, h, h_t, cp, R = gasfun(igas, T)
+      elseif (gas == "c2h5ohjeta71blend") #Fuel 32 blend with fuel 24 with 71% blend of the first fuel
+            #parameters from CRECK butanol reac mech retrofitting using cantera
+            μ0 = 6.894186411524931e-06
+            S_μ = 465.3618026431094 #standard deviation 8.04%
+            K0 = 0.012465267945034036
+            S_k = 3145.6816767919036 #standard deviation 1915%
+            T0 = 273.0
+
+            igas = 322471
+            s, s_t, h, h_t, cp, R = gasfun(igas, T)
       end
       
 
