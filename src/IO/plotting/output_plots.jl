@@ -1340,9 +1340,9 @@ function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float
 end
 
 """
-    PayloadRangeFuel(ac_og, idxFuel, rhoFuel, LHVaporFuel; Rpts, Ppts, itermax, initializes_engine, opt_prescribed_cruise_parameter, Ldebug)
+    PayloadRangeSpecified(ac_og, idxFuel, rhoFuel, LHVaporFuel, mPayLst, ranLst; itermax, initializes_engine, opt_prescribed_cruise_parameter, Ldebug)
 
-Function to extract a payload range information for an aircraft offdesign to different fuel
+Function to extract PFEI for a specified payload and range (PFEI returns to 0 if not converge)
 
 !!! details "🔃 Inputs and Outputs"
     **Inputs:**
@@ -1350,20 +1350,22 @@ Function to extract a payload range information for an aircraft offdesign to dif
     - `idxFuel::Integer`: Index of fuel to use
     - `rhoFuel::Float64`: Density of the fuel to use
     - `LHVaporFuel::Float64`: Heat of vaporization of the fuel
-    - `Rpts::Int64`: Density of ranges to be plot (Optional).
-    - `Ppts::Int64`: Density of payloads to be plot (Optional).
+    - `mPayLst::Vector`: [Ton] vector of payload weights
+    - `ranLst::Vector`: [nmi] vector of flight ranges
     - `itermax::Int64`: Max Iterations for fly_mission! loop (Optional).
     - `initializes_engine::Bool`: Use design case as initial guess for engine state if true (Optional)
     - `opt_prescribed_cruise_parameter::String`: option for whether cruise altitude(`altitude`) or lift coefficient(`CL`)
     - `Ldebug::Bool`: verbosity flag. false by default, hiding outputs as PR sweeps progress (Optional).
 """
-function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, LHVaporFuel::Float64, wPayLst::Vector, RanLst::Vector; 
+function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, LHVaporFuel::Float64, mPayLst::Vector, ranLst::Vector; 
     itermax::Int64 = 35, initializes_engine::Bool = true, opt_prescribed_cruise_parameter::String = "CL",
     Ldebug::Bool = false)
 
     if !ac_og.is_sized[1]
         error("Aircraft $(ac_og.name) not sized. Please size aircraft before calling `PayloadRange()`.")
     end
+
+    @assert ((length(mPayLst) == length(ranLst)) && (length(mPayLst)>0) && (length(ranLst)>0)) "Specified range and payload weights must have the same finite length"
 
     #Duplicate design mission as second aircraft, which will be modified
     parm = cat(ac_og.parm[:,1], ac_og.parm[:,1], dims=2)
@@ -1376,20 +1378,16 @@ function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float
     for HX in ac.engine.heat_exchangers
         HX.HXgas_mission = cat(HX.HXgas_mission[:,1], HX.HXgas_mission[:,1], dims=2)
     end
+
     #Extract aircraft parameters
     Wmax = ac.parg[igWMTO]
     Fuelmax = ac.parg[igWfmax]
     Wempty = ac.parg[igWMTO] - ac.parg[igWfuel] - ac.parg[igWpay]
-    PFEI = 0.0
 
     Ranges_Lst = []
     PFEIs_Lst = []
     mPay_Lst = []
-    maxPay = ac.parg[igWpaymax]
-    Wpax = ac.parm[imWperpax, 1]
-    sizingWpay = ac.parm[imWpay, 1] #sizing payload
 
-    RangeArray =  ac.parm[imRange,1] * sort([LinRange(0.1,2.0,Rpts-1); 1.0]) #This ensures design range is always shown
     tolweight = 1.0 #One newton tolerance for weight checks
 
     #Save previous fuel state to change back later
@@ -1397,58 +1395,42 @@ function PayloadRangeFuel(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float
     rhoFuelBase = ac.parg[igrhofuel]
     LHVaporFuelBase = ac.pare[iehvap, :, :]
 
-    for Range = RangeArray
-        if maxPay == 0
-            break
-        else
-            #This ensures design payload is always included
-            Payloads = reverse(sort([(maxPay) * LinRange(0, 1, Ppts - 1); sizingWpay]))
+    #Do unit conversion
+    ranLst = convertDist.(ranLst, "nmi", "m") #[nmi]->[m]
+    wPayLst = mPayLst * 9.81 * 1000.0 #[Ton]->[N]
+    for (idx,ranCur) in enumerate(ranLst) 
+        wPayCur = wPayLst[idx]
+        if Ldebug println("range (m) = $(ranCur), payload (N) = $(wPayCur)") end
+        
+        ac.parm[imRange,2] = ranCur
+        ac.parm[imWpay,2] = wPayCur
+
+        ac.para[iaalt,ipcruise1,2] = ac.para[iaalt,ipcruise1,1] #reset the aircraft to the design altitude and cruise CL 
+        ac.para[iaCL,ipcruise1,2] = ac.para[iaCL,ipcruise1,1] #since one is changed during fly_mission!() per opt_prescribed_cruise_parameter
+        
+        ac.options.ifuel = idxFuel
+        ac.parg[igrhofuel] = rhoFuel
+        ac.pare[iehvap, :, :] .= LHVaporFuel #Maybe unused but still change
+        ac.pare[iehvapcombustor, :, :] .= LHVaporFuel
+        try
+            fly_mission!(ac, 2; itermax = itermax, initializes_engine = initializes_engine, opt_prescribed_cruise_parameter = opt_prescribed_cruise_parameter)
+            mWfuel = ac.parm[imWfuel,2]
+            WTO = Wempty + wPayCur + mWfuel
+
+            # if weights are negative or above their max, point is infeasible
+            if ((WTO - Wmax) > tolweight) || ((mWfuel - Fuelmax) > tolweight) || (WTO < 0.0) || (mWfuel < 0.0)
+                if Ldebug println("This case converges to a invalid conds") end
+                PFEICur = 0.0
+            else
+                PFEICur = ac.parm[imPFEI, 2]
+            end     
+        catch
+            if Ldebug println("This specified case did not converge") end
+            PFEICur = 0.0
         end
-        ac.parm[imRange,2] = Range
-        for mWpay = Payloads
-            if Ldebug println("Checking for Range (nmi): ", convertDist(Range, "m", "nmi"), " and Pax = ", mWpay/convertForce(Wpax, "N", "lbf")) end
-            #reset the aircraft to the design altitude and cruise CL since one is changed during fly_mission!() per opt_prescribed_cruise_parameter
-            ac.para[iaalt,ipcruise1,2] = ac.para[iaalt,ipcruise1,1]
-            ac.para[iaCL,ipcruise1,2] = ac.para[iaCL,ipcruise1,1]
-            
-            ac.parm[imWpay,2] = mWpay
-
-            ac.options.ifuel = idxFuel
-            ac.parg[igrhofuel] = rhoFuel
-            ac.pare[iehvap, :, :] .= LHVaporFuel #Maybe unused but still change
-            ac.pare[iehvapcombustor, :, :] .= LHVaporFuel
-            try
-                fly_mission!(ac, 2; itermax = itermax, initializes_engine = initializes_engine, opt_prescribed_cruise_parameter = opt_prescribed_cruise_parameter)
-                # fly_mission! success: store maxPay, break loop
-                mWfuel = ac.parm[imWfuel,2]
-                WTO = Wempty + mWpay + mWfuel
-
-                # if weights are negative or above their max, point is infeasible
-                if ((WTO - Wmax) > tolweight) || ((mWfuel - Fuelmax) > tolweight) || (WTO < 0.0) || (mWfuel < 0.0)
-                    WTO = 0.0
-                    mWfuel = 0.0
-
-                    if Ldebug println("Max out error!") end
-
-                    if mWpay == 0
-                        if Ldebug println("Payload 0 and no convergence found") end
-                        
-                        maxPay = 0
-                    end
-                else
-                    maxPay = mWpay
-                    PFEI = ac.parm[imPFEI, 2]
-                    if Ldebug println("Converged - moving to next range...") end
-                    
-                    break
-                end     
-            catch
-                if Ldebug println("Not Converged - moving to lower payload...") end
-            end
-        end
-        append!(Ranges_Lst, Range) #[m]
-        append!(PFEIs_Lst, PFEI)
-        append!(mPay_Lst, maxPay) #[N]
+        append!(Ranges_Lst, ranCur) #[m]
+        append!(PFEIs_Lst, PFEICur)
+        append!(mPay_Lst, wPayCur) #[N]
     end
     Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
     mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
