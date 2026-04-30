@@ -1455,14 +1455,22 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
         LHVCruise = 0.5 * (ac.pare[iehfuel,ipcruise1, 2] + ac.pare[iehfuel,ipcruise2, 2]) #J/kg cruise heating value
         TSECCruise = TSFCCruise*LHVCruise #Cruise thrust specific energy consumption (J/s/N)
         altCruise = ac.para[iaalt,ipcruise1,2] #m cruise altitude
-        ##Compare the relative energy consumption for the three phases
-        fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
-        fracW_StaCru = ac.para[iafracW, ipcruise1, 2]
-        fracW_StaDes = ac.para[iafracW, ipdescent1, 2]
-        fracW_EndMis = ac.para[iafracW, ipdescentn, 2]
-        EneTO = Wmax * (fracW_StaMis-fracW_StaCru) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Takeoff energy
-        EneCR = Wmax * (fracW_StaCru-fracW_StaDes) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Cruise energy
-        EneDE = Wmax * (fracW_StaDes-fracW_EndMis) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Descent energy
+        ##Compare the relative energy consumption for the three phases (Assume no fuel venting)
+        EneTO = 0.0 #Takeoff and Climb Energy(J)
+        for ip = ipclimb1:(ipclimb5-1)
+                EneTO += 0.5*(ac.pare[iehfuel, ip, 2]+ac.pare[iehfuel, ip+1, 2])*
+                (ac.para[iafracW, ip, 2]-ac.para[iafracW, ip+1, 2])*ac.parg[igWMTO]/gee
+        end
+        EneCR = 0.0 #Cruise Energy(J)
+        for ip = ipcruise1:(ipcruise2-1)
+                EneCR += 0.5*(ac.pare[iehfuel, ip, 2]+ac.pare[iehfuel, ip+1, 2])*
+                (ac.para[iafracW, ip, 2]-ac.para[iafracW, ip+1, 2])*ac.parg[igWMTO]/gee
+        end
+        EneDE = 0.0 #Descent Energy(J)
+        for ip = ipdescent1:(ipdescent5-1)
+                EneDE += 0.5*(ac.pare[iehfuel, ip, 2]+ac.pare[iehfuel, ip+1, 2])*
+                (ac.para[iafracW, ip, 2]-ac.para[iafracW, ip+1, 2])*ac.parg[igWMTO]/gee
+        end
         ##Store Output Data
         append!(Ranges_Lst, ranCur) #[m]
         append!(PFEIs_Lst, PFEICur)
@@ -1624,14 +1632,22 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
         if (idx==1)
             append!(LHVFuel_Lst, LHVFuel)
         end
-        ##Compare the relative energy consumption for the three phases
-        fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
-        fracW_StaCru = ac.para[iafracW, ipcruise1, 2]
-        fracW_StaDes = ac.para[iafracW, ipdescent1, 2]
-        fracW_EndMis = ac.para[iafracW, ipdescentn, 2]
-        EneTO = Wmax * (fracW_StaMis-fracW_StaCru) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Takeoff energy
-        EneCR = Wmax * (fracW_StaCru-fracW_StaDes) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Cruise energy
-        EneDE = Wmax * (fracW_StaDes-fracW_EndMis) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Descent energy
+        ##Compare the relative energy consumption for the three phases(Assume no fuel venting)
+        EneTO = 0.0 #Takeoff and Climb Energy(J)
+        for ip = ipclimb1:(ipclimb5-1)
+                EneTO += 0.5*(ac.pare[iehfuel, ip, 2]+ac.pare[iehfuel, ip+1, 2])*
+                (ac.para[iafracW, ip, 2]-ac.para[iafracW, ip+1, 2])*ac.parg[igWMTO]/gee
+        end
+        EneCR = 0.0 #Cruise Energy(J)
+        for ip = ipcruise1:(ipcruise2-1)
+                EneCR += 0.5*(ac.pare[iehfuel, ip, 2]+ac.pare[iehfuel, ip+1, 2])*
+                (ac.para[iafracW, ip, 2]-ac.para[iafracW, ip+1, 2])*ac.parg[igWMTO]/gee
+        end
+        EneDE = 0.0 #Descent Energy(J)
+        for ip = ipdescent1:(ipdescent5-1)
+                EneDE += 0.5*(ac.pare[iehfuel, ip, 2]+ac.pare[iehfuel, ip+1, 2])*
+                (ac.para[iafracW, ip, 2]-ac.para[iafracW, ip+1, 2])*ac.parg[igWMTO]/gee
+        end
         ##Store Output Data
         append!(Ranges_Lst, ranCur) #[m]
         append!(PFEIs_Lst, PFEICur)
