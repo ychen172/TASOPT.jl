@@ -1493,6 +1493,7 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
     end
 
     @assert ((length(mPayLst) == length(ranLst)) && (length(mPayLst)>0) && (length(ranLst)>0)) "Specified range and payload weights must have the same finite length"
+    @assert ((length(ac.pare[iePhases2ndFuel, :, 2]) == length(flgPhaseSwitch))) "Specified fuel switching flag vector must have the same length as the number of phases"
 
     #Duplicate design mission as second aircraft, which will be modified
     parm = cat(ac_og.parm[:,1], ac_og.parm[:,1], dims=2)
@@ -1521,10 +1522,21 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
 
     tolweight = 1.0 #One newton tolerance for weight checks
 
-    #Save previous fuel state to change back later
+    #Save previous primary fuel state to change back later
     idxFuelBase = ac.options.ifuel
     rhoFuelBase = ac.parg[igrhofuel]
     LHVaporFuelBase = ac.pare[iehvap, :, :]
+
+    #Save previoud dual-fuel state to change back later
+    ifuel2ndBase = ac.options.ifuel2nd
+    rhoFuel2ndBase = ac.parg[igrhofuel2nd]
+    hVapFuel2ndBase = ac.parg[ighvap2nd]
+    flagPhaseFuelSwitchBase = ac.pare[iePhases2ndFuel, :, 2]
+
+    #Setup dual-fuel operation
+    ac.options.ifuel2nd = idxFuel2nd
+    ac.parg[igrhofuel2nd] = rhoFuel2nd
+    ac.parg[ighvap2nd] = LHVaporFuel2nd
 
     #Do unit conversion
     ranLst = convertDist.(ranLst, "nmi", "m") #[nmi]->[m]
@@ -1533,16 +1545,22 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
         wPayCur = wPayLst[idx]
         if Ldebug println("range (m) = $(ranCur), payload (N) = $(wPayCur)") end
         
+        #Setup the flight range an payload weight specified
         ac.parm[imRange,2] = ranCur
         ac.parm[imWpay,2] = wPayCur
 
+        #Overwritten prevention
         ac.para[iaalt,ipcruise1,2] = ac.para[iaalt,ipcruise1,1] #reset the aircraft to the design altitude and cruise CL 
         ac.para[iaCL,ipcruise1,2] = ac.para[iaCL,ipcruise1,1] #since one is changed during fly_mission!() per opt_prescribed_cruise_parameter
         
+        #Setup the specified primary fuel parameters
         ac.options.ifuel = idxFuel
         ac.parg[igrhofuel] = rhoFuel
         ac.pare[iehvap, :, :] .= LHVaporFuel #Maybe unused but still change
         ac.pare[iehvapcombustor, :, :] .= LHVaporFuel
+
+        #Setup the dual-fuel switching points
+        ac.pare[iePhases2ndFuel, :, 2] = flgPhaseSwitch
         try
             fly_mission!(ac, 2; itermax = itermax, initializes_engine = initializes_engine, opt_prescribed_cruise_parameter = opt_prescribed_cruise_parameter)
             mWfuel = ac.parm[imWfuel,2]
@@ -1578,11 +1596,17 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
     Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
     mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
 
-    #Change the fuel state back
+    #Change the primary fuel state back
     ac.options.ifuel = idxFuelBase
     ac.parg[igrhofuel] = rhoFuelBase
     ac.pare[iehvap, :, :] .= LHVaporFuelBase
     ac.pare[iehvapcombustor, :, :] .= LHVaporFuelBase
+
+    #Change the secondary fuel state back
+    ac.options.ifuel2nd = ifuel2ndBase
+    ac.parg[igrhofuel2nd] = rhoFuel2ndBase
+    ac.parg[ighvap2nd] = hVapFuel2ndBase
+    ac.pare[iePhases2ndFuel, :, 2] = flagPhaseFuelSwitchBase
     
     return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst
 end
