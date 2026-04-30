@@ -594,10 +594,13 @@ function tfsize!(gee, M0, T0, p0, a0, M2, M25,
             #      write(*,*) 'Pt6   u6 ', pt6, u6
             #
             # ===============================================================
-            #---- effective fuel heating value, over states 3, 4  (just for info)
+            #---- effective fuel heating value, over states 3, 4  (just for info and PFEI)
             cpa = 0.5 * (cpt3 + cpt4)
-            hfuel = cpa * (Tt4 - Tt3 + ffb * (Tt4 - Ttf)) / (etab * ffb)
+            hfuel = ( cpa * (Tt4 - Tt3) + cpa * ffb * (Tt4 - Ttf) + ffb * hvap ) / (etab * ffb)
 
+            #---- excluding the fuel evaporation effect, over states 3, 4 (just for info and PFEI)
+            #      cpa = 0.5 * (cpt3 + cpt4)
+            #      hfuel = cpa * (Tt4 - Tt3 + ffb * (Tt4 - Ttf)) / (etab * ffb)
             #---- effective fuel heating value, over states 3, 4.1  (just for info)
             #      cpa = 0.5*(cpt3+cpt41)
             #      hfuel = cpa*((1.0-fo)*(Tt41-Tt3) + ff*(Tt41-Ttf)) / (etab*ff)
