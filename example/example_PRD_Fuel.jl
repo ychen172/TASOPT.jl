@@ -52,7 +52,7 @@ mPay_Com .*= 0.9
 idxFuel = 25
 rhoFuel = 817.0
 LHVaporFuel = 358694.0 #J/kg
-mPay_Jet_Com, Ranges_Jet_Com, PFEIs_Jet_Com, EneTO_Jet, EneCR_Jet, EneDE_Jet, mFuel_Jet, mTO_Jet = PayloadRangeSpecified(ac, idxFuel, rhoFuel, LHVaporFuel, mPay_Com, Ranges_Com)
+mPay_Jet_Com, Ranges_Jet_Com, PFEIs_Jet_Com, EneTO_Jet, EneCR_Jet, EneDE_Jet, mFuel_Jet, mTO_Jet, rangeEst_Jet, LD_Jet, TSEC_Jet = PayloadRangeSpecified(ac, idxFuel, rhoFuel, LHVaporFuel, mPay_Com, Ranges_Com)
 
 Output = (; 
     Symbol("mPay (Ton)") => mPay_Jet_Com,
@@ -62,7 +62,10 @@ Output = (;
     Symbol("EnergyCR (J)") => EneCR_Jet,
     Symbol("EnergyDE (J)") => EneDE_Jet,
     Symbol("mFuel (Ton)") => mFuel_Jet,
-    Symbol("mTO (Ton)") => mTO_Jet
+    Symbol("mTO (Ton)") => mTO_Jet,
+    Symbol("rangeEst (nmi)") => rangeEst_Jet,
+    Symbol("LDratio ") => LD_Jet,
+    Symbol("TSEC (J/s/N) ") => TSEC_Jet
 )
 CSV.write("$(savedir)PayRanDataJetFuel_Com.csv", Output; writeheader=true)
 
@@ -70,7 +73,7 @@ CSV.write("$(savedir)PayRanDataJetFuel_Com.csv", Output; writeheader=true)
 idxFuel = 32
 rhoFuel = 789.0
 LHVaporFuel = 918187.9 #J/kg
-mPay_Eth_Com, Ranges_Eth_Com, PFEIs_Eth_Com, EneTO_Eth, EneCR_Eth, EneDE_Eth, mFuel_Eth, mTO_Eth = PayloadRangeSpecified(ac, idxFuel, rhoFuel, LHVaporFuel, mPay_Com, Ranges_Com)
+mPay_Eth_Com, Ranges_Eth_Com, PFEIs_Eth_Com, EneTO_Eth, EneCR_Eth, EneDE_Eth, mFuel_Eth, mTO_Eth, rangeEst_Eth, LD_Eth, TSEC_Eth = PayloadRangeSpecified(ac, idxFuel, rhoFuel, LHVaporFuel, mPay_Com, Ranges_Com)
 
 Output = (; 
     Symbol("mPay (Ton)") => mPay_Eth_Com,
@@ -80,7 +83,10 @@ Output = (;
     Symbol("EnergyCR (J)") => EneCR_Eth,
     Symbol("EnergyDE (J)") => EneDE_Eth,
     Symbol("mFuel (Ton)") => mFuel_Eth,
-    Symbol("mTO (Ton)") => mTO_Eth
+    Symbol("mTO (Ton)") => mTO_Eth,
+    Symbol("rangeEst (nmi)") => rangeEst_Eth,
+    Symbol("LDratio ") => LD_Eth,
+    Symbol("TSEC (J/s/N) ") => TSEC_Eth
 )
 CSV.write("$(savedir)PayRanDataEthanol_Com.csv", Output; writeheader=true)
 
@@ -92,9 +98,9 @@ rhoFuelSec = 789.0
 hVapFuelPri = 358694.0
 hVapFuelSec = 918187.9
 flgPhaseSwitch = zeros(size(ac.pare, 2))
-flgPhaseSwitch[:] .= 1.0
+flgPhaseSwitch[ipclimb1:ipclimb5] .= 1.0
 #Run dual-fuel
-mPay_Dua_Com, Ranges_Dua_Com, PFEIs_Dua_Com, EneTO_Dua, EneCR_Dua, EneDE_Dua, mFuel_Dua, mTO_Dua = PayloadRangeSpecDual(ac, idxFuelPri, rhoFuelPri, hVapFuelPri, mPay_Com, Ranges_Com, idxFuelSec, rhoFuelSec, hVapFuelSec, flgPhaseSwitch)
+mPay_Dua_Com, Ranges_Dua_Com, PFEIs_Dua_Com, EneTO_Dua, EneCR_Dua, EneDE_Dua, mFuel_Dua, mTO_Dua, LHVFuel_Dua = PayloadRangeSpecDual(ac, idxFuelPri, rhoFuelPri, hVapFuelPri, mPay_Com, Ranges_Com, idxFuelSec, rhoFuelSec, hVapFuelSec, flgPhaseSwitch)
 Output = (; 
     Symbol("mPay (Ton)") => mPay_Dua_Com,
     Symbol("Ranges (nmi)") => Ranges_Dua_Com,
@@ -106,3 +112,9 @@ Output = (;
     Symbol("mTO (Ton)") => mTO_Dua
 )
 CSV.write("$(savedir)PayRanDataDual_Com.csv", Output; writeheader=true)
+
+Output = (; 
+    Symbol("LHV Fuel (J/kg)") => LHVFuel_Dua
+)
+
+CSV.write("$(savedir)MissionParaDual_Com.csv", Output; writeheader=true)

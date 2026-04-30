@@ -1395,6 +1395,9 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     EneDE_Lst = []
     mFuel_Lst = [] #Ton
     mTO_Lst = [] #Ton
+    rangeEst_Lst = [] #nmi Estimated using range equation
+    LD_Lst = []
+    TSEC_Lst = [] #(J/s/N)
 
     tolweight = 1.0 #One newton tolerance for weight checks
 
@@ -1440,6 +1443,16 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
             mWfuel = 0.0
             WTO = 0.0
         end
+        ##Compute a reference range using Breguet range equation
+        velHorCruise = 0.5 * (cos(ac.para[iagamV, ipcruise1,2])*ac.pare[ieu0, ipcruise1,2] + 
+                        cos(ac.para[iagamV, ipcruise2,2])*ac.pare[ieu0, ipcruise2, 2]) #(m/s) Averaged cruise horizontal velocity
+        LDRatioCruise = 0.5 * (ac.para[iaCL, ipcruise1,2]/ac.para[iaCD, ipcruise1,2] + 
+                        ac.para[iaCL, ipcruise2,2]/ac.para[iaCD, ipcruise2,2]) #Lift Drag Ratio
+        TSFCCruise = 0.5 * (ac.pare[ieTSFC, ipcruise1, 2] + ac.pare[ieTSFC, ipcruise2,2]) / gee #(kg/s/N)
+        WRatioIni2Fin = ac.para[iafracW,ipclimb1,2]/ac.para[iafracW,ipdescentn,2] #WIni/WFin
+        rangeEst = ((velHorCruise*LDRatioCruise)/(gee*TSFCCruise))*log(WRatioIni2Fin)/nmi_to_m #nmi estimated range        
+        LHVCruise = 0.5 * (ac.pare[iehfuel,ipcruise1, 2] + ac.pare[iehfuel,ipcruise2, 2]) #J/kg cruise heating value
+        TSECCruise = TSFCCruise*LHVCruise #Cruise thrust specific energy consumption (J/s/N)
         ##Compare the relative energy consumption for the three phases
         fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
         fracW_StaCru = ac.para[iafracW, ipcruise1, 2]
@@ -1457,6 +1470,9 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
         append!(EneDE_Lst, EneDE) #[J]
         append!(mFuel_Lst, mWfuel) #[N]
         append!(mTO_Lst, WTO) #[N]
+        append!(rangeEst_Lst, rangeEst) #[nmi]
+        append!(LD_Lst, LDRatioCruise)
+        append!(TSEC_Lst, TSECCruise)
     end
     Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
     mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
@@ -1469,7 +1485,7 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     ac.pare[iehvap, :, :] .= LHVaporFuelBase
     ac.pare[iehvapcombustor, :, :] .= LHVaporFuelBase
     
-    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst, mFuel_Lst, mTO_Lst
+    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst, mFuel_Lst, mTO_Lst, rangeEst_Lst, LD_Lst, TSEC_Lst
 end
 
 """
@@ -1536,6 +1552,7 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
     EneDE_Lst = []
     mFuel_Lst = [] #Ton
     mTO_Lst = [] #Ton
+    LHVFuel_Lst = [] #First missions LHV J/kg
 
     tolweight = 1.0 #One newton tolerance for weight checks
 
@@ -1598,6 +1615,11 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
             mWfuel = 0.0
             WTO = 0.0
         end
+        ##Extract the heating value variations at different phases
+        LHVFuel = ac.pare[iehfuel,:, 2] #J/kg
+        if (idx==1)
+            append!(LHVFuel_Lst, LHVFuel)
+        end
         ##Compare the relative energy consumption for the three phases
         fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
         fracW_StaCru = ac.para[iafracW, ipcruise1, 2]
@@ -1633,7 +1655,7 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
     ac.parg[ighvap2nd] = hVapFuel2ndBase
     ac.pare[iePhases2ndFuel, :, 2] = flagPhaseFuelSwitchBase
     
-    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst, mFuel_Lst, mTO_Lst
+    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst, mFuel_Lst, mTO_Lst, LHVFuel_Lst
 end
 
 """
