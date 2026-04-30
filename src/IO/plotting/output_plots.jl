@@ -1388,9 +1388,13 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     PFEIs_Lst = []
     mPay_Lst = []
     PFEICur = 0.0
+    mWfuel = 0.0
+    WTO = 0.0
     EneTO_Lst = []
     EneCR_Lst = []
     EneDE_Lst = []
+    mFuel_Lst = [] #Ton
+    mTO_Lst = [] #Ton
 
     tolweight = 1.0 #One newton tolerance for weight checks
 
@@ -1425,12 +1429,16 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
             if ((WTO - Wmax) > tolweight) || ((mWfuel - Fuelmax) > tolweight) || (WTO < 0.0) || (mWfuel < 0.0)
                 if Ldebug println("This case converges to a invalid conds") end
                 PFEICur = 0.0
+                mWfuel = 0.0
+                WTO = 0.0
             else
                 PFEICur = ac.parm[imPFEI, 2]
             end     
         catch
             if Ldebug println("This specified case did not converge") end
             PFEICur = 0.0
+            mWfuel = 0.0
+            WTO = 0.0
         end
         ##Compare the relative energy consumption for the three phases
         fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
@@ -1447,9 +1455,13 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
         append!(EneTO_Lst, EneTO) #[J]
         append!(EneCR_Lst, EneCR) #[J]
         append!(EneDE_Lst, EneDE) #[J]
+        append!(mFuel_Lst, mWfuel) #[N]
+        append!(mTO_Lst, WTO) #[N]
     end
     Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
     mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
+    mFuel_Lst = mFuel_Lst ./ (9.81 * 1000) #[Ton]
+    mTO_Lst = mTO_Lst ./ (9.81 * 1000) #[Ton]
 
     #Change the fuel state back
     ac.options.ifuel = idxFuelBase
@@ -1457,7 +1469,7 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     ac.pare[iehvap, :, :] .= LHVaporFuelBase
     ac.pare[iehvapcombustor, :, :] .= LHVaporFuelBase
     
-    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst
+    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst, mFuel_Lst, mTO_Lst
 end
 
 """
@@ -1517,9 +1529,13 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
     PFEIs_Lst = []
     mPay_Lst = []
     PFEICur = 0.0
+    mWfuel = 0.0
+    WTO = 0.0
     EneTO_Lst = []
     EneCR_Lst = []
     EneDE_Lst = []
+    mFuel_Lst = [] #Ton
+    mTO_Lst = [] #Ton
 
     tolweight = 1.0 #One newton tolerance for weight checks
 
@@ -1571,12 +1587,16 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
             if ((WTO - Wmax) > tolweight) || ((mWfuel - Fuelmax) > tolweight) || (WTO < 0.0) || (mWfuel < 0.0)
                 if Ldebug println("This case converges to a invalid conds") end
                 PFEICur = 0.0
+                mWfuel = 0.0
+                WTO = 0.0
             else
                 PFEICur = ac.parm[imPFEI, 2]
             end     
         catch
             if Ldebug println("This specified case did not converge") end
             PFEICur = 0.0
+            mWfuel = 0.0
+            WTO = 0.0
         end
         ##Compare the relative energy consumption for the three phases
         fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
@@ -1593,9 +1613,13 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
         append!(EneTO_Lst, EneTO) #[J]
         append!(EneCR_Lst, EneCR) #[J]
         append!(EneDE_Lst, EneDE) #[J]
+        append!(mFuel_Lst, mWfuel) #[N]
+        append!(mTO_Lst, WTO) #[N]
     end
     Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
     mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
+    mFuel_Lst = mFuel_Lst ./ (9.81 * 1000) #[Ton]
+    mTO_Lst = mTO_Lst ./ (9.81 * 1000) #[Ton]
 
     #Change the primary fuel state back
     ac.options.ifuel = idxFuelBase
@@ -1609,7 +1633,7 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
     ac.parg[ighvap2nd] = hVapFuel2ndBase
     ac.pare[iePhases2ndFuel, :, 2] = flagPhaseFuelSwitchBase
     
-    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst
+    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst, mFuel_Lst, mTO_Lst
 end
 
 """
