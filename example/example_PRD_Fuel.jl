@@ -88,6 +88,7 @@ rhoFuelSec = 789.0
 hVapFuelPri = 358694.0
 hVapFuelSec = 918187.9
 flgPhaseSwitch = zeros(size(ac.pare, 2))
+flgPhaseSwitch[:] .= 1.0
 #Run dual-fuel
 mPay_Dua_Com, Ranges_Dua_Com, PFEIs_Dua_Com, EneTO_Dua, EneCR_Dua, EneDE_Dua = PayloadRangeSpecDual(ac, idxFuelPri, rhoFuelPri, hVapFuelPri, mPay_Com, Ranges_Com, idxFuelSec, rhoFuelSec, hVapFuelSec, flgPhaseSwitch)
 Output = (; 
