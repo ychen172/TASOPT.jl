@@ -214,17 +214,26 @@ fueltype = readfuel("fuel_type")
 if compare_strings(fueltype, "JET-A")
     pare[ieTft, :, :] .= readfuel("fuel_temp") #Temperature of fuel in fuel tank
     pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank
+    pare[iePhases2ndFuel, :, :] .= false #initialize a mission always with secondary fuel completely turned off
     parg[igrhofuel] = readfuel("fuel_density")
+    parg[igrhofuel2nd] = readfuel("fuel_density")
+    parg[ighvap2nd] = readfuel("fuel_enthalpy_vaporization")
     ifuel = 24
 elseif compare_strings(fueltype, "C2H5OH")
     pare[ieTft, :, :] .= readfuel("fuel_temp") #Temperature of fuel in fuel tank
     pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank
+    pare[iePhases2ndFuel, :, :] .= false #as pare is an float vector, use 0 here to say false and 1 to say true
     parg[igrhofuel] = readfuel("fuel_density")
+    parg[igrhofuel2nd] = readfuel("fuel_density")
+    parg[ighvap2nd] = readfuel("fuel_enthalpy_vaporization")
     ifuel = 32
 elseif compare_strings(fueltype, "JET-FUEL-25")
     pare[ieTft, :, :] .= readfuel("fuel_temp") #Temperature of fuel in fuel tank
     pare[ieTfuel, :, :] .= readfuel("fuel_temp") #Initialize fuel temperature as temperature in tank
+    pare[iePhases2ndFuel, :, :] .= false
     parg[igrhofuel] = readfuel("fuel_density")
+    parg[igrhofuel2nd] = readfuel("fuel_density")
+    parg[ighvap2nd] = readfuel("fuel_enthalpy_vaporization")
     ifuel = 25
 elseif compare_strings(fueltype, "LH2") 
     ifuel = 40
@@ -1261,6 +1270,7 @@ end
 ac_options = TASOPT.Options(
     opt_fuel = _opt_fuel,
     ifuel = ifuel,
+    ifuel2nd = ifuel,
     has_wing_fuel = has_wing_fuel,
     has_centerbox_fuel = has_centerbox_fuel,
     has_fuselage_fuel = (nftanks>0),

@@ -53,7 +53,9 @@ function fly_mission!(ac, imission = 1; itermax = 35, initializes_engine = true,
     #Initialize arrays with the design mission values if desired
     if (initializes_engine)
         #----- use design case as initial guess for engine state
+        saved_Phases2ndFuel = copy(pare[iePhases2ndFuel, :]) #Avoid washing off mission specific engine operating conditions
         pare[:,:] .= pared[:,:]
+        pare[iePhases2ndFuel, :] = saved_Phases2ndFuel
     else
         pare[ieu0, ipcruise1] = pared[ieu0, ipcruise1] #Copy flight speed for altitude calculation
     end

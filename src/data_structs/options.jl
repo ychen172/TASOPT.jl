@@ -11,6 +11,8 @@ $TYPEDFIELDS
     opt_fuel::FuelType.T
     """Fuel option index (non-driving; determined and used by gas calcs)"""
     ifuel::Int
+    """Secondary fuel option index (Use only at certain phases of flight) """
+    ifuel2nd::Int
     """Indicates presence of centerbox fuel tank, can only be true if has_wing_fuel is true"""
     has_centerbox_fuel::Bool
     """Indicates presence of wing fuel tanks """

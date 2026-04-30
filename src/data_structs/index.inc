@@ -179,7 +179,10 @@
       const igWfvent = 121
       const igWHXs = 122
       const igfeng = 123
-      const igtotal    = 123
+
+      const igrhofuel2nd = 124
+      const ighvap2nd = 125
+      const igtotal    = 125
 
 #---- indices for aero variables at each mission point
       const iaalt     =  1
@@ -486,7 +489,9 @@
       const iedehtdfc           = 231
       const ieConvFail          = 232
 
-      const ietotal = 232
+      const iePhases2ndFuel     = 233
+
+      const ietotal = 233
 
 #---- max number of blade rows allowed by ieepsc* and ieTmet* indices above
 # integer ncrowx

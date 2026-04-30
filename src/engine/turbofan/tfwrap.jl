@@ -23,6 +23,20 @@ function tfwrap!(ac, case::String, imission::Int64, ip::Int64, initializes_engin
     #Unpack data storage arrays
     parg, _, para, pare, options, _, _, wing, _, _, engine = unpack_ac(ac, imission)
     
+    #Switch to secondary fuel if this phase is the target phase for fuel switching
+    flagSwitchFuel = pare[iePhases2ndFuel,ip]
+    ifuelBase = options.ifuel #Save a copy in case modified
+    rhoFuelBase = parg[igrhofuel]
+    hvapBase = pare[iehvap,ip]
+    hvapcombustorBase = pare[iehvapcombustor,ip] 
+    if flagSwitchFuel
+        options.ifuel = options.ifuel2nd #Use secondary fuel
+        parg[igrhofuel] = parg[igrhofuel2nd]
+        pare[iehvap,ip] = parg[ighvap2nd]
+        pare[iehvapcombustor,ip] = parg[ighvap2nd]
+    end
+    
+    #Run engine
     if case == "design"
         opt_calc_call = CalcMode.Sizing
         opt_cooling = CoolingOpt.FixedCoolingFlowRatio
@@ -90,5 +104,13 @@ function tfwrap!(ac, case::String, imission::Int64, ip::Int64, initializes_engin
             # also set first estimate of total cooling mass flow fraction
             pare[iefc, jp] = pare[iefc, ip]
         end
+    end
+
+    #Conditionally assign back the base/primary fuel before exit
+    if flagSwitchFuel
+        options.ifuel = ifuelBase #Switch back
+        parg[igrhofuel] = rhoFuelBase
+        pare[iehvap,ip] = hvapBase
+        pare[iehvapcombustor,ip] = hvapcombustorBase
     end
 end
