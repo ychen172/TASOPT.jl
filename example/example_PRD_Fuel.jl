@@ -12,7 +12,7 @@ savedir = "Movie/"
 if !isdir(savedir)
     mkdir(savedir)
 end
-
+include("../src/data_structs/index.inc")
 
 # Load default model
 ac = load_default_model() #Use default model for payload-range diagram
@@ -87,9 +87,9 @@ rhoFuelPri = 817.0
 rhoFuelSec = 789.0
 hVapFuelPri = 358694.0
 hVapFuelSec = 918187.9
-flgPhaseSwitch = falses(length(ac.pare[iePhases2ndFuel, :, 2]))
+flgPhaseSwitch = zeros(size(ac.pare, 2))
 #Run dual-fuel
-mPay_Dua_Com, Ranges_Dua_Com, PFEIs_Dua_Com, EneTO_Dua, EneCR_Dua, EneDE_Dua = PayloadRangeSpecified(ac, idxFuelPri, rhoFuelPri, hVapFuelPri, mPay_Com, Ranges_Com, idxFuelSec, rhoFuelSec, hVapFuelSec, flgPhaseSwitch)
+mPay_Dua_Com, Ranges_Dua_Com, PFEIs_Dua_Com, EneTO_Dua, EneCR_Dua, EneDE_Dua = PayloadRangeSpecDual(ac, idxFuelPri, rhoFuelPri, hVapFuelPri, mPay_Com, Ranges_Com, idxFuelSec, rhoFuelSec, hVapFuelSec, flgPhaseSwitch)
 Output = (; 
     Symbol("mPay (Ton)") => mPay_Dua_Com,
     Symbol("Ranges (nmi)") => Ranges_Dua_Com,

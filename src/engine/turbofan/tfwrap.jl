@@ -29,7 +29,7 @@ function tfwrap!(ac, case::String, imission::Int64, ip::Int64, initializes_engin
     rhoFuelBase = parg[igrhofuel]
     hvapBase = pare[iehvap,ip]
     hvapcombustorBase = pare[iehvapcombustor,ip] 
-    if flagSwitchFuel
+    if (flagSwitchFuel>0.5)
         options.ifuel = options.ifuel2nd #Use secondary fuel
         parg[igrhofuel] = parg[igrhofuel2nd]
         pare[iehvap,ip] = parg[ighvap2nd]
@@ -107,7 +107,7 @@ function tfwrap!(ac, case::String, imission::Int64, ip::Int64, initializes_engin
     end
 
     #Conditionally assign back the base/primary fuel before exit
-    if flagSwitchFuel
+    if (flagSwitchFuel>0.5)
         options.ifuel = ifuelBase #Switch back
         parg[igrhofuel] = rhoFuelBase
         pare[iehvap,ip] = hvapBase

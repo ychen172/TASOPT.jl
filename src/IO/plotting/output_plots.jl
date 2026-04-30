@@ -1484,7 +1484,7 @@ Function to extract PFEI for a specified payload and range (PFEI returns to 0 if
     - `Ldebug::Bool`: verbosity flag. false by default, hiding outputs as PR sweeps progress (Optional).
 """
 function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, LHVaporFuel::Float64,
-    mPayLst::Vector, ranLst::Vector, idxFuel2nd::Int64, rhoFuel2nd::Float64, LHVaporFuel2nd::Float64, flgPhaseSwitch::Vector{Bool}; 
+    mPayLst::Vector, ranLst::Vector, idxFuel2nd::Int64, rhoFuel2nd::Float64, LHVaporFuel2nd::Float64, flgPhaseSwitch::Vector; 
     itermax::Int64 = 35, initializes_engine::Bool = true, opt_prescribed_cruise_parameter::String = "CL",
     Ldebug::Bool = false)
 
@@ -1493,7 +1493,6 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
     end
 
     @assert ((length(mPayLst) == length(ranLst)) && (length(mPayLst)>0) && (length(ranLst)>0)) "Specified range and payload weights must have the same finite length"
-    @assert ((length(ac.pare[iePhases2ndFuel, :, 2]) == length(flgPhaseSwitch))) "Specified fuel switching flag vector must have the same length as the number of phases"
 
     #Duplicate design mission as second aircraft, which will be modified
     parm = cat(ac_og.parm[:,1], ac_og.parm[:,1], dims=2)
@@ -1506,6 +1505,8 @@ function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::F
     for HX in ac.engine.heat_exchangers
         HX.HXgas_mission = cat(HX.HXgas_mission[:,1], HX.HXgas_mission[:,1], dims=2)
     end
+    
+    @assert ((length(ac.pare[iePhases2ndFuel, :, 2]) == length(flgPhaseSwitch))) "Specified fuel switching flag vector must have the same length as the number of phases"
 
     #Extract aircraft parameters
     Wmax = ac.parg[igWMTO]
