@@ -802,8 +802,13 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
       parm[imWfuel] = Wfuel
       #TODO the above calculation does not account for the effect of venting on the flight profile
 
-      # mission PFEI
-      Wburn = WMTO * fburn
-      parm[imPFEI] = Wburn/gee * parg[igLHVfuel] / (parm[imWpay] * parm[imRange])
+      # mission PFEI (Integrate through the phases in case fuel type changes during different phases)
+      energyFlight = 0.0 #Total flight fuel energy (J)
+      for ip = ipclimb1:(ipdescentn-1)
+            energyFlight += 0.5*(pare[iehfuel, ip]+pare[iehfuel, ip+1])*
+            (para[iafracW, ip]-para[iafracW, ip+1])*WMTO/gee
+      end
+      energyFlight += pare[iehfuel, ipcruise1]*parm[imWfvent]/gee #estimate the additional fuel energy from venting if any
+      parm[imPFEI] = energyFlight/(parm[imWpay] * parm[imRange])
 
 end
