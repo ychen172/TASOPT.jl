@@ -47,7 +47,7 @@ n = min(length(Ranges_Eth), length(Ranges_Jet))
 Ranges_Com = Ranges_Eth[1:n-2] #[nmi] #Drop the last two to avoid 0 range ending point
 mPay_Com = min.(mPay_Jet[1:n-2], mPay_Eth[1:n-2])  #[Ton] smaller payload of the two
 mPay_Com .*= 0.9
-
+"""
 #Run off-design on jet fuel (Specified common ranges and payloads)
 idxFuel = 25
 rhoFuel = 817.0
@@ -79,3 +79,23 @@ Output = (;
     Symbol("EnergyDE (J)") => EneDE_Eth
 )
 CSV.write("$(savedir)PayRanDataEthanol_Com.csv", Output; writeheader=true)
+"""
+
+idxFuelPri = 25
+idxFuelSec = 32
+rhoFuelPri = 817.0
+rhoFuelSec = 789.0
+hVapFuelPri = 358694.0
+hVapFuelSec = 918187.9
+flgPhaseSwitch = falses(length(ac.pare[iePhases2ndFuel, :, 2]))
+#Run dual-fuel
+mPay_Dua_Com, Ranges_Dua_Com, PFEIs_Dua_Com, EneTO_Dua, EneCR_Dua, EneDE_Dua = PayloadRangeSpecified(ac, idxFuelPri, rhoFuelPri, hVapFuelPri, mPay_Com, Ranges_Com, idxFuelSec, rhoFuelSec, hVapFuelSec, flgPhaseSwitch)
+Output = (; 
+    Symbol("mPay (Ton)") => mPay_Dua_Com,
+    Symbol("Ranges (nmi)") => Ranges_Dua_Com,
+    Symbol("PFEIs") => PFEIs_Dua_Com,
+    Symbol("EnergyTO (J)") => EneTO_Dua,
+    Symbol("EnergyCR (J)") => EneCR_Dua,
+    Symbol("EnergyDE (J)") => EneDE_Dua
+)
+CSV.write("$(savedir)PayRanDataDual_Com.csv", Output; writeheader=true)
