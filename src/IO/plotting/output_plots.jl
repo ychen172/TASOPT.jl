@@ -1461,6 +1461,133 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
 end
 
 """
+    PayloadRangeSpecified(ac_og, idxFuel, rhoFuel, LHVaporFuel, mPayLst, ranLst, idxFuel2nd, rhoFuel2nd, LHVaporFuel2nd, flgPhaseSwitch; itermax, initializes_engine, opt_prescribed_cruise_parameter, Ldebug)
+
+Function to extract PFEI for a specified payload and range (PFEI returns to 0 if not converge)
+    Accept both change primary fuel and accept dual-fuel operation
+
+!!! details "🔃 Inputs and Outputs"
+    **Inputs:**
+    - `ac_og::aircraft`: Aircraft structure for payload range diagram.
+    - `idxFuel::Integer`: Index of fuel to use
+    - `rhoFuel::Float64`: Density of the fuel to use
+    - `LHVaporFuel::Float64`: Heat of vaporization of the fuel
+    - `mPayLst::Vector`: [Ton] vector of payload weights
+    - `ranLst::Vector`: [nmi] vector of flight ranges
+    - `idxFuel2nd::Integer`: Index of the secondary fuel to use during dual fuel phases
+    - `rhoFuel2nd::Float64`: Density of the secondary fuel to use during dual fuel phases
+    - `LHVaporFuel2nd::Float64`: Heat of vaporization of the secondary fuel to use during dual fuel phases
+    - `flgPhaseSwitch::Vector{Bool}`: vector of flags indicating which phases to switch to 2ndary fuel (in order of phases)
+    - `itermax::Int64`: Max Iterations for fly_mission! loop (Optional).
+    - `initializes_engine::Bool`: Use design case as initial guess for engine state if true (Optional)
+    - `opt_prescribed_cruise_parameter::String`: option for whether cruise altitude(`altitude`) or lift coefficient(`CL`)
+    - `Ldebug::Bool`: verbosity flag. false by default, hiding outputs as PR sweeps progress (Optional).
+"""
+function PayloadRangeSpecDual(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, LHVaporFuel::Float64,
+    mPayLst::Vector, ranLst::Vector, idxFuel2nd::Int64, rhoFuel2nd::Float64, LHVaporFuel2nd::Float64, flgPhaseSwitch::Vector{Bool}; 
+    itermax::Int64 = 35, initializes_engine::Bool = true, opt_prescribed_cruise_parameter::String = "CL",
+    Ldebug::Bool = false)
+
+    if !ac_og.is_sized[1]
+        error("Aircraft $(ac_og.name) not sized. Please size aircraft before calling `PayloadRange()`.")
+    end
+
+    @assert ((length(mPayLst) == length(ranLst)) && (length(mPayLst)>0) && (length(ranLst)>0)) "Specified range and payload weights must have the same finite length"
+
+    #Duplicate design mission as second aircraft, which will be modified
+    parm = cat(ac_og.parm[:,1], ac_og.parm[:,1], dims=2)
+    pare = cat(ac_og.pare[:,:,1], ac_og.pare[:,:,1], dims=3)
+    para = cat(ac_og.para[:,:,1], ac_og.para[:,:,1], dims=3)
+    ac = aircraft(ac_og.name, ac_og.description,
+    ac_og.options, ac_og.parg, parm, para, pare, [true], 
+    ac_og.fuselage, ac_og.fuse_tank, ac_og.wing, ac_og.htail, ac_og.vtail, ac_og.engine, ac_og.landing_gear)
+
+    for HX in ac.engine.heat_exchangers
+        HX.HXgas_mission = cat(HX.HXgas_mission[:,1], HX.HXgas_mission[:,1], dims=2)
+    end
+
+    #Extract aircraft parameters
+    Wmax = ac.parg[igWMTO]
+    Fuelmax = ac.parg[igWfmax]
+    Wempty = ac.parg[igWMTO] - ac.parg[igWfuel] - ac.parg[igWpay]
+
+    Ranges_Lst = []
+    PFEIs_Lst = []
+    mPay_Lst = []
+    PFEICur = 0.0
+    EneTO_Lst = []
+    EneCR_Lst = []
+    EneDE_Lst = []
+
+    tolweight = 1.0 #One newton tolerance for weight checks
+
+    #Save previous fuel state to change back later
+    idxFuelBase = ac.options.ifuel
+    rhoFuelBase = ac.parg[igrhofuel]
+    LHVaporFuelBase = ac.pare[iehvap, :, :]
+
+    #Do unit conversion
+    ranLst = convertDist.(ranLst, "nmi", "m") #[nmi]->[m]
+    wPayLst = mPayLst * 9.81 * 1000.0 #[Ton]->[N]
+    for (idx,ranCur) in enumerate(ranLst) 
+        wPayCur = wPayLst[idx]
+        if Ldebug println("range (m) = $(ranCur), payload (N) = $(wPayCur)") end
+        
+        ac.parm[imRange,2] = ranCur
+        ac.parm[imWpay,2] = wPayCur
+
+        ac.para[iaalt,ipcruise1,2] = ac.para[iaalt,ipcruise1,1] #reset the aircraft to the design altitude and cruise CL 
+        ac.para[iaCL,ipcruise1,2] = ac.para[iaCL,ipcruise1,1] #since one is changed during fly_mission!() per opt_prescribed_cruise_parameter
+        
+        ac.options.ifuel = idxFuel
+        ac.parg[igrhofuel] = rhoFuel
+        ac.pare[iehvap, :, :] .= LHVaporFuel #Maybe unused but still change
+        ac.pare[iehvapcombustor, :, :] .= LHVaporFuel
+        try
+            fly_mission!(ac, 2; itermax = itermax, initializes_engine = initializes_engine, opt_prescribed_cruise_parameter = opt_prescribed_cruise_parameter)
+            mWfuel = ac.parm[imWfuel,2]
+            WTO = Wempty + wPayCur + mWfuel
+
+            # if weights are negative or above their max, point is infeasible
+            if ((WTO - Wmax) > tolweight) || ((mWfuel - Fuelmax) > tolweight) || (WTO < 0.0) || (mWfuel < 0.0)
+                if Ldebug println("This case converges to a invalid conds") end
+                PFEICur = 0.0
+            else
+                PFEICur = ac.parm[imPFEI, 2]
+            end     
+        catch
+            if Ldebug println("This specified case did not converge") end
+            PFEICur = 0.0
+        end
+        ##Compare the relative energy consumption for the three phases
+        fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
+        fracW_StaCru = ac.para[iafracW, ipcruise1, 2]
+        fracW_StaDes = ac.para[iafracW, ipdescent1, 2]
+        fracW_EndMis = ac.para[iafracW, ipdescentn, 2]
+        EneTO = Wmax * (fracW_StaMis-fracW_StaCru) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Takeoff energy
+        EneCR = Wmax * (fracW_StaCru-fracW_StaDes) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Cruise energy
+        EneDE = Wmax * (fracW_StaDes-fracW_EndMis) / gee * (ac.parg[igLHVfuel]-LHVaporFuel) #[J] Descent energy
+        ##Store Output Data
+        append!(Ranges_Lst, ranCur) #[m]
+        append!(PFEIs_Lst, PFEICur)
+        append!(mPay_Lst, wPayCur) #[N]
+        append!(EneTO_Lst, EneTO) #[J]
+        append!(EneCR_Lst, EneCR) #[J]
+        append!(EneDE_Lst, EneDE) #[J]
+    end
+    Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
+    mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
+
+    #Change the fuel state back
+    ac.options.ifuel = idxFuelBase
+    ac.parg[igrhofuel] = rhoFuelBase
+    ac.pare[iehvap, :, :] .= LHVaporFuelBase
+    ac.pare[iehvapcombustor, :, :] .= LHVaporFuelBase
+    
+    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst
+end
+
+"""
     DragPolar(ac; CL_range = 0.2:0.05:0.8, 
               show_drag_components=false, show_airfoil_data=false, 
               title=nothing, legend=true, print_results=false)
