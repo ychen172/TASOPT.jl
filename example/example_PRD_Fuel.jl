@@ -52,7 +52,7 @@ mPay_Com .*= 0.9
 idxFuel = 25
 rhoFuel = 817.0
 LHVaporFuel = 358694.0 #J/kg
-mPay_Jet_Com, Ranges_Jet_Com, PFEIs_Jet_Com, EneTO_Jet, EneCR_Jet, EneDE_Jet, mFuel_Jet, mTO_Jet, rangeEst_Jet, LD_Jet, TSEC_Jet = PayloadRangeSpecified(ac, idxFuel, rhoFuel, LHVaporFuel, mPay_Com, Ranges_Com)
+mPay_Jet_Com, Ranges_Jet_Com, PFEIs_Jet_Com, EneTO_Jet, EneCR_Jet, EneDE_Jet, mFuel_Jet, mTO_Jet, rangeEst_Jet, LD_Jet, TSEC_Jet, altCR_Jet = PayloadRangeSpecified(ac, idxFuel, rhoFuel, LHVaporFuel, mPay_Com, Ranges_Com)
 
 Output = (; 
     Symbol("mPay (Ton)") => mPay_Jet_Com,
@@ -65,7 +65,8 @@ Output = (;
     Symbol("mTO (Ton)") => mTO_Jet,
     Symbol("rangeEst (nmi)") => rangeEst_Jet,
     Symbol("LDratio ") => LD_Jet,
-    Symbol("TSEC (J/s/N) ") => TSEC_Jet
+    Symbol("TSEC (J/s/N) ") => TSEC_Jet,
+    Symbol("altCR (ft) ") => altCR_Jet
 )
 CSV.write("$(savedir)PayRanDataJetFuel_Com.csv", Output; writeheader=true)
 
@@ -73,7 +74,7 @@ CSV.write("$(savedir)PayRanDataJetFuel_Com.csv", Output; writeheader=true)
 idxFuel = 32
 rhoFuel = 789.0
 LHVaporFuel = 918187.9 #J/kg
-mPay_Eth_Com, Ranges_Eth_Com, PFEIs_Eth_Com, EneTO_Eth, EneCR_Eth, EneDE_Eth, mFuel_Eth, mTO_Eth, rangeEst_Eth, LD_Eth, TSEC_Eth = PayloadRangeSpecified(ac, idxFuel, rhoFuel, LHVaporFuel, mPay_Com, Ranges_Com)
+mPay_Eth_Com, Ranges_Eth_Com, PFEIs_Eth_Com, EneTO_Eth, EneCR_Eth, EneDE_Eth, mFuel_Eth, mTO_Eth, rangeEst_Eth, LD_Eth, TSEC_Eth, altCR_Eth = PayloadRangeSpecified(ac, idxFuel, rhoFuel, LHVaporFuel, mPay_Com, Ranges_Com)
 
 Output = (; 
     Symbol("mPay (Ton)") => mPay_Eth_Com,
@@ -86,7 +87,8 @@ Output = (;
     Symbol("mTO (Ton)") => mTO_Eth,
     Symbol("rangeEst (nmi)") => rangeEst_Eth,
     Symbol("LDratio ") => LD_Eth,
-    Symbol("TSEC (J/s/N) ") => TSEC_Eth
+    Symbol("TSEC (J/s/N) ") => TSEC_Eth,
+    Symbol("altCR (ft) ") => altCR_Eth
 )
 CSV.write("$(savedir)PayRanDataEthanol_Com.csv", Output; writeheader=true)
 

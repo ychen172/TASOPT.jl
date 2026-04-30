@@ -1398,6 +1398,7 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     rangeEst_Lst = [] #nmi Estimated using range equation
     LD_Lst = []
     TSEC_Lst = [] #(J/s/N)
+    altCR_Lst = [] #(ft)cruise altitude
 
     tolweight = 1.0 #One newton tolerance for weight checks
 
@@ -1453,6 +1454,7 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
         rangeEst = ((velHorCruise*LDRatioCruise)/(gee*TSFCCruise))*log(WRatioIni2Fin)/nmi_to_m #nmi estimated range        
         LHVCruise = 0.5 * (ac.pare[iehfuel,ipcruise1, 2] + ac.pare[iehfuel,ipcruise2, 2]) #J/kg cruise heating value
         TSECCruise = TSFCCruise*LHVCruise #Cruise thrust specific energy consumption (J/s/N)
+        altCruise = ac.para[iaalt,ipcruise1,2] #m cruise altitude
         ##Compare the relative energy consumption for the three phases
         fracW_StaMis = ac.para[iafracW, ipclimb1, 2] #Weight fraction of maximum takeoff weight
         fracW_StaCru = ac.para[iafracW, ipcruise1, 2]
@@ -1473,11 +1475,13 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
         append!(rangeEst_Lst, rangeEst) #[nmi]
         append!(LD_Lst, LDRatioCruise)
         append!(TSEC_Lst, TSECCruise)
+        append!(altCR_Lst, altCruise) #[m]
     end
     Ranges_Lst = convertDist.(Ranges_Lst, "m", "nmi") #[nmi]
     mPay_Lst = mPay_Lst ./ (9.81 * 1000) #[Ton]
     mFuel_Lst = mFuel_Lst ./ (9.81 * 1000) #[Ton]
     mTO_Lst = mTO_Lst ./ (9.81 * 1000) #[Ton]
+    altCR_Lst = convertDist.(altCR_Lst, "m", "ft") #[ft]
 
     #Change the fuel state back
     ac.options.ifuel = idxFuelBase
@@ -1485,11 +1489,11 @@ function PayloadRangeSpecified(ac_og::TASOPT.aircraft, idxFuel::Int64, rhoFuel::
     ac.pare[iehvap, :, :] .= LHVaporFuelBase
     ac.pare[iehvapcombustor, :, :] .= LHVaporFuelBase
     
-    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst, mFuel_Lst, mTO_Lst, rangeEst_Lst, LD_Lst, TSEC_Lst
+    return mPay_Lst, Ranges_Lst, PFEIs_Lst, EneTO_Lst, EneCR_Lst, EneDE_Lst, mFuel_Lst, mTO_Lst, rangeEst_Lst, LD_Lst, TSEC_Lst, altCR_Lst
 end
 
 """
-    PayloadRangeSpecified(ac_og, idxFuel, rhoFuel, LHVaporFuel, mPayLst, ranLst, idxFuel2nd, rhoFuel2nd, LHVaporFuel2nd, flgPhaseSwitch; itermax, initializes_engine, opt_prescribed_cruise_parameter, Ldebug)
+    PayloadRangeSpecDual(ac_og, idxFuel, rhoFuel, LHVaporFuel, mPayLst, ranLst, idxFuel2nd, rhoFuel2nd, LHVaporFuel2nd, flgPhaseSwitch; itermax, initializes_engine, opt_prescribed_cruise_parameter, Ldebug)
 
 Function to extract PFEI for a specified payload and range (PFEI returns to 0 if not converge)
     Accept both change primary fuel and accept dual-fuel operation
