@@ -12,6 +12,13 @@ using NLopt
 # Import indices for calling aircraft parameters
 include(__TASOPTindices__)
 
+# Make a folder for saving optimized aircraft model
+save_dir = "ModelSaved"
+mkpath(save_dir)
+
+# Make a save name for the optimized model
+save_Name = "acOptimized"
+
 # Initialize arrays for tracking optimization progress
 xarray = []
 farray = []
@@ -32,30 +39,31 @@ struct Constraint
     limit::Float64
     penalty::Float64
 end
-iter = 0
+
 # Objective function
+iter = 0
 function obj(x, grad)
     # Update wing parameters
     wing = ac.wing
-    wing.layout.AR = x[1]                                    # Aspect Ratio 
-    wing.layout.sweep = x[3]                                 # Sweep angle [deg]
-    wing.inboard.λ = x[5]                                    # Inner panel taper ratio
-    wing.outboard.λ = x[6]                                   # Outer panel taper ratio
+    wing.layout.AR = x[1]                                   # Aspect Ratio 
+    wing.layout.sweep = x[3]                                # Sweep angle [deg]
+    wing.inboard.λ = x[5]                                   # Inner panel taper ratio
+    wing.outboard.λ = x[6]                                  # Outer panel taper ratio
     wing.inboard.cross_section.thickness_to_chord = x[7]    # Root thickness-to-chord ratio
     wing.outboard.cross_section.thickness_to_chord = x[8]   # Spanbreak thickness-to-chord ratio
 
     # Update flight condition parameters
-    ac.para[iaCL, ipclimb1+1:ipdescentn-1, 1] .= x[2]           # Cruise lift coefficient
+    ac.para[iaCL, ipclimb1+1:ipdescentn-1, 1] .= x[2]       # Cruise lift coefficient
     ac.para[iaalt, ipclimbn:ipcruise1, 1] .= x[4]           # Cruise altitude [ft]
     ac.para[iarcls, ipclimb2:ipdescent4, 1] .= x[9]         # Break/root CL ratio = cls/clo
     ac.para[iarclt, ipclimb2:ipdescent4, 1] .= x[10]        # Tip/root CL ratio = clt/clo
     
     # Update engine parameters
     ac.pare[ieTt4, ipcruise1:ipcruise2, 1] .= x[11]         # Turbine inlet temperature [K]
-    ac.pare[iepihc, ipcruise1, 1] = x[12]        # High pressure compressor pressure ratio
-    ac.pare[iepif, ipcruise1, 1] = x[13]                   # Fan pressure ratio
-    ac.pare[iepilc, ipcruise1, 1] = 3.0          # Low pressure compressor pressure ratio (fixed)
-    ac.pare[ieBPR, ipcruise1, 1] = x[14] # Bypass ratio
+    ac.pare[iepihc, ipcruise1, 1] = x[12]                   # High pressure compressor pressure ratio
+    ac.pare[iepif, ipcruise1, 1] = x[13]                    # Fan pressure ratio
+    ac.pare[iepilc, ipcruise1, 1] = 3.0                     # Low pressure compressor pressure ratio (fixed)
+    ac.pare[ieBPR, ipcruise1, 1] = x[14]                    # Bypass ratio
 
     # Size aircraft with new parameters
     try
@@ -120,22 +128,22 @@ function obj(x, grad)
 
     # Optional additional constraints (commented out for flexibility)
     # 5. Maximum metal temperature constraint
-    # Tvanemax = 1333.33  # [K]
-    # Tvane = maximum(ac.pare[ieTmet1, :, 1])
-    # if Tvane > Tvanemax
-    #     constraint = Tvane/Tvanemax - 1.0
-    #     penalty = 5.0 * ac.parg[igWpay] * constraint^2
-    #     total_penalty += penalty
-    # end
+    Tvanemax = 1333.33  # [K]
+    Tvane = maximum(ac.pare[ieTmet1, :, 1])
+    if Tvane > Tvanemax
+        constraint = Tvane/Tvanemax - 1.0
+        penalty = 5.0 * ac.parg[igWpay] * constraint^2
+        total_penalty += penalty
+    end
 
     # 6. Maximum takeoff weight constraint
-    # WTOmax = ac.parg[igWMTO]
-    # WTO = ac.parm[imWTO, 1]
-    # if WTO > WTOmax
-    #     constraint = WTO/WTOmax - 1.0
-    #     penalty = 10.0 * ac.parg[igWpay] * constraint^2
-    #     total_penalty += penalty
-    # end
+    WTOmax = ac.parg[igWMTO]
+    WTO = ac.parm[imWTO, 1]
+    if WTO > WTOmax
+        constraint = WTO/WTOmax - 1.0
+        penalty = 10.0 * ac.parg[igWpay] * constraint^2
+        total_penalty += penalty
+    end
 
     # 7. Maximum fan diameter constraint
     dfanmax = 2.0  # [m]
@@ -278,16 +286,17 @@ println("="^60)
 
 # Run optimization
 println("Starting optimization...")
-(optf, optx, ret) = NLopt.optimize(opt, initial)
+# (optf, optx, ret) = NLopt.optimize(opt, initial)
 
-# opt_time = @elapsed begin
-#     try
-#         (optf, optx, ret) = NLopt.optimize(opt, initial)
-#     catch e
-#         println("Optimization failed: $e")
-#         optf, optx, ret = Inf, initial, :FAILURE
-#     end
-# end
+opt_time = @elapsed begin
+    try
+        (optf, optx, ret) = NLopt.optimize(opt, initial)
+        quicksave_aircraft(ac,joinpath(save_dir, "$(save_Name).jld2"))
+    catch e
+        println("Optimization failed: $e")
+        optf, optx, ret = Inf, initial, :FAILURE
+    end
+end
 
 # numevals = opt.numevals
 
