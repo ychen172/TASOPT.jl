@@ -21,5 +21,6 @@ docs/build/*
 .vscode/*
 .CondaPkg/*
 __pycache__/*
+example/**/*.jld2
 
 example/Movie/*.csv

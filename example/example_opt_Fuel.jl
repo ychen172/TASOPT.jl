@@ -134,6 +134,7 @@ function obj(x, grad)
         constraint = Tvane/Tvanemax - 1.0
         penalty = 5.0 * ac.parg[igWpay] * constraint^2
         total_penalty += penalty
+        push!(violated_constraints, Constraint("Metal temperature", Tvane, Tvanemax, penalty))
     end
 
     # 6. Maximum takeoff weight constraint
@@ -143,6 +144,7 @@ function obj(x, grad)
         constraint = WTO/WTOmax - 1.0
         penalty = 10.0 * ac.parg[igWpay] * constraint^2
         total_penalty += penalty
+        push!(violated_constraints, Constraint("Maximum takeoff weight", WTO, WTOmax, penalty))
     end
 
     # 7. Maximum fan diameter constraint
