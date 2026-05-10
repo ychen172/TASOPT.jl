@@ -30,7 +30,7 @@ OptHistory() = OptHistory(
 function make_obj(ac::TASOPT.aircraft, constraints::Vector{Float64}, hist::OptHistory, 
                   penal_scale::Vector{Float64}=[25.0, 1.0, 1.0, 5.0, 5.0, 1.0]; print_every::Int=10, iter_size_loop::Int=150)
     """
-    All inputs in SI units
+    All inputs in SI units (Exceptions: sweep(Deg), )
     ac: Aircraft model with the modified mission parameters (Ex. target range, and target payload, or fuel type)
     constraints: [max_span, max_lenField, min_TOCGamma, max_Tt3, max_TMetal, max_DiaFan] #There are also other sanity checks will be automatically included
                     1          2             3            4          5           6
@@ -58,7 +58,7 @@ function make_obj(ac::TASOPT.aircraft, constraints::Vector{Float64}, hist::OptHi
         ####Overwrite the design parameters into the aircraft model
         # Update wing parameters
         ac.wing.layout.AR    = x[1]                                # Aspect Ratio 
-        ac.wing.layout.sweep = x[3]                                # Sweep angle
+        ac.wing.layout.sweep = x[3]                                # Sweep angle (deg)
         ac.wing.inboard.λ    = x[5]                                # Inner panel taper ratio
         ac.wing.outboard.λ   = x[6]                                # Outer panel taper ratio
         ac.wing.inboard.cross_section.thickness_to_chord  = x[7]   # Root thickness-to-chord ratio
