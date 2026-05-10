@@ -2,6 +2,8 @@
 
 # 1) Load TASOPT
 using TASOPT
+using DataFrames, CSV
+using Plots
 include(__TASOPTindices__)
 
 # 2) Include input file for desired aircraft/
@@ -46,8 +48,21 @@ TakeoffMass_Cur = ac.parm[imWTO, 1]/9.81/1000. #(Ton)
 TakeoffMass_Max = ac.parg[igWMTO]/9.81/1000. #(Ton)
 println("Takeoff Mass (Ton): Cur: $TakeoffMass_Cur, Max: $TakeoffMass_Max")
 
+# 3) Collect and save design parameters
+massPayload = ac.parm[imWpay, 1]/9.81/1000. #(Ton)
+numberPassengers = ac.parm[imWpay, 1]/ac.parm[imWperpax, 1] #Number
+Range = ac.parm[imRange, 1]/1852. #nmi
+PFEI = ac.parm[imPFEI, 1] #(J/J)
+
+Output = (; 
+    Symbol("massPayload (Ton)") => [massPayload],
+    Symbol("numberPassengers") => [numberPassengers],
+    Symbol("Range (nmi)") => [Range],
+    Symbol("PFEI (J/J)") => [PFEI]
+)
+CSV.write(joinpath(save_dir,"DesignParameters.csv"), Output; writeheader=true)
+
 # 4) Save the limiting parameters
-using DataFrames, CSV
 var_names = [
     "Wing Span (m)",
     "Balanced Field Length (m)",
@@ -101,6 +116,5 @@ df = DataFrame(
 CSV.write(joinpath(save_dir,"LimitingParameters.csv"), df)
 
 # 5) Plot figures
-using Plots
 pic = TASOPT.stickfig(ac)
 savefig(pic, joinpath(save_dir,"StickPlot.png"))
