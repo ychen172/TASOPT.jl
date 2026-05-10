@@ -22,8 +22,8 @@ end
 
 OptHistory() = OptHistory(
     Vector{Vector{Float64}}(),
-    Vector{Float64},
-    Vector{Float64},
+    Vector{Float64}(),
+    Vector{Float64}(),
     Vector{Vector{Constraint}}()
 )
 
