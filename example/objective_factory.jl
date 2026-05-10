@@ -2,6 +2,7 @@ module ObjectiveFactory
 export OptHistory, make_obj
 using TASOPT
 using Printf
+include(__TASOPTindices__)
 """
 make_obj() creates an objective function that store an aircraft model with setup mission information and store
 constraints for the output aircraft parameters. The objective function can then be tested with different design variables.
