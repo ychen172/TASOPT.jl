@@ -1,3 +1,5 @@
+module ObjectiveFactory
+export OptHistory, make_obj
 using TASOPT
 using Printf
 """
@@ -20,13 +22,13 @@ end
 
 OptHistory() = OptHistory(
     Vector{Vector{Float64}}(),
-    Float64[],
-    Float64[],
+    Vector{Float64},
+    Vector{Float64},
     Vector{Vector{Constraint}}()
 )
 
-function make_obj(ac::TASOPT.aircraft, constraints::Float64[], hist::OptHistory, 
-                  penal_scale::Float64[]=[25.0, 1.0, 1.0, 5.0, 5.0, 1.0]; print_every::Int=10, iter_size_loop::Int=150)
+function make_obj(ac::TASOPT.aircraft, constraints::Vector{Float64}, hist::OptHistory, 
+                  penal_scale::Vector{Float64}=[25.0, 1.0, 1.0, 5.0, 5.0, 1.0]; print_every::Int=10, iter_size_loop::Int=150)
     """
     All inputs in SI units
     ac: Aircraft model with the modified mission parameters (Ex. target range, and target payload, or fuel type)
@@ -206,3 +208,5 @@ function make_obj(ac::TASOPT.aircraft, constraints::Float64[], hist::OptHistory,
     end
     return obj
 end
+
+end # module ObjectiveFactory
