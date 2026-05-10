@@ -1,6 +1,6 @@
 using TASOPT, NLopt
 include(joinpath(@__DIR__, "objective_factory.jl"))
-using .ObjectiveFactory: OptHistory, make_obj
+using .ObjectiveFactory: OptHistory, make_obj, best_feasible
 include(__TASOPTindices__)
 
 #### IO Prepare
@@ -79,11 +79,18 @@ opt.maxeval       = iters_max_opt
 opt_time = @elapsed begin
     try
         (optf, optx, ret) = NLopt.optimize(opt, initial)
-        quicksave_aircraft(ac,joinpath(save_dir, "$(save_Name).jld2"))
     catch e
         println("Optimization failed: $e")
         optf, optx, ret = Inf, initial, :FAILURE
     end
 end
 
-
+# Select the best solution that satisfy all the constraints
+bestSol = best_feasible(hist_optim)
+if isnothing(bestSol)
+    println("No feasible solution that satisfy the constraints found")
+else
+    println("Identified and ran the best solution")
+    penalty = obj(bestSol.test_param, Float64[])
+    quicksave_aircraft(ac,joinpath(save_dir, "$(save_Name).jld2"))
+end

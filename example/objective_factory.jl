@@ -1,5 +1,5 @@
 module ObjectiveFactory
-export OptHistory, make_obj
+export OptHistory, make_obj, best_feasible
 using TASOPT
 using Printf
 include(__TASOPTindices__)
@@ -27,6 +27,13 @@ OptHistory() = OptHistory(
     Vector{Float64}(),
     Vector{Vector{Constraint}}()
 )
+
+function best_feasible(hist_all)
+    idx = findall(v -> isempty(v), hist_all.violations)
+    isempty(idx) && return nothing
+    i = idx[argmin(hist_all.penalty[idx])]
+    return (index=i, test_param=hist_all.test_param[i], penalty=hist_all.penalty[i], PFEI=hist_all.PFEI[i])
+end
 
 function make_obj(ac::TASOPT.aircraft, constraints::Vector{Float64}, hist::OptHistory, 
                   penal_scale::Vector{Float64}=[25.0, 1.0, 1.0, 5.0, 5.0, 1.0]; print_every::Int=10, iter_size_loop::Int=150)
