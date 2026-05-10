@@ -54,13 +54,42 @@ numberPassengers = ac.parm[imWpay, 1]/ac.parm[imWperpax, 1] #Number
 Range = ac.parm[imRange, 1]/1852. #nmi
 PFEI = ac.parm[imPFEI, 1] #(J/J)
 
-Output = (; 
-    Symbol("massPayload (Ton)") => [massPayload],
-    Symbol("numberPassengers") => [numberPassengers],
-    Symbol("Range (nmi)") => [Range],
-    Symbol("PFEI (J/J)") => [PFEI]
+var_names = [
+    "Payload Mass (Ton)",
+    "Number of passenger",
+    "Flight Range (nmi)",
+    "PFEI (J/J)",
+    "Wing Span (m)",
+    "Balanced Field Length (m)",
+    "Top of Climb Flight Angle (deg)",
+    "Compressor Exit Temperature (K)",
+    "Metal Temperature (K)",
+    "Fan Diameter (m)",
+    "Fuel Mass (Ton)",
+    "Takeoff Mass (Ton)"
+]
+
+val = [
+    massPayload,
+    numberPassengers,
+    Range,
+    PFEI,
+    wingSpan_Cur,
+    fieldLengthBalanced_Cur,
+    TOCFlightAngle_Cur,
+    Tt3_Cur,
+    TMetal_Cur,
+    DiaFan_Cur,
+    FuelMass_Cur,
+    TakeoffMass_Cur
+]
+
+df = DataFrame(
+    Symbol("Variables") => var_names,
+    Symbol("Values") => val
 )
-CSV.write(joinpath(save_dir,"DesignParameters.csv"), Output; writeheader=true)
+
+CSV.write(joinpath(save_dir,"DesignParameters.csv"), df)
 
 # 4) Save the limiting parameters
 var_names = [
