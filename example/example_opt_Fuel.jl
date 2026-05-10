@@ -17,7 +17,7 @@ save_dir = "ModelSaved"
 mkpath(save_dir)
 
 # Make a save name for the optimized model
-save_Name = "acOptimized"
+save_Name = "acOptimized_Cus"
 
 # Initialize arrays for tracking optimization progress
 xarray = []
@@ -28,7 +28,7 @@ OPRarray = []
 plot_obj = nothing
 
 # Load default aircraft model
-ac = load_default_model()
+ac = read_aircraft_model("./customized/narrow_input.toml")
 # ac.engine.model.weight_model_name = "fitzgerald_adv"
 size_aircraft!(ac)
 
