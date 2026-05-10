@@ -48,11 +48,18 @@ function make_obj(ac::TASOPT.aircraft, constraints::Vector{Float64}, hist::OptHi
     @assert iter_size_loop >= 1
 
     ####Construct objective function
-    function obj(x)
+    function obj(x, grad)
         """
         x: [AR, CL, sweep, altitude, λ_in, λ_out, t/c_root, t/c_span, rcls, rclt, Tt4, π_hc, π_f, π_lc, BPR]
              1.  2.   3.      4.      5.     6.      7.         8.      9.   10.   11.   12.  13.  14.  15.
         """
+        #### Check if gradients provided:
+        if !isempty(grad)
+            # for derivative-free algorithms this is usually empty anyway
+            # for gradient-based ones, you must compute and assign grad[:] properly
+            fill!(grad, 0.0)
+        end
+
         ####Size check
         @assert length(x) == 15
 
