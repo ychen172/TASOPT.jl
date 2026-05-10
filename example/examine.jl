@@ -9,7 +9,7 @@ include(__TASOPTindices__)
 # 2) Include input file for desired aircraft/
 #  load the target model
 load_dir = "ModelSaved"
-load_name = "acOptimized"
+load_name = "acOptimized_Cus"
 ac = quickload_aircraft(joinpath(load_dir,"$(load_name).jld2")) # simply a synonym to read_aircraft_model()
 save_dir = "ModelProcessed"
 save_dir = joinpath(save_dir,load_name)
