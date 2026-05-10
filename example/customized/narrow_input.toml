@@ -79,7 +79,7 @@
                                 
     range = ["3000.0 nmi", "3000.0 nmi"] # Design Range + second mission range
 
-    payload = ["198 pax", "198 pax"]     # Mission payload; pax can be used as a unit of weight.
+    payload = ["190 pax", "190 pax"]     # Mission payload; pax can be used as a unit of weight.
                                         # Weight per pax also specified (215 lbf/pax is std)
 
     weight_per_pax = "217.0 lbf"    # Specify weight per passenger - 
