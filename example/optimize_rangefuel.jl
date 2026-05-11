@@ -42,7 +42,7 @@ end
 
 """
 optimize_rangefuel_fun!(ac; mission_req=default, bounds_opt=default, constraints_opt=default
-                        tol_rel=default, maxeval=default, optimizer=default)
+                        tol_rel=default, iters_max_opt=default, optimizer_type=default)
 
 Optimize an aircraft for a design flight range and fuel type
     Input aircraft model will be modified inplace to become the optimized solution
@@ -60,6 +60,8 @@ Inputs:
     optimizer_type:Symbol: optimization method
 Outputs:
     status: Symbol: status of the optimization (NLopt statuses and :NO_FEASIBLE_SOLUTION)
+                    good_status = status in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
+                    bad_status  = status in (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
     hist_optim: OptHistory: Optimization history [test_param,penalty,PFEI,violations]
 Updates:
     ac
