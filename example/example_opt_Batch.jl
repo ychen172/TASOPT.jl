@@ -14,6 +14,8 @@ save_Name = "acOptimized_Cus2"
 #### Loading an Baseline Aircraft Model
 ac = read_aircraft_model("./customized/narrow_input.toml"; templatefile = "./customized/narrow_input.toml")
 size_aircraft!(ac)
+# ##### Or if load an already sized mission
+# ac = quickload_aircraft(joinpath(save_dir,"acOptimized_Cus.jld2"))
 
 #### Modify the mission requirement for optimization
 ac.parm[imRange,:] .= 3000.0 * 1852.0 #Size at different flight range (m)
