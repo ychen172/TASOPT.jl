@@ -3,6 +3,69 @@ include(joinpath(@__DIR__, "objective_factory.jl"))
 using .ObjectiveFactory: OptHistory, make_obj, best_feasible
 include(__TASOPTindices__)
 
+Base.@kwdef mutable struct MissionReq
+    range_des::Float64 = (3000.0 * 1852.0)  #Design flight range (m)
+    idx_fuel::Int = 24 #Fuel Index: Jet Fuel(24), Ethanol(32)
+    rho_fuel::Float64 = 817.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
+    hvap_fuel::Float64 = 358694.0 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
+end
+
+Base.@kwdef mutable struct BoundsOpt #Limites: [Lower Bound, Upper Bound, Initial dx]
+    AR_lim::NTuple{3,Float64}             = (6.0,    18.0,   0.5)   #1  Wing aspect ratio
+    CL_lim::NTuple{3,Float64}             = (0.45,   0.75,   0.05)  #2  Cruise CL
+    sweep_deg_lim::NTuple{3,Float64}      = (25.0,   30.0,   0.1)   #3  Wing sweep angle (deg)
+    alt_cruise_m_lim::NTuple{3,Float64}   = (10000.0,20000.0,200.0) #4  Cruise altitude (m)
+    taper_in_lim::NTuple{3,Float64}       = (0.65,   0.85,   0.01)  #5  Inboard wing taper ratio
+    taper_out_lim::NTuple{3,Float64}      = (0.10,   0.40,   0.01)  #6  Outboard wing taper ratio
+    tc_root_lim::NTuple{3,Float64}        = (0.125,  0.15,   0.01)  #7  Inboard thickness-to-chord ratio
+    tc_span_lim::NTuple{3,Float64}        = (0.125,  0.15,   0.01)  #8  Outboard thickness-to-chord ratio
+    rcls_lim::NTuple{3,Float64}           = (0.90,   1.30,   0.01)  #9  Break/root Cl ratio at cruise
+    rclt_lim::NTuple{3,Float64}           = (0.70,   1.00,   0.01)  #10 Tip/root Cl ratio at cruise
+    Tt4_lim::NTuple{3,Float64}            = (1400.0, 1650.0, 100.0) #11 Tt4 at cruise (K)
+    PR_hpc_lim::NTuple{3,Float64}         = (10.0,   15.0,   0.5)   #12 HPC pressure ratio at cruise
+    PR_fan_lim::NTuple{3,Float64}         = (1.25,   2.0,    0.05)  #13 Fan pressure ratio at cruise
+    PR_lpc_lim::NTuple{3,Float64}         = (2.999,  3.001,  0.0001)#14 LPC pressure ratio at cruise
+    BPR_lim::NTuple{3,Float64}            = (1.0,    20.0,   1.0)   #15 Bypass ratio at cruise
+end
+
+Base.@kwdef mutable struct ConstraintsOpt #Constrained values for optimization
+    span_max::Float64      = 35.814   # Maximum span (m)
+    lenField_max::Float64  = 2400.0   # Maximum balanced field length (m)
+    TOCGamma_min::Float64  = 0.015    # Minimum top-of-climb flight angle (rad)
+    Tt3_max::Float64       = 900.0    # Maximum combustor inlet temperature (K)
+    TMetal_max::Float64    = 1333.33  # Maximum metal temperature (K)
+    DiaFan_max::Float64    = 2.0      # Maximum fan diameter (m)
+end
+
+"""
+    optimize_aircraft!(ac; mission_req, constraints, lower, upper, init_dx,
+                       save_dir="ModelSaved", save_name="acOptimized_Cus2",
+                       tol_rel=1e-6, maxeval=1000, optimizer=:LN_NELDERMEAD)
+
+Optimize aircraft design variables in-place on `ac`.
+
+Required:
+- mission_req: NamedTuple, e.g.
+    (range_m=3000*1852, ifuel=24, rhofuel=817.0, ehvap=358694.0, ehvapcombustor=358694.0)
+- constraints: [max_span, max_lenField, min_TOCGamma, max_Tt3, max_TMetal, max_DiaFan]
+- lower, upper, init_dx: vectors for 15 design variables
+
+Returns a NamedTuple with status, history, and save path.
+"""
+function optimize_aircraft!(
+    ac;
+    mission_req::NamedTuple,
+    constraints::AbstractVector{<:Real},
+    lower::AbstractVector{<:Real},
+    upper::AbstractVector{<:Real},
+    init_dx::AbstractVector{<:Real},
+    save_dir::AbstractString="ModelSaved",
+    save_name::AbstractString="acOptimized_Cus2",
+    tol_rel::Real=1e-6,
+    maxeval::Integer=1000,
+    optimizer::Symbol=:LN_NELDERMEAD,
+)
+
 #### IO Prepare
 # Make a folder for saving optimized aircraft model
 save_dir = "ModelSaved"
