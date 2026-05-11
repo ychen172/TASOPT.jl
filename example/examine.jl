@@ -50,7 +50,7 @@ println("Takeoff Mass (Ton): Cur: $TakeoffMass_Cur, Max: $TakeoffMass_Max")
 
 # 3) Collect and save design parameters
 #Mission Parameters
-massPayload = ac.parm[imWpay, 1]/9.81/1000. #(Ton)
+massPayload = ac.parm[imWpay, 1]/gee/1000.0 #(Ton)
 numberPassengers = ac.parm[imWpay, 1]/ac.parm[imWperpax, 1] #Number
 Range = ac.parm[imRange, 1]/1852. #nmi
 PFEI = ac.parm[imPFEI, 1] #(J/J)
@@ -78,6 +78,10 @@ TSFC_cruise = 0.5 * (ac.pare[ieTSFC, ipcruise1, 1] + ac.pare[ieTSFC, ipcruise2,1
 TSEC_cruise = TSFC_cruise*LHV_cruise #Averaged cruise thrust specific energy consumption (J/s/N)
 vel_cruise = 0.5 * (cos(ac.para[iagamV, ipcruise1,1]) * ac.pare[ieu0, ipcruise1,1] + 
                     cos(ac.para[iagamV, ipcruise2,1]) * ac.pare[ieu0, ipcruise2, 1]) #Averaged cruise horizontal velocity (m/s)
+massTO = ac.parm[imWTO,1]/gee/1000.0 #Takeoff mass (Ton)
+massFuel = ac.parm[imWfuel]/gee/1000.0 #Fuel mass (Ton)
+massEmpty = massTO-massFuel-massPayload #By definition, the empty weight (Ton)
+
 
 var_names = [
     "Payload Mass (Ton)",

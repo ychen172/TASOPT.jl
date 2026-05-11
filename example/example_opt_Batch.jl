@@ -15,7 +15,8 @@ save_Name = "acOptimized_Cus2"
 ac = read_aircraft_model("./customized/narrow_input.toml"; templatefile = "./customized/narrow_input.toml")
 size_aircraft!(ac)
 
-#### Modify the mission requirement for optimization (ToDo)
+#### Modify the mission requirement for optimization
+ac.parm[imRange,:] .= 3000.0 * 1852.0 #Size at different flight range (m)
 
 #### Get the objective function for optimization
 hist_optim = OptHistory() #Optimization history
