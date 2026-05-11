@@ -52,7 +52,7 @@ println("Takeoff Mass (Ton): Cur: $TakeoffMass_Cur, Max: $TakeoffMass_Max")
 #Mission Parameters
 massPayload = ac.parm[imWpay, 1]/gee/1000.0 #(Ton)
 numberPassengers = ac.parm[imWpay, 1]/ac.parm[imWperpax, 1] #Number
-Range = ac.parm[imRange, 1]/1852. #nmi
+range = ac.parm[imRange, 1]/1852.0 #nmi
 PFEI = ac.parm[imPFEI, 1] #(J/J)
 #Input Optimized Parameter
 AR = ac.wing.layout.AR #Wing aspect ratio
@@ -79,49 +79,58 @@ TSEC_cruise = TSFC_cruise*LHV_cruise #Averaged cruise thrust specific energy con
 vel_cruise = 0.5 * (cos(ac.para[iagamV, ipcruise1,1]) * ac.pare[ieu0, ipcruise1,1] + 
                     cos(ac.para[iagamV, ipcruise2,1]) * ac.pare[ieu0, ipcruise2, 1]) #Averaged cruise horizontal velocity (m/s)
 massTO = ac.parm[imWTO,1]/gee/1000.0 #Takeoff mass (Ton)
-massFuel = ac.parm[imWfuel]/gee/1000.0 #Fuel mass (Ton)
-massEmpty = massTO-massFuel-massPayload #By definition, the empty weight (Ton)
-
+massFuel_ = ac.parm[imWfuel,1]/gee/1000.0 #Fuel mass (Ton)
+fracFuelReserved_ = ac.parg[igfreserve]/(ac.parg[igfreserve]+1.0) #fraction reserved fuel (mFuelRes/mFuelTotal)
+massFuelReserved = massFuel_*fracFuelReserved_ # Fuel mass reserved (Ton)
+massFuelBurned = massFuel_*(1.0 - fracFuelReserved_) #Fuel mass burned (Ton)
+massEmpty = massTO - massFuelBurned - massFuelReserved - massPayload #By definition, the empty weight (Ton)
+weightRatio_ = massTO/(massTO-massFuelBurned) #Initial weight / Final weight
+rangeBreguet = ((vel_cruise * LD_cruise)/(gee * TSFC_cruise)) * log(weightRatio_) / 1852.0 #Estimated range using Breguet range equation
 
 var_names = [
-    "Payload Mass (Ton)",
+    "Payload mass (Ton)",
     "Number of passenger",
-    "Flight Range (nmi)",
+    "Flight range (nmi)",
     "PFEI (J/J)",
-    "Wing Span (m)",
-    "Balanced Field Length (m)",
-    "Top of Climb Flight Angle (deg)",
-    "Compressor Exit Temperature (K)",
-    "Metal Temperature (K)",
-    "Fan Diameter (m)",
-    "Fuel Mass (Ton)",
-    "Takeoff Mass (Ton)",
-    "Wing Aspect Ratio",
+    "Wing span (m)",
+    "Balanced field length (m)",
+    "Top of climb flight angle (deg)",
+    "Compressor exit temperature (K)",
+    "Metal temperature (K)",
+    "Fan diameter (m)",
+    "Fuel mass (Ton)",
+    "Takeoff mass (Ton)",
+    "Wing aspect ratio",
     "Cruise CL",
-    "Wing Sweep Angle (deg)",
-    "Cruise Altitude (ft)",
-    "Inboard Wing Taper Ratio",
-    "Outboard Wing Taper Ratio",
-    "Inboard Thickness-to-Chord Ratio",
-    "Outboard Thickness-to-Chord Ratio",
-    "Break/Root CL Ratio at Cruise",
-    "Tip/Root CL Ratio at Cruise",
-    "Tt4 at Cruise (K)",
-    "HPC Pressure Ratio at Cruise",
-    "Fan Pressure Ratio at Cruise",
-    "LPC Pressure Ratio at Cruise",
-    "Bypass Ratio at Cruise",
-    "Lift-to-Drag Ratio at Cruise",
-    "Heating Value at Cruise (J/kg)",
-    "Thrust Specific Fuel Consumption at Cruise (kg/s/N)",
-    "Thrust Specific Energy Consumption at Cruise (J/s/N)",
-    "Horizontal Velocity at Cruise (m/s)"
+    "Wing sweep angle (deg)",
+    "Cruise altitude (ft)",
+    "Inboard wing taper ratio",
+    "Outboard wing taper ratio",
+    "Inboard thickness-to-chord ratio",
+    "Outboard thickness-to-chord ratio",
+    "Break/root CL ratio at cruise",
+    "Tip/root CL ratio at cruise",
+    "Tt4 at cruise (K)",
+    "HPC pressure ratio at cruise",
+    "Fan pressure ratio at cruise",
+    "LPC pressure ratio at cruise",
+    "Bypass ratio at cruise",
+    "Lift-to-drag ratio at cruise",
+    "Heating value at cruise (J/kg)",
+    "Thrust specific fuel consumption at cruise (kg/s/N)",
+    "Thrust specific energy consumption at cruise (J/s/N)",
+    "Horizontal velocity at cruise (m/s)",
+    "Takeoff mass (Ton)",
+    "Fuel mass reserved (Ton)",
+    "Fuel mass burned (Ton)",
+    "Empty mass (Ton)",
+    "Breguet flight range (nmi)"
 ]
 
 val = [
     massPayload,
     numberPassengers,
-    Range,
+    range,
     PFEI,
     wingSpan_Cur,
     fieldLengthBalanced_Cur,
@@ -150,7 +159,12 @@ val = [
     LHV_cruise,
     TSFC_cruise,
     TSEC_cruise,
-    vel_cruise
+    vel_cruise,
+    massTO,
+    massFuelReserved,
+    massFuelBurned,
+    massEmpty,
+    rangeBreguet
 ]
 
 df = DataFrame(
