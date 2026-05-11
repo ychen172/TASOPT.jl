@@ -28,7 +28,7 @@ OptHistory() = OptHistory(
     Vector{Vector{Constraint}}()
 )
 
-function best_feasible(hist_all)
+function best_feasible(hist_all::OptHistory)
     idx = findall(v -> isempty(v), hist_all.violations)
     isempty(idx) && return nothing
     i = idx[argmin(hist_all.penalty[idx])]

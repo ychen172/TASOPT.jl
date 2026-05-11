@@ -59,8 +59,8 @@ Inputs:
     iters_max_opt:Int: maximum iteration for the optimizers to run
     optimizer_type:Symbol: optimization method
 Outputs:
+    status: Symbol: status of the optimization (NLopt statuses and :NO_FEASIBLE_SOLUTION)
     hist_optim: OptHistory: Optimization history [test_param,penalty,PFEI,violations]
-    status: Symbol: status of the optimization [:FTOL_REACHED(Good), :MAXEVAL_REACHED(Okay), :FAILURE(Bad)]
 Updates:
     ac
 """
@@ -143,36 +143,35 @@ function optimize_rangefuel_fun!(
     initial_saved = initial #save an unclamped initial to retract back the aircraft model state
     initial = clamp.(initial, lower, upper)
 
-    #### Setup the optimizer
-    opt = NLopt.Opt(optimizer_type, numBounds)
-    opt.lower_bounds  = lower
-    opt.upper_bounds  = upper
-    opt.min_objective = obj
-    opt.initial_step  = init_dx
-    opt.ftol_rel      = tol_rel
-    opt.maxeval       = iters_max_opt
-
-    #### Run the optimization
+    #### Optimization
     try
+        # Setup the optimizer
+        opt = NLopt.Opt(optimizer_type, numBounds)
+        opt.lower_bounds  = lower
+        opt.upper_bounds  = upper
+        opt.min_objective = obj
+        opt.initial_step  = init_dx
+        opt.ftol_rel      = tol_rel
+        opt.maxeval       = iters_max_opt
+        # Run the optimization
         (_, _, status) = NLopt.optimize(opt, initial)
     catch errOpt
-        println("Current O=optimization failed: $(errOpt)")
+        println("Current optimization failed: $(errOpt)")
         (_, _, status) = (Inf, initial, :FAILURE)
     end
 
     #### Prepare an updated aircraft model state
-    if status != :FAILURE
-        bestSol = best_feasible(hist_optim)
-        if isnothing(bestSol)
-            println("No constraint satisfying solutions found, return to starting state")
-            obj(initial_saved, Float64[]) #This likely wont be feasible either
-        else
-            println("Identified and setup the current best solution with optimization reached by $(status)")
-            obj(bestSol.test_param, Float64[])
+    bestSol = best_feasible(hist_optim)
+    if isnothing(bestSol)
+        println("No constraint satisfying solutions found, return to starting state")
+        obj(initial_saved, Float64[]) #This likely wont be feasible either
+        if status in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, 
+            :MAXEVAL_REACHED, :MAXTIME_REACHED)
+            status = :NO_FEASIBLE_SOLUTION
         end
     else
-        println("Optimization process failed, return to starting state")
-        obj(initial_saved, Float64[]) #This likely wont be feasible either
+        println("Identified and setup the current best solution with optimization reached by $(status)")
+        obj(bestSol.test_param, Float64[])
     end
 
     return status, hist_optim
