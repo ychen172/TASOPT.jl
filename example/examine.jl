@@ -73,7 +73,7 @@ BPR_cruise = ac.pare[ieBPR, ipcruise1, 1] #bypass ratio at cruise
 #Parameters to Flight Efficiencies
 LD_cruise = 0.5 * (ac.para[iaCL, ipcruise1, 1]/ac.para[iaCD, ipcruise1, 1] + 
                         ac.para[iaCL, ipcruise2, 1]/ac.para[iaCD, ipcruise2, 1]) #Averaged cruise lift-to-drag ratio
-LHV_cruise = 0.5 * (ac.pare[iehfuel, ipcruise1, 1] + ac.pare[iehfuel, ipcruise2, 1]) #Averaged cruise heating value (J/kg)
+LHV_cruise = 0.5 * (ac.pare[iehfuel, ipcruise1, 1] + ac.pare[iehfuel, ipcruise2, 1]) #Averaged cruise heating value (J/kg) (Include vaporization already)
 TSFC_cruise = 0.5 * (ac.pare[ieTSFC, ipcruise1, 1] + ac.pare[ieTSFC, ipcruise2,1]) / gee #Averaged cruise thrust specfic heat consumption (kg/s/N)
 TSEC_cruise = TSFC_cruise*LHV_cruise #Averaged cruise thrust specific energy consumption (J/s/N)
 vel_cruise = 0.5 * (cos(ac.para[iagamV, ipcruise1,1]) * ac.pare[ieu0, ipcruise1,1] + 
@@ -121,7 +121,7 @@ var_names = [
     "LPC pressure ratio at cruise",
     "Bypass ratio at cruise",
     "Lift-to-drag ratio at cruise",
-    "Heating value at cruise (J/kg)",
+    "Heating value at cruise (from liquid) (J/kg)",
     "Thrust specific fuel consumption at cruise (kg/s/N)",
     "Thrust specific energy consumption at cruise (J/s/N)",
     "Horizontal velocity at cruise (m/s)",
