@@ -21,7 +21,7 @@ size_aircraft!(ac)
 hist_optim = OptHistory() #Optimization history
 # Setup constraints
 max_span = 35.814 #Maximum Span(m)
-max_lenField = 2438.4 #Maximum Balanced Field Length(m)
+max_lenField = 2400.0 #Maximum Balanced Field Length(m)
 min_TOCGamma = 0.015 #Minimum Top of Climb Flight Angle (rad)
 max_Tt3 = 900.0 #Maximum Combustor Inlet Temperature (K)
 max_TMetal = 1333.33 #Maximum Metal Tempeature (K)
