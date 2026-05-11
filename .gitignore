@@ -23,5 +23,6 @@ docs/build/*
 __pycache__/*
 example/**/*.jld2
 example/**/*.csv
+example/**/*.txt
 
 example/Movie/*.csv
