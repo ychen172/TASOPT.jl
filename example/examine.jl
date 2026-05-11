@@ -88,6 +88,7 @@ weightRatio_ = massTO/(massTO-massFuelBurned) #Initial weight / Final weight
 rangeBreguet = ((vel_cruise * LD_cruise)/(gee * TSFC_cruise)) * log(weightRatio_) / 1852.0 #Estimated range using Breguet range equation
 #Parameters to engine and combustor performance
 numberEngines = ac.parg[igneng]
+thrustOneEngine_takeoff = ac.pare[ieFe, iptakeoff, 1] / 1000.0 #Takeoff thrust [kN] 
 thrustOneEngine_climb1 = ac.pare[ieFe, ipclimb1, 1] / 1000.0 #Takeoff thrust [kN]
 thrustOneEngine_cruise1 = ac.pare[ieFe, ipcruise1, 1] / 1000.0 #Cruise thrust [kN]
 
@@ -130,6 +131,7 @@ var_names = [
     "Empty mass (Ton)",
     "Breguet flight range (nmi)",
     "Number of engines",
+    "Thrust at start takeoff (one engine) (kN)",
     "Thrust at start climb (one engine) (kN)",
     "Thrust at start cruise (one engine) (kN)"
 ]
@@ -173,6 +175,7 @@ val = [
     massEmpty,
     rangeBreguet,
     numberEngines,
+    thrustOneEngine_takeoff,
     thrustOneEngine_climb1,
     thrustOneEngine_cruise1
 ]
