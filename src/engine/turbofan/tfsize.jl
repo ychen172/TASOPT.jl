@@ -596,7 +596,7 @@ function tfsize!(gee, M0, T0, p0, a0, M2, M25,
             # ===============================================================
             #---- effective fuel heating value, over states 3, 4  (just for info and PFEI)
             cpa = 0.5 * (cpt3 + cpt4)
-            hfuel = ( cpa * (Tt4 - Tt3) + cpa * ffb * (Tt4 - Ttf) + ffb * hvap ) / (etab * ffb)
+            hfuel = ( cpa * (Tt4 - Tt3) + cpa * ffb * (Tt4 - Ttf) ) / (etab * ffb)
 
             #---- excluding the fuel evaporation effect, over states 3, 4 (just for info and PFEI)
             #      cpa = 0.5 * (cpt3 + cpt4)

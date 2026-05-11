@@ -17,6 +17,10 @@ size_aircraft!(ac)
 
 #### Modify the mission requirement for optimization
 ac.parm[imRange,:] .= 3000.0 * 1852.0 #Size at different flight range (m)
+ac.options.ifuel = 24 #Fuel Index: Jet Fuel(24), Ethanol(32)
+ac.parg[igrhofuel] = 817.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
+ac.pare[iehvap, :, :] .= 358694.0 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
+ac.pare[iehvapcombustor, :, :] .= 358694.0
 
 #### Get the objective function for optimization
 hist_optim = OptHistory() #Optimization history
