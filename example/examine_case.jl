@@ -25,9 +25,7 @@ Outputs:
 function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::AbstractString;
     flg_save::Bool=true, bounds_opt::Union{Nothing,BoundsOpt}=nothing, constraints_opt::Union{Nothing,ConstraintsOpt}=nothing)
     
-    #### Setup a saving directory 
-    out_dir = joinpath(save_dir, save_name)
-    mkpath(out_dir)
+    #### Setup a saving directory
     ac.is_sized[1] || throw(ArgumentError("Input aircraft model has to be sized"))
 
     #### Extract design parameters
@@ -128,6 +126,10 @@ function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_nam
     # Quick exit if not saving anything
     !flg_save && return designParam
 
+    #### Create save directory
+    out_dir = joinpath(save_dir, save_name)
+    mkpath(out_dir)
+
     #### Output the design parameters
     desVar_names = [
     "Payload mass (Ton)",
@@ -219,21 +221,21 @@ function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_nam
     Symbol("Values") => desVar_values
     )
     # write out the parameters
-    CSV.write(joinpath(save_dir,"DesPara_$(save_name).csv"), df_desVar)
+    CSV.write(joinpath(out_dir,"DesPara_$(save_name).csv"), df_desVar)
 
     #### Output the aircraft stick plots
     pic = TASOPT.stickfig(ac)
-    savefig(pic, joinpath(save_dir,"StickPlot_$(save_name).png"))
+    savefig(pic, joinpath(out_dir,"StickPlot_$(save_name).png"))
 
     #### Output constraints
     if !isnothing(constraints_opt)
         # Extract the constraints
-        span_maxLim     = constraints_opt[1] #Maximum wing span (m)
-        lenField_maxLim = constraints_opt[2] #Maximum balanced field length (m)
-        TOCGamma_minLim = constraints_opt[3]*180/pi #Minimum top-of-climb flight angle (deg)
-        Tt3_maxLim      = constraints_opt[4] #Maximum compressor outlet temperature (K)
-        TMetal_maxLim   = constraints_opt[5] #Maximum metal temperature (K)
-        DiaFan_maxLim   = constraints_opt[6] #Maximum fan diameter (m)
+        span_maxLim     = constraints_opt.span_max #Maximum wing span (m)
+        lenField_maxLim = constraints_opt.lenField_max #Maximum balanced field length (m)
+        TOCGamma_minLim = constraints_opt.TOCGamma_min*180/pi #Minimum top-of-climb flight angle (deg)
+        Tt3_maxLim      = constraints_opt.Tt3_max #Maximum compressor outlet temperature (K)
+        TMetal_maxLim   = constraints_opt.TMetal_max #Maximum metal temperature (K)
+        DiaFan_maxLim   = constraints_opt.DiaFan_max #Maximum fan diameter (m)
         massTO_maxLim   = ac.parg[igWMTO]/gee/1000.0 #Maximum takeoff mass (Ton)
         massFuel_maxLim = ac.parg[igWfmax]/gee/1000.0 #Maximum fuel mass (Ton)
         # Prepare the print
@@ -284,7 +286,7 @@ function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_nam
             Symbol("Upper Limits")  => consVar_max
         )
         # Save the constraints
-        CSV.write(joinpath(save_dir,"ConsPara_$(save_name).csv"), df_consVar)
+        CSV.write(joinpath(out_dir,"ConsPara_$(save_name).csv"), df_consVar)
     end
 
     #### Output optimization parameters with bounds
@@ -365,7 +367,7 @@ function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_nam
             Symbol("Upper Bounds")  => bndVar_max,
         )
         # Save the optimization parameters
-        CSV.write(joinpath(save_dir, "BoundPara_$(save_name).csv"), df_bndVar)
+        CSV.write(joinpath(out_dir, "BoundPara_$(save_name).csv"), df_bndVar)
     end
     
     return designParam
