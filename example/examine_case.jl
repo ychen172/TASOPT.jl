@@ -226,7 +226,68 @@ function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_nam
     savefig(pic, joinpath(save_dir,"StickPlot_$(save_name).png"))
 
     #### Output constraints
-    
+    if !isnothing(constraints_opt)
+        # Extract the constraints
+        span_maxLim     = constraints[1] #Maximum wing span (m)
+        lenField_maxLim = constraints[2] #Maximum balanced field length (m)
+        TOCGamma_minLim = constraints[3]*180/pi #Minimum top-of-climb flight angle (deg)
+        Tt3_maxLim      = constraints[4] #Maximum compressor outlet temperature (K)
+        TMetal_maxLim   = constraints[5] #Maximum metal temperature (K)
+        DiaFan_maxLim   = constraints[6] #Maximum fan diameter (m)
+        massTO_maxLim   = ac.parg[igWMTO]/gee/1000.0 #Maximum takeoff mass (Ton)
+        massFuel_maxLim = ac.parg[igWfmax]/gee/1000.0 #Maximum fuel mass (Ton)
+        # Prepare the print
+        consVar_names = [
+            "Wing span (m)",
+            "Balanced field length (m)",
+            "Top-of-climb flight angle (deg)",
+            "Maximum compressor exit temperature (K)",
+            "Maximum metal temperature (K)",
+            "Fan diameter (m)",
+            "Total fuel mass (Ton)",
+            "Takeoff mass (Ton)"
+        ]
+        consVar_values = [
+            spanWing,
+            lenFieldBalanced,
+            gamTOC,
+            Tt3Max,
+            TMetalMax,
+            diaFan,
+            massFuelTot,
+            massTO
+        ]
+        consVar_min = [
+            NaN,
+            NaN,
+            TOCGamma_minLim,
+            NaN,
+            NaN,
+            NaN,
+            NaN,
+            NaN
+        ]
+        consVar_max = [
+            span_maxLim,
+            lenField_maxLim,
+            NaN,
+            Tt3_maxLim,
+            TMetal_maxLim,
+            DiaFan_maxLim,
+            massFuel_maxLim,
+            massTO_maxLim
+        ]
+        df_consVar = DataFrame(
+            Symbol("Variables")     => consVar_names,
+            Symbol("Design Values") => consVar_values,
+            Symbol("Lower Limits")  => consVar_min,
+            Symbol("Upper Limits")  => consVar_max
+        )
+        # Save the constraints
+        CSV.write(joinpath(save_dir,"ConsPara_$(save_name).csv"), df_consVar)
+    end
 
+    
+    
     return designParam
 end
