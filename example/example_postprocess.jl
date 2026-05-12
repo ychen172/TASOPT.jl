@@ -46,3 +46,24 @@ end
 #### Save the comparison design parameters
 df_desPara = DataFrame(desParamRows)
 CSV.write(joinpath(save_dirSub, "$(save_name)_DesPara.csv"), df_desPara)
+
+#### Also save the fixed constraints and fixed optimization bounds
+bounds_opt = BoundsOpt()
+constraints_opt = ConstraintsOpt()
+# saving
+function save_struct(datStr,filename)
+    numfields = fieldcount(typeof(datStr))
+    lenfields = length(getfield(datStr,1))
+    namfields = collect(fieldnames(typeof(datStr)))
+    data = Matrix{Float64}(undef, lenfields, numfields)
+    for i = 1:numfields
+        for j = 1:lenfields
+            data[j,i] = getfield(datStr,i)[j]
+        end
+    end
+    df = DataFrame(data, Symbol.(namfields))
+    CSV.write(filename, df)
+    return df
+end
+save_struct(bounds_opt, joinpath(save_dirSub, "$(save_name)_OptBounds.csv"))
+save_struct(constraints_opt, joinpath(save_dirSub, "$(save_name)_Constraints.csv"))

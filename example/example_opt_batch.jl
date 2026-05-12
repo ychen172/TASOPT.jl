@@ -67,7 +67,7 @@ function main()
         ####Get the inputs to the optimizers
         # Intiailized inputs
         mission_req = MissionReq()
-        bound_opt = BoundsOpt()
+        bounds_opt = BoundsOpt()
         constraints_opt = ConstraintsOpt()
         # Modify the mission requirements
         mission_req.idx_fuel = idx_fuel #Fuel Index: Jet Fuel(24), Ethanol(32)
@@ -77,7 +77,7 @@ function main()
         mission_req.range_des = (ran_cur * 1852.0)  #Design flight range (m)
 
         #### Run the optimization
-        status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bound_opt, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt)
+        status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bounds_opt, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt)
 
         #### Judging and save the result
         if status_cur in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
