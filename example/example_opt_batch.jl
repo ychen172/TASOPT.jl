@@ -47,9 +47,9 @@ save_name = "acOptimized_BatOpt" #jld2
 idx_fuel = 24 #Fuel Index: Jet Fuel(24), Ethanol(32)
 rho_fuel = 817.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
 hvap_fuel = 358694.0 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
-iters_max_opt = 1000 #Number of interations
+iters_max_opt = 100000 #1000 #Number of interations
 #Sweep
-range_lst = [3000,2900] #Range in nmi (Need to be turned to meter for input) #collect(3000.0:-100:300) #28 cases
+range_lst = collect(3000.0:-100:300) #[3000,2900] #Range in nmi (Need to be turned to meter for input) #collect(3000.0:-100:300) #28 cases
 
 ####Initialize the log
 status_log = joinpath(save_dir, "$(save_name)_Log.txt")
