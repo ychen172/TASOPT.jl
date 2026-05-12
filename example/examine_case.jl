@@ -228,12 +228,12 @@ function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_nam
     #### Output constraints
     if !isnothing(constraints_opt)
         # Extract the constraints
-        span_maxLim     = constraints[1] #Maximum wing span (m)
-        lenField_maxLim = constraints[2] #Maximum balanced field length (m)
-        TOCGamma_minLim = constraints[3]*180/pi #Minimum top-of-climb flight angle (deg)
-        Tt3_maxLim      = constraints[4] #Maximum compressor outlet temperature (K)
-        TMetal_maxLim   = constraints[5] #Maximum metal temperature (K)
-        DiaFan_maxLim   = constraints[6] #Maximum fan diameter (m)
+        span_maxLim     = constraints_opt[1] #Maximum wing span (m)
+        lenField_maxLim = constraints_opt[2] #Maximum balanced field length (m)
+        TOCGamma_minLim = constraints_opt[3]*180/pi #Minimum top-of-climb flight angle (deg)
+        Tt3_maxLim      = constraints_opt[4] #Maximum compressor outlet temperature (K)
+        TMetal_maxLim   = constraints_opt[5] #Maximum metal temperature (K)
+        DiaFan_maxLim   = constraints_opt[6] #Maximum fan diameter (m)
         massTO_maxLim   = ac.parg[igWMTO]/gee/1000.0 #Maximum takeoff mass (Ton)
         massFuel_maxLim = ac.parg[igWfmax]/gee/1000.0 #Maximum fuel mass (Ton)
         # Prepare the print
@@ -287,7 +287,86 @@ function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_nam
         CSV.write(joinpath(save_dir,"ConsPara_$(save_name).csv"), df_consVar)
     end
 
-    
+    #### Output optimization parameters with bounds
+    if !isnothing(bounds_opt)
+        # Extract the boundaries for optimization
+        bndVar_names = [
+            "Wing aspect ratio",
+            "Cruise CL",
+            "Wing sweep angle (deg)",
+            "Cruise altitude (ft)",
+            "Inboard wing taper ratio",
+            "Outboard wing taper ratio",
+            "Inboard thickness-to-chord ratio",
+            "Outboard thickness-to-chord ratio",
+            "Break/root CL ratio at cruise",
+            "Tip/root CL ratio at cruise",
+            "Tt4 at cruise (K)",
+            "HPC pressure ratio at cruise",
+            "Fan pressure ratio at cruise",
+            "LPC pressure ratio at cruise",
+            "Bypass ratio at cruise"
+        ]
+        bndVar_values = [
+            AR,
+            CL_cruise,
+            sweep,
+            alt_cruise,
+            taper_wing_in,
+            taper_wing_out,
+            thick_to_chord_in,
+            thick_to_chord_out,
+            break_root_cl_ratio_cruise,
+            tip_root_cl_ratio_cruise,
+            Tt4_cruise,
+            PR_hpc_cruise,
+            PR_fan_cruise,
+            PR_lpc_cruise,
+            BPR_cruise
+        ]
+        bndVar_min = [
+            bounds_opt.AR_lim[1],
+            bounds_opt.CL_lim[1],
+            bounds_opt.sweep_deg_lim[1], #[deg]
+            bounds_opt.alt_cruise_m_lim[1]*3.280839895, #[ft]
+            bounds_opt.taper_in_lim[1],
+            bounds_opt.taper_out_lim[1],
+            bounds_opt.tc_root_lim[1],
+            bounds_opt.tc_span_lim[1],
+            bounds_opt.rcls_lim[1],
+            bounds_opt.rclt_lim[1],
+            bounds_opt.Tt4_lim[1],#[K]
+            bounds_opt.PR_hpc_lim[1],
+            bounds_opt.PR_fan_lim[1],
+            bounds_opt.PR_lpc_lim[1],
+            bounds_opt.BPR_lim[1]
+        ]
+        bndVar_max = [
+            bounds_opt.AR_lim[2],
+            bounds_opt.CL_lim[2],
+            bounds_opt.sweep_deg_lim[2], #[deg]
+            bounds_opt.alt_cruise_m_lim[2]*3.280839895, #[ft]
+            bounds_opt.taper_in_lim[2],
+            bounds_opt.taper_out_lim[2],
+            bounds_opt.tc_root_lim[2],
+            bounds_opt.tc_span_lim[2],
+            bounds_opt.rcls_lim[2],
+            bounds_opt.rclt_lim[2],
+            bounds_opt.Tt4_lim[2],#[K]
+            bounds_opt.PR_hpc_lim[2],
+            bounds_opt.PR_fan_lim[2],
+            bounds_opt.PR_lpc_lim[2],
+            bounds_opt.BPR_lim[2]
+        ]
+        df_bndVar = DataFrame(
+            Symbol("Variables")     => bndVar_names,
+            Symbol("Design Values") => bndVar_values,
+            Symbol("Lower Bounds")  => bndVar_min,
+            Symbol("Upper Bounds")  => bndVar_max,
+        )
+        # Save the optimization parameters
+        CSV.write(joinpath(save_dir, "BoundPara_$(save_name).csv"), df_bndVar)
+    end
     
     return designParam
 end
