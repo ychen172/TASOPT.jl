@@ -3,6 +3,8 @@ export ExtractDes
 
 using CSV, DataFrames
 using TASOPT, NLopt
+using Plots
+include(__TASOPTindices__)
 include(joinpath(@__DIR__, "optimize_rangefuel.jl"))
 using .OptimizeRangeFuel: BoundsOpt, ConstraintsOpt
 
