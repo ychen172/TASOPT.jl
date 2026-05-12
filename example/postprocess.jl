@@ -1,10 +1,13 @@
+module PostProcess
+export ExtractDes
+
 using CSV, DataFrames
 using TASOPT, NLopt
 include(joinpath(@__DIR__, "optimize_rangefuel.jl"))
 using .OptimizeRangeFuel: BoundsOpt, ConstraintsOpt
 
 """
-example_design!(ac, save_dir, save_name; bounds_opt, constraints_opt)
+ExtractDes(ac, save_dir, save_name; flg_save, bounds_opt, constraints_opt)
 
 Post-process the design point information by outputing the parameters into csv and return design parameters too
 Inputs:
@@ -22,7 +25,7 @@ Saves(Activated if flg_save):
 Outputs:
     designParam: name tuple: extracted design parameters
 """
-function example_design!(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::AbstractString;
+function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::AbstractString;
     flg_save::Bool=true, bounds_opt::Union{Nothing,BoundsOpt}=nothing, constraints_opt::Union{Nothing,ConstraintsOpt}=nothing)
     
     #### Setup a saving directory
