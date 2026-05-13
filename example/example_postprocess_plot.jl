@@ -12,6 +12,7 @@ using .PostProcess: ExtractDes
 using .PostProcess.OptimizeRangeFuel: BoundsOpt, ConstraintsOpt
 include(joinpath(@__DIR__, "optimize_rangefuel.jl"))
 using .OptimizeRangeFuel.extract_opt_para
+using Plots
 
 #### Setup IO
 model_dir    = "ModelSavedTest"
@@ -24,7 +25,7 @@ save_dirSub = joinpath(save_dir,save_prefix) #Sub-directory to save comparison d
 mkpath(save_dirSub)
 
 #### Missions Parameters to Compare
-Fuels = ["Eth","Jet"] #These corresponding to the model file name
+Fuels = ["Jet","Jet"] #These corresponding to the model file name
 Ranges = collect(300:100:3000) #Prefixex+Fuel+Range.jld2
 flgSaveIndividual = false #Whether to save an output for individual case
 
@@ -68,4 +69,31 @@ for (i,curFuel) in enumerate(Fuels)
     push!(paraSet, (paraSetSub))
     push!(boundSet, (boundSetSub))
     push!(optParSet, (optParSetSub))
+end
+
+####Plot out the operation parameter comparison between the fuels over the ranges
+fNamesOptPara = fieldnames(BoundsOpt)
+numOptParas = length(fNamesOptPara)
+# Get the range out
+range_matrix = []
+for idxFuel in eachindex(Fuels) #Through each fuel
+    # Read out the ranges first
+    range_lst = []
+    for idxRange in eachindex(paraSet[idxFuel])
+        push!(range_lst, paraSet[idxFuel][idxRange].range) #[nmi]
+    end
+    push!(range_matrix, range_lst)
+end
+# Get and compare each design parameters
+for idxPara = 1:numOptParas #Loop through all the parameters
+    p = plot(xlabel="Range [nmi]", ylabel="$(fNamesOptPara[idxPara])")
+    for idxFuel in eachindex(Fuels) #Through each fuel    
+        value_lst = []
+        for idxRange in eachindex(optParSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
+            push!(value_lst, optParSet[idxFuel][idxRange][idxPara])
+        end
+        # Plot
+        plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
+    end
+    savefig(p, joinpath(save_dirSub, "Compare_$(fNamesOptPara[idxPara]).pdf"))
 end
