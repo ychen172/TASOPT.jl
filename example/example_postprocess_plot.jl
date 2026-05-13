@@ -9,9 +9,7 @@ using DataFrames, CSV
 include(__TASOPTindices__)
 include(joinpath(@__DIR__, "postprocess.jl"))
 using .PostProcess: ExtractDes
-using .PostProcess.OptimizeRangeFuel: BoundsOpt, ConstraintsOpt
-include(joinpath(@__DIR__, "optimize_rangefuel.jl"))
-using .OptimizeRangeFuel.extract_opt_para
+using .PostProcess.OptimizeRangeFuel: BoundsOpt, ConstraintsOpt, extract_opt_para
 using Plots
 
 #### Setup IO
@@ -86,7 +84,7 @@ for idxFuel in eachindex(Fuels) #Through each fuel
 end
 # Get and compare each design parameters
 for idxPara = 1:numOptParas #Loop through all the parameters
-    p = plot(xlabel="Range [nmi]", ylabel="$(fNamesOptPara[idxPara])")
+    p = plot(xlabel="Range [nmi]", ylabel="$(fNamesOptPara[idxPara])", dpi=800)
     for idxFuel in eachindex(Fuels) #Through each fuel    
         value_lst = []
         for idxRange in eachindex(optParSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
@@ -95,5 +93,5 @@ for idxPara = 1:numOptParas #Loop through all the parameters
         # Plot
         plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
     end
-    savefig(p, joinpath(save_dirSub, "Compare_$(fNamesOptPara[idxPara]).pdf"))
+    savefig(p, joinpath(save_dirSub, "Compare_$(fNamesOptPara[idxPara]).png"))
 end
