@@ -1,5 +1,5 @@
 module PostProcess
-export ExtractDes
+export ExtractDes, save_hist_compact!
 
 using CSV, DataFrames
 using TASOPT, NLopt
@@ -7,6 +7,7 @@ using Plots
 include(__TASOPTindices__)
 include(joinpath(@__DIR__, "optimize_rangefuel.jl"))
 using .OptimizeRangeFuel: BoundsOpt, ConstraintsOpt
+using JLD2
 
 """
 ExtractDes(ac, save_dir, save_name; flg_save, bounds_opt, constraints_opt)
@@ -376,6 +377,37 @@ function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::Ab
     end
     
     return designParam
+end
+
+####History Saving function
+function save_hist_compact!(jld2_path::AbstractString, ran_cur, hist)
+    tag = "range_$(round(Int, ran_cur))"
+
+    # violation "size" per evaluation (how many constraints violated)
+    nviol = Int32.(length.(hist.violations))
+    feasible = isempty.(hist.violations)
+
+    # compact test_param into a matrix (cheaper than Vector{Vector})
+    n = length(hist.test_param)
+    X = if n == 0
+        Matrix{Float32}(undef, 0, 0)
+    else
+        nvar = length(hist.test_param[1])
+        M = Matrix{Float32}(undef, n, nvar)
+        for i in 1:n
+            @inbounds M[i, :] .= Float32.(hist.test_param[i])
+        end
+        M
+    end
+
+    jldopen(jld2_path, "a+") do f
+        f["$tag/test_param"] = X
+        f["$tag/penalty"] = Float32.(hist.penalty)
+        f["$tag/PFEI"] = Float32.(hist.PFEI)
+        f["$tag/nviol"] = nviol
+        f["$tag/feasible"] = feasible
+        f["$tag/n_eval"] = length(hist.penalty)
+    end
 end
 
 end # module PostProcess

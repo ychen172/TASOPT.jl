@@ -3,53 +3,24 @@ using JLD2
 include(joinpath(@__DIR__, "optimize_rangefuel.jl"))
 using .OptimizeRangeFuel: MissionReq, BoundsOpt, ConstraintsOpt, optimize_rangefuel_fun!
 include(__TASOPTindices__)
+include(joinpath(@__DIR__, "postprocess.jl"))
+using .PostProcess: save_hist_compact!
 
-####History Saving function
-function save_hist_compact!(jld2_path::AbstractString, ran_cur, hist)
-    tag = "range_$(round(Int, ran_cur))"
-
-    # violation "size" per evaluation (how many constraints violated)
-    nviol = Int32.(length.(hist.violations))
-    feasible = isempty.(hist.violations)
-
-    # compact test_param into a matrix (cheaper than Vector{Vector})
-    n = length(hist.test_param)
-    X = if n == 0
-        Matrix{Float32}(undef, 0, 0)
-    else
-        nvar = length(hist.test_param[1])
-        M = Matrix{Float32}(undef, n, nvar)
-        for i in 1:n
-            @inbounds M[i, :] .= Float32.(hist.test_param[i])
-        end
-        M
-    end
-
-    jldopen(jld2_path, "a+") do f
-        f["$tag/test_param"] = X
-        f["$tag/penalty"] = Float32.(hist.penalty)
-        f["$tag/PFEI"] = Float32.(hist.PFEI)
-        f["$tag/nviol"] = nviol
-        f["$tag/feasible"] = feasible
-        f["$tag/n_eval"] = length(hist.penalty)
-    end
-end
-#######################################Main Scirpt###########################################
 ####Start from an initial aircraft model
 # Load from
 save_dir  = "ModelSaved"
 load_name = "acOptimized_BatOptJet300" #jld2
 # Save to
-save_name = "acOptimized_BatOptEth" #jld2
+save_name = "acOptimized_BatOptJet" #jld2
 
 ####Setup the test conditions
 #Fixed
-idx_fuel = 32 #Fuel Index: Jet Fuel(24), Ethanol(32)
-rho_fuel = 789.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
-hvap_fuel = 918187.9 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
-iters_max_opt = 100000 #1000 #Number of interations
+idx_fuel = 24 #Fuel Index: Jet Fuel(24), Ethanol(32)
+rho_fuel = 817.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
+hvap_fuel = 358694.0 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
+iters_max_opt = 1000 #1000 #Number of interations
 #Sweep
-range_lst = collect(300:100:3000) #[3000,2900] #Range in nmi (Need to be turned to meter for input) #collect(3000.0:-100:300) #28 cases
+range_lst = [301] #collect(300:100:3000) #[3000,2900] #Range in nmi (Need to be turned to meter for input) #collect(3000.0:-100:300) #28 cases
 
 ####Initialize the log
 status_log = joinpath(save_dir, "$(save_name)_Log.txt")
