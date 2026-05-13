@@ -13,7 +13,7 @@ using .PostProcess.OptimizeRangeFuel: BoundsOpt, ConstraintsOpt, extract_opt_par
 using Plots
 
 #### Setup IO
-model_dir    = "ModelSavedTest"
+model_dir    = "ModelSaved"
 model_prefix = "acOptimized_BatOpt" #Frontal key name for the models(FuelRange)
 save_dir     = "ModelProcessed" #Outer Directory for saving models
 save_prefix  = "Eth_Jet_Comparison" #The total save name for jet and ethanol comparison
@@ -23,7 +23,7 @@ save_dirSub = joinpath(save_dir,save_prefix) #Sub-directory to save comparison d
 mkpath(save_dirSub)
 
 #### Missions Parameters to Compare
-Fuels = ["Jet","Jet"] #These corresponding to the model file name
+Fuels = ["Jet","Eth"] #These corresponding to the model file name
 Ranges = collect(300:100:3000) #Prefixex+Fuel+Range.jld2
 flgSaveIndividual = false #Whether to save an output for individual case
 
@@ -90,8 +90,17 @@ for idxPara = 1:numOptParas #Loop through all the parameters
         for idxRange in eachindex(optParSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
             push!(value_lst, optParSet[idxFuel][idxRange][idxPara])
         end
+        # Bound list
+        LB_lst = []
+        UB_lst = []
+        for idxRange in eachindex(boundSet[idxFuel])
+            push!(LB_lst, getfield(boundSet[idxFuel][idxRange], fNamesOptPara[idxPara])[1])
+            push!(UB_lst, getfield(boundSet[idxFuel][idxRange], fNamesOptPara[idxPara])[2])
+        end
         # Plot
         plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
+        plot!(p, range_matrix[idxFuel], LB_lst, lw=0.5, label="$(Fuels[idxFuel]) Low Bound")
+        plot!(p, range_matrix[idxFuel], UB_lst, lw=0.5, label="$(Fuels[idxFuel]) High Bound")
     end
     savefig(p, joinpath(save_dirSub, "Compare_$(fNamesOptPara[idxPara]).png"))
 end
