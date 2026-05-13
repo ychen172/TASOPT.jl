@@ -26,6 +26,7 @@ mkpath(save_dirSub)
 Fuels = ["Jet","Eth"] #These corresponding to the model file name
 Ranges = collect(300:100:3000) #Prefixex+Fuel+Range.jld2
 flgSaveIndividual = false #Whether to save an output for individual case
+flgPlotBounds = false #Whether to plots the optimization bounds
 
 #### Load the default constraints which is believed at this point to be common to call cases
 constraints_opt = ConstraintsOpt()
@@ -86,21 +87,25 @@ end
 for idxPara = 1:numOptParas #Loop through all the parameters
     p = plot(xlabel="Range [nmi]", ylabel="$(fNamesOptPara[idxPara])", dpi=800)
     for idxFuel in eachindex(Fuels) #Through each fuel    
+        # Get parameters
         value_lst = []
         for idxRange in eachindex(optParSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
             push!(value_lst, optParSet[idxFuel][idxRange][idxPara])
         end
-        # Bound list
-        LB_lst = []
-        UB_lst = []
-        for idxRange in eachindex(boundSet[idxFuel])
-            push!(LB_lst, getfield(boundSet[idxFuel][idxRange], fNamesOptPara[idxPara])[1])
-            push!(UB_lst, getfield(boundSet[idxFuel][idxRange], fNamesOptPara[idxPara])[2])
-        end
-        # Plot
+        # Plot parameters
         plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
-        plot!(p, range_matrix[idxFuel], LB_lst, lw=0.5, label="$(Fuels[idxFuel]) Low Bound")
-        plot!(p, range_matrix[idxFuel], UB_lst, lw=0.5, label="$(Fuels[idxFuel]) High Bound")
+        # Get bounds
+        if flgPlotBounds
+            LB_lst = []
+            UB_lst = []
+            for idxRange in eachindex(boundSet[idxFuel])
+                push!(LB_lst, getfield(boundSet[idxFuel][idxRange], fNamesOptPara[idxPara])[1])
+                push!(UB_lst, getfield(boundSet[idxFuel][idxRange], fNamesOptPara[idxPara])[2])
+            end
+            # Plot bounds
+            plot!(p, range_matrix[idxFuel], LB_lst, lw=0.5, label="$(Fuels[idxFuel]) Low Bound")
+            plot!(p, range_matrix[idxFuel], UB_lst, lw=0.5, label="$(Fuels[idxFuel]) High Bound")
+        end
     end
     savefig(p, joinpath(save_dirSub, "Compare_$(fNamesOptPara[idxPara]).png"))
 end
