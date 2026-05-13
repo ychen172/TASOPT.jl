@@ -1,5 +1,5 @@
 module OptimizeRangeFuel
-export MissionReq, BoundsOpt, ConstraintsOpt, optimize_rangefuel_fun!, clip_loc_bound!
+export MissionReq, BoundsOpt, ConstraintsOpt, optimize_rangefuel_fun!, clip_loc_bound!, adjust_bounds!, extract_opt_para
 
 using TASOPT, NLopt
 include(joinpath(@__DIR__, "objective_factory.jl"))
@@ -182,33 +182,149 @@ end
 function clip_loc_bound!(bounds_local::BoundsOpt, bounds_global::BoundsOpt)
     """
     This function clip the local bounds by the global bounds
+        Current adjustment skip fixed parameters with global bound [3] == 0
+            Need to ensure local and global bounds for that are setup consistently
+            Global and local have the same small bounds, but global has range 0, and local dx very very small
     inputs:
         bounds_local: Local bounds of the 15 parameters (Altered in place)
         bounds_global: the hard limit bounds (Unchanged)
     """
     for fName in fieldnames(typeof(bounds_local))
-        loc = getfield(bounds_local, fName) # (lb, ub, dx)
-        glo = getfield(bounds_global, fName) # (lb, ub, searchRange/2)
+        l1,l2,l3 = getfield(bounds_local, fName) # (lb, ub, dx)
+        g1,g2,g3 = getfield(bounds_global, fName) # (lb, ub, searchRange/2)
 
-        if 2.0*glo[3] > glo[2]-glo[1]
-            error("$(fName): search range $(2.0*glo[3]) exceeds global span $(glo[2]-glo[1])")
+        #### Catch fixed parameter case
+        if g3 == 0.0
+            continue
         end
 
-        lb_new = clamp(min(loc[1],loc[2]), glo[1], glo[2])
-        ub_new = clamp(max(loc[1],loc[2]), glo[1], glo[2])
+        #### Check the validity of global search range
+        if 2.0*g3 > g2-g1
+            error("$(fName): search range $(2.0*g3) exceeds global span $(g2-g1)")
+        end
+
+        #### Clip the local search range
+        lb_new = clamp(min(l1,l2), g1, g2)
+        ub_new = clamp(max(l1,l2), g1, g2)
         cen_new = 0.5*(lb_new+ub_new)
-        if (cen_new-glo[1])<glo[3]
-            lb_new = glo[1]
-            ub_new = lb_new+2.0*glo[3]
-        elseif (glo[2]-cen_new)<glo[3]
-            ub_new = glo[2]
-            lb_new = ub_new-2.0*glo[3]
+        if (cen_new-g1)<g3
+            lb_new = g1
+            ub_new = lb_new+2.0*g3
+        elseif (g2-cen_new)<g3
+            ub_new = g2
+            lb_new = ub_new-2.0*g3
         else
-            lb_new = cen_new-glo[3]
-            ub_new = cen_new+glo[3]
+            lb_new = cen_new-g3
+            ub_new = cen_new+g3
         end
-        setfield!(bounds_local, fName, (lb_new, ub_new, loc[3]))
+
+        #### Return the field
+        setfield!(bounds_local, fName, (lb_new, ub_new, l3))
     end
+end
+
+function adjust_bounds!(ac::TASOPT.aircraft, bounds_local::BoundsOpt, bounds_global::BoundsOpt)
+    """
+    This function adjust the local bounds for the 15 optimization parameters based on current aircraft solution
+        and the limitations from the global bounds.
+        If optimize solution is 0.5*halfSearchRange from either boundary, the local bounds will alter unless the global bounds are touched
+        Case1: sol sit far from global bound, 
+               If sol not close to local bounds, local bounds unchanged (Same struct - no clip)
+               if sol close to local bounds, expand the local bounds and clip.
+        Case2: sol sit close to global bounds but local bounds do not touch global bound. 
+               If sol not close to local bounds, local bounds unchanged (Same struct - no clip)
+               If sol close to local bounds, local bounds expand and clip to global bound by the flgChanged.
+        Case3: sol sit close to global bounds and local bounds touch global bound.
+               If sol not close to local bounds, local bounds unchanges (Same struct - no clip)
+               if sol close to local bounds, touching detected, local bounds unchanged (Same struct - no clip)
+        1. The above should be iterate using fewer optimization evals step, and have solution converged by MAXEVAL_REACHED
+        2. If (Same struct - no clip detected), increase evals step to large value to get a true solution with MINFLOT_REACHED convergence
+        Then check to see if the (Same struct is still true), if not, repeat the step1 -> step2
+        Current adjustment skip fixed parameters with global bound [3] == 0
+            Need to ensure local and global bounds for that are setup consistently
+            Global and local have the same small bounds, but global has range 0, and local dx very very small
+    Inputs:
+        ac: Aircraft model with optimized parameters (Unchanged)
+        bounds_local: Local bounds of the 15 parameters (Changed in place)
+        bounds_global: the hard limit bounds (Unchanged)
+    Outputs:
+        flgChanged: bool: if any of the local bounds have been altered
+    """
+    #### Extract the current state of parameters
+    opt_solution = extract_opt_para(ac)
+    numfields = fieldcount(typeof(bounds_local))
+    @assert length(opt_solution) == fieldcount(typeof(bounds_local))
+    
+    #### Loop through each field to check on close bound
+    flgChanged = false
+    for i=1:numfields
+        #### Extract the bounds
+        l1,l2,l3 = getfield(bounds_local, i) # (lb, ub, dx)
+        g1,g2,g3 = getfield(bounds_global, i) # (lb, ub, searchRange/2)
+        sol = opt_solution[i] #(solCur)
+        
+        #### Catch fixed parameter case
+        if g3 == 0.0
+            if !(isapprox(l1, g1; atol=1e-12, rtol=1e-10) &&
+                isapprox(l2, g2; atol=1e-12, rtol=1e-10))
+                println("Warning: For fixed parameters case. need to ensure local and global boundary match l1: $(l1), g1: $(g1), l2: $(l2), g2: $(g2)")
+                setfield!(bounds_local, i, (g1, g2, l3))
+                flgChanged = true
+            end
+            continue
+        end
+
+        #### Catch out of range solution (Typically only within local bounds(clipped) parameters will be tested)
+        spanTol = (g2-g1)*1e-10
+        if sol>g2+spanTol || sol<g1-spanTol
+            error("Detect solution out of global bounds, something is wrong. sol: $(sol), UB: $(g2+spanTol), LB: $(g1-spanTol)")
+        end
+
+        #### Update the lower bounds (May lead to local bounds larger than the global one, require clamping)
+        if (l2-sol < g3*0.5) && (l2 < g2-spanTol)
+            l2 = sol + g3
+            l1 = sol - g3
+            setfield!(bounds_local, i, (l1,l2,l3))
+            flgChanged = true
+        elseif (sol-l1 < g3*0.5) && (l1 > g1+spanTol)
+            l1 = sol - g3
+            l2 = sol + g3
+            setfield!(bounds_local, i, (l1,l2,l3))
+            flgChanged = true
+        end #If no update, previous iteration will ensure the local bounds sit within the global one
+    end
+
+    #### Return the flag
+    return flgChanged
+end
+
+function extract_opt_para(ac::TASOPT.aircraft)
+    """
+    This function extract an optimization parameter set from aircraft model
+    Inputs:
+        ac: Aircraft model with optimized parameters (Unchanged)
+    Outputs:
+        opt_para: vector{Float64}: parameters from optimization
+                  [AR,CL,sweep(deg),altitude,λ_in,λ_out,t/c_root,t/c_span,rcls,rclt,Tt4,π_hc,π_f,π_lc,BPR]
+    """
+    opt_para = [
+    ac.wing.layout.AR,                                     #1  Wing aspect ratio
+    ac.para[iaCL, ipcruise1, 1],                           #2  Cruise CL
+    ac.wing.layout.sweep,                                  #3  Wing sweep angle (deg)
+    ac.para[iaalt, ipcruise1, 1],                          #4  Cruise altitude (m)
+    ac.wing.inboard.λ,                                     #5  Inboard wing taper ratio
+    ac.wing.outboard.λ,                                    #6  Outboard wing taper ratio
+    ac.wing.inboard.cross_section.thickness_to_chord,      #7  Inboard thickness-to-chord ratio
+    ac.wing.outboard.cross_section.thickness_to_chord,     #8  Outboard thickness-to-chord ratio
+    ac.para[iarcls, ipcruise1, 1],                         #9  Break/root Cl ratio at cruise
+    ac.para[iarclt, ipcruise1, 1],                         #10 Tip/root Cl ratio at cruise
+    ac.pare[ieTt4, ipcruise1, 1],                          #11 Tt4 at cruise (K)
+    ac.pare[iepihc, ipcruise1, 1],                         #12 HPC pressure ratio at cruise
+    ac.pare[iepif, ipcruise1, 1],                          #13 Fan pressure ratio at cruise
+    ac.pare[iepilc, ipcruise1, 1],                         #14 LPC pressure ratio at cruise
+    ac.pare[ieBPR, ipcruise1, 1],                          #15 Bypass ratio at cruise
+    ]
+    return opt_para
 end
 
 end # module OptimizeRangeFuel
