@@ -6,21 +6,29 @@ include(__TASOPTindices__)
 include(joinpath(@__DIR__, "postprocess.jl"))
 using .PostProcess: save_hist_compact!
 
-####Start from an initial aircraft model
+#### Start from an initial aircraft model
 # Load from
 save_dir  = "ModelSaved"
-load_name = "acOptimized_BatOptJet300" #jld2
+load_name = "acOptimized_Bat" #jld2
 # Save to
 save_name = "acOptimized_BatOptJet" #jld2
 
-####Setup the test conditions
-#Fixed
-idx_fuel = 24 #Fuel Index: Jet Fuel(24), Ethanol(32)
-rho_fuel = 817.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
-hvap_fuel = 358694.0 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
+#### Setup optimization parameters
 iters_max_opt = 1000 #1000 #Number of interations
-#Sweep
+
+#### Setup the mission requirement
+mission_req = MissionReq()
+mission_req.idx_fuel = 24 #Fuel Index: Jet Fuel(24), Ethanol(32)
+mission_req.rho_fuel = 817.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
+mission_req.hvap_fuel = 358694.0 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
+# Range list to iterate through
 range_lst = [301] #collect(300:100:3000) #[3000,2900] #Range in nmi (Need to be turned to meter for input) #collect(3000.0:-100:300) #28 cases
+
+#### Setup constraints
+constraints_opt = ConstraintsOpt()
+
+#### Setup search ranges for optimized parameters
+bounds_opt = BoundsOpt()
 
 ####Initialize the log
 status_log = joinpath(save_dir, "$(save_name)_Log.txt")
@@ -35,16 +43,7 @@ function main()
     failsafe_name = load_name #something bad happen in the 1st step, reload this initial aircraft model for the 2nd step
     ####Optimization
     for (idx, ran_cur) in enumerate(range_lst)
-        ####Get the inputs to the optimizers
-        # Intiailized inputs
-        mission_req = MissionReq()
-        bounds_opt = BoundsOpt()
-        constraints_opt = ConstraintsOpt()
-        # Modify the mission requirements
-        mission_req.idx_fuel = idx_fuel #Fuel Index: Jet Fuel(24), Ethanol(32)
-        mission_req.rho_fuel = rho_fuel #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
-        mission_req.hvap_fuel = hvap_fuel #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
-        # For sweep requirement
+        ####Update the mission requirement
         mission_req.range_des = (ran_cur * 1852.0)  #Design flight range (m)
 
         #### Run the optimization
