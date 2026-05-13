@@ -1,5 +1,5 @@
 module OptimizeRangeFuel
-export MissionReq, BoundsOpt, ConstraintsOpt, optimize_rangefuel_fun!
+export MissionReq, BoundsOpt, ConstraintsOpt, optimize_rangefuel_fun!, clip_loc_bound!
 
 using TASOPT, NLopt
 include(joinpath(@__DIR__, "objective_factory.jl"))
@@ -177,6 +177,38 @@ function optimize_rangefuel_fun!(
     end
 
     return status, hist_optim
+end
+
+function clip_loc_bound!(bounds_local::BoundsOpt, bounds_global::BoundsOpt)
+    """
+    This function clip the local bounds by the global bounds
+    inputs:
+        bounds_local: Local bounds of the 15 parameters (Altered in place)
+        bounds_global: the hard limit bounds (Unchanged)
+    """
+    for fName in fieldnames(typeof(bounds_local))
+        loc = getfield(bounds_local, fName) # (lb, ub, dx)
+        glo = getfield(bounds_global, fName) # (lb, ub, searchRange/2)
+
+        if 2.0*glo[3] > glo[2]-glo[1]
+            error("$(fName): search range $(2.0*glo[3]) exceeds global span $(glo[2]-glo[1])")
+        end
+
+        lb_new = clamp(min(loc[1],loc[2]), glo[1], glo[2])
+        ub_new = clamp(max(loc[1],loc[2]), glo[1], glo[2])
+        cen_new = 0.5*(lb_new+ub_new)
+        if (cen_new-glo[1])<glo[3]
+            lb_new = glo[1]
+            ub_new = lb_new+2.0*glo[3]
+        elseif (glo[2]-cen_new)<glo[3]
+            ub_new = glo[2]
+            lb_new = ub_new-2.0*glo[3]
+        else
+            lb_new = cen_new-glo[3]
+            ub_new = cen_new+glo[3]
+        end
+        setfield!(bounds_local, fName, (lb_new, ub_new, loc[3]))
+    end
 end
 
 end # module OptimizeRangeFuel
