@@ -1,5 +1,5 @@
 module PostProcess
-export ExtractDes, save_hist_compact!
+export ExtractDes, save_hist_compact!, save_struct
 
 using CSV, DataFrames
 using TASOPT, NLopt
@@ -408,6 +408,21 @@ function save_hist_compact!(jld2_path::AbstractString, ran_cur, hist)
         f["$tag/feasible"] = feasible
         f["$tag/n_eval"] = length(hist.penalty)
     end
+end
+
+function save_struct(datStr,filename)
+    numfields = fieldcount(typeof(datStr))
+    lenfields = length(getfield(datStr,1))
+    namfields = collect(fieldnames(typeof(datStr)))
+    data = Matrix{Float64}(undef, lenfields, numfields)
+    for i = 1:numfields
+        for j = 1:lenfields
+            data[j,i] = getfield(datStr,i)[j]
+        end
+    end
+    df = DataFrame(data, Symbol.(namfields))
+    CSV.write(filename, df)
+    return df
 end
 
 end # module PostProcess

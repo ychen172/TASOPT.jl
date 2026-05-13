@@ -1,10 +1,10 @@
 using TASOPT, NLopt
 using JLD2
 include(joinpath(@__DIR__, "optimize_rangefuel.jl"))
-using .OptimizeRangeFuel: MissionReq, BoundsOpt, ConstraintsOpt, optimize_rangefuel_fun!
+using .OptimizeRangeFuel: MissionReq, BoundsOpt, ConstraintsOpt, optimize_rangefuel_fun!, clip_loc_bound!, adjust_bounds!
 include(__TASOPTindices__)
 include(joinpath(@__DIR__, "postprocess.jl"))
-using .PostProcess: save_hist_compact!
+using .PostProcess: save_hist_compact!, save_struct
 
 #### Start from an initial aircraft model
 # Load from
@@ -14,7 +14,8 @@ load_name = "acOptimized_Bat" #jld2
 save_name = "acOptimized_BatOptJet" #jld2
 
 #### Setup optimization parameters
-iters_max_opt = 1000 #1000 #Number of interations
+iters_max_opt_coarse = 500 #Initial optimizations steps to find a good search bound
+iters_max_opt_fine = 100000 #After the good search bound is estabilished
 
 #### Setup the mission requirement
 mission_req = MissionReq()
@@ -39,51 +40,114 @@ bounds_opt_global.tc_root_lim      = (0.04,   0.6,     0.1)
 bounds_opt_global.tc_span_lim      = (0.04,   0.6,     0.1)
 bounds_opt_global.rcls_lim         = (0.40,   2.0,     0.3)
 bounds_opt_global.rclt_lim         = (0.40,   2.0,     0.3)
-bounds_opt_global.Tt4_lim          = (1000.0, 2000.0,  200.0) # Change to 50
-bounds_opt_global.PR_hpc_lim       = (1.25,   50.0,    5.0)   # Change to 0.1
+bounds_opt_global.Tt4_lim          = (1000.0, 2000.0,  200.0) 
+bounds_opt_global.PR_hpc_lim       = (1.25,   50.0,    5.0)
 bounds_opt_global.PR_fan_lim       = (1.25,   4.0,     0.2)
-bounds_opt_global.PR_lpc_lim       = (2.999,  3.001,   0.0)   # Change to 0.00001
+bounds_opt_global.PR_lpc_lim       = (2.999,  3.001,   0.0)
 bounds_opt_global.BPR_lim          = (1.0,    30.0,    3.0)
+save_struct(bounds_opt_global, joinpath(save_dir, "$(save_name)_GlobalBounds.csv"))
 # Create a local boundary
-bounds_opt_local                   = BoundsOpt()
-bounds_opt_local.Tt4_lim = (bounds_opt_local.Tt4_lim[1], bounds_opt_local.Tt4_lim[2], 50.0)
-bounds_opt_local.PR_hpc_lim = (bounds_opt_local.PR_hpc_lim[1], bounds_opt_local.PR_hpc_lim[2], 0.2)
-bounds_opt_local.PR_lpc_lim = (bounds_opt_local.PR_lpc_lim[1], bounds_opt_local.PR_lpc_lim[2], 0.00001)
+bounds_opt_local            = BoundsOpt()
+bounds_opt_local.Tt4_lim    = (bounds_opt_local.Tt4_lim[1], bounds_opt_local.Tt4_lim[2], 50.0) #Change step size to 50 K
+bounds_opt_local.PR_hpc_lim = (bounds_opt_local.PR_hpc_lim[1], bounds_opt_local.PR_hpc_lim[2], 0.2) # Change step size to 0.1 pressure ratio
+bounds_opt_local.PR_lpc_lim = (bounds_opt_global.PR_lpc_lim[1], bounds_opt_global.PR_lpc_lim[2], 0.00001) #Fixed Param: Consistent with global but fake search step
+# Clip the current local bounds by global bounds before the optimization
+clip_loc_bound!(bounds_opt_local, bounds_opt_global)
 
-####Initialize the log
+#### Initialize the log
 status_log = joinpath(save_dir, "$(save_name)_Log.txt")
 open(status_log, "w") do io
     println(io, "range_nmi,status")
 end
 
-####Optimization function
+#### Optimization
 function main()
-    ####Load the starting model
+    #### Load the starting model
     ac = quickload_aircraft(joinpath(save_dir,"$(load_name).jld2"))
     failsafe_name = load_name #something bad happen in the 1st step, reload this initial aircraft model for the 2nd step
-    ####Optimization
-    for (idx, ran_cur) in enumerate(range_lst)
-        ####Update the mission requirement
+    bounds_local = deepcopy(bounds_opt_local)
+    failsafe_bounds_local = deepcopy(bounds_local) #Incase failsafe to old ac, also failsafe to old bound
+
+    #### Intialize the iterations
+    numRanges = length(range_lst)
+    idxRan = 1
+    flgReRun = false
+
+    #### Outer loop for the range
+    while idxRan <= numRanges || flgReRun
+        #### Check for re-run
+        if flgReRun
+            idxRan -= 1
+        end
+        ran_cur = range_lst[idxRan]
+
+        #### Update the range requirement
         mission_req.range_des = (ran_cur * 1852.0)  #Design flight range (m)
 
-        #### Run the optimization
-        status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bounds_opt_local, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt)
+        #### Phase one optimization
+        # Initalization
+        countWhile = 0
+        flag_bound_change = true
+        while (flag_bound_change)
+            countWhile += 1
+            # Coarse optimization
+            status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bounds_local, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt_coarse)
 
-        #### Judging and save the result
-        if status_cur in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
-            quicksave_aircraft(ac, joinpath(save_dir, "$(save_name*string(round(Int,ran_cur))).jld2"))
-            failsafe_name = save_name*string(round(Int,ran_cur))
-        else
-            ac = quickload_aircraft(joinpath(save_dir,"$(failsafe_name).jld2"))
+            # Judge and adjust the bound
+            if (countWhile<1000) && (status_cur in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED))
+                # Update the local bounds
+                flag_bound_change = adjust_bounds!(ac, bounds_local, bounds_opt_global)
+                if flag_bound_change
+                    clip_loc_bound!(bounds_local, bounds_opt_global)
+                end
+            else
+                ac = quickload_aircraft(joinpath(save_dir,"$(failsafe_name).jld2"))
+                bounds_local = deepcopy(failsafe_bounds_local)
+                status_cur = :Search_Range_Identification_Failed
+                break
+            end
         end
 
-        ####Store the log
-        open(status_log, "a") do io
-            println(io, "$(round(Int,ran_cur)),$(string(status_cur))")
+        #### Phase two optimization
+        flgReRun = false # Should the current range be rerun
+        if (status_cur != :Search_Range_Identification_Failed)
+            # Fine optimization
+            status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bounds_local, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt_fine)
+
+            # Judge for bound adjustment
+            if status_cur in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
+                # Check on bound
+                flag_bound_change = adjust_bounds!(ac, bounds_local, bounds_opt_global)
+                if flag_bound_change #If the flag bound change is true, need to re-run the current range(through phase 1 and phase 2 again)
+                    clip_loc_bound!(bounds_local, bounds_opt_global)
+                end
+                if !flag_bound_change #Nice, fine run succeed with perfect search range too, save the result
+                    # Save the optimized model
+                    quicksave_aircraft(ac, joinpath(save_dir, "$(save_name*string(round(Int,ran_cur))).jld2"))
+                    save_struct(bounds_local, joinpath(save_dir, "$(save_name*string(round(Int,ran_cur)))_BoundLocal.csv"))
+                    # Update the fail save
+                    failsafe_name = save_name*string(round(Int,ran_cur)) #Update the failsafe too
+                    failsafe_bounds_local = deepcopy(bounds_local)
+                    # Save the optimization history
+                    save_hist_compact!(joinpath(save_dir, "$(save_name*string(round(Int,ran_cur)))_History.jld2"), ran_cur, hist_optim_cur)
+                else
+                    flgReRun = true
+                end
+            else #Coarse search fine but fine search failed, fall back to old solution and skip the current iteration, keep the fine search error status
+                ac = quickload_aircraft(joinpath(save_dir,"$(failsafe_name).jld2"))
+                bounds_local = deepcopy(failsafe_bounds_local)
+            end
         end
 
-        ####Store the optimization history
-        save_hist_compact!(joinpath(save_dir, "$(save_name*string(round(Int,ran_cur)))_History.jld2"), ran_cur, hist_optim_cur)
+        #### Store the log (Only if the current (phase 1 + phase 2 operations) are not being rerun)
+        if !flgReRun
+            open(status_log, "a") do io
+                println(io, "$(round(Int,ran_cur)),$(string(status_cur))")
+            end
+        end
+
+        #### Update Index
+        idxRan += 1
     end
 end
 main()
