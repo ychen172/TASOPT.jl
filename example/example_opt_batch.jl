@@ -23,7 +23,7 @@ mission_req.idx_fuel = 24 #Fuel Index: Jet Fuel(24), Ethanol(32)
 mission_req.rho_fuel = 817.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
 mission_req.hvap_fuel = 358694.0 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
 # Range list to iterate through
-range_lst = [301] #collect(300:100:3000) #[3000,2900] #Range in nmi (Need to be turned to meter for input) #collect(3000.0:-100:300) #28 cases
+range_lst = collect(300:100:3000) #collect(300:100:3000) #[3000,2900] #Range in nmi (Need to be turned to meter for input) #collect(3000.0:-100:300) #28 cases
 
 #### Setup constraints
 constraints_opt = ConstraintsOpt()
@@ -52,7 +52,7 @@ bounds_opt_local.Tt4_lim    = (bounds_opt_local.Tt4_lim[1], bounds_opt_local.Tt4
 bounds_opt_local.PR_hpc_lim = (bounds_opt_local.PR_hpc_lim[1], bounds_opt_local.PR_hpc_lim[2], 0.2) # Change step size to 0.1 pressure ratio
 bounds_opt_local.PR_lpc_lim = (bounds_opt_global.PR_lpc_lim[1], bounds_opt_global.PR_lpc_lim[2], 0.00001) #Fixed Param: Consistent with global but fake search step
 # Clip the current local bounds by global bounds before the optimization
-clip_loc_bound!(bounds_opt_local, bounds_opt_global)
+# Given the large uncertaintin in the intial guess: Suppress the intial clipping to get a better starting solution. clip_loc_bound!(bounds_opt_local, bounds_opt_global)
 
 #### Initialize the log
 status_log = joinpath(save_dir, "$(save_name)_Log.txt")
@@ -77,9 +77,11 @@ function main()
     while idxRan <= numRanges || flgReRun
         #### Check for re-run
         if flgReRun
+            println("ReRun the previous range")
             idxRan -= 1
         end
         ran_cur = range_lst[idxRan]
+        println("Runing range $(ran_cur)")
 
         #### Update the range requirement
         mission_req.range_des = (ran_cur * 1852.0)  #Design flight range (m)
@@ -90,6 +92,7 @@ function main()
         flag_bound_change = true
         while (flag_bound_change)
             countWhile += 1
+            println("Range: $(ran_cur) on coarse run #$(countWhile)")
             # Coarse optimization
             status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bounds_local, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt_coarse)
 
@@ -111,6 +114,7 @@ function main()
         #### Phase two optimization
         flgReRun = false # Should the current range be rerun
         if (status_cur != :Search_Range_Identification_Failed)
+            println("Range: $(ran_cur) on fine run")
             # Fine optimization
             status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bounds_local, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt_fine)
 
