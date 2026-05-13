@@ -20,8 +20,6 @@ save_dir    = "ModelProcessed" #Outer Directory for saving models
 save_name   = "BatOptJet1500" #The total save name for jet and ethanol comparison
 mkpath(model_dir)
 mkpath(save_dir)
-save_dirSub = joinpath(save_dir,save_name) #Sub-directory to save comparison data
-mkpath(save_dirSub)
 
 #### Assumed default constraints used
 constraints_opt = ConstraintsOpt()
@@ -38,4 +36,4 @@ end
 
 #### Setup parameters
 ac = quickload_aircraft(joinpath(model_dir,"$(model_name).jld2"))
-designParam = ExtractDes(ac, save_dirSub, save_name; flg_save=true, bounds_opt=bounds_opt, constraints_opt=constraints_opt)
+designParam = ExtractDes(ac, save_dir, save_name; flg_save=true, bounds_opt=bounds_opt, constraints_opt=constraints_opt)
