@@ -28,7 +28,27 @@ range_lst = [301] #collect(300:100:3000) #[3000,2900] #Range in nmi (Need to be 
 constraints_opt = ConstraintsOpt()
 
 #### Setup search ranges for optimized parameters
-bounds_opt = BoundsOpt()
+bounds_opt_global                  = BoundsOpt() #This hard limits should be fixed across all cases
+bounds_opt_global.AR_lim           = (5.0,    20.0,    3.0) # Use the third entry to set the minimum half-local-search-range 
+bounds_opt_global.CL_lim           = (0.30,   1.00,    0.14)
+bounds_opt_global.sweep_deg_lim    = (0.0,    40.0,    5.0)
+bounds_opt_global.alt_cruise_m_lim = (4000.0, 20000.0, 2000.0)
+bounds_opt_global.taper_in_lim     = (0.025,  1.00,    0.2)
+bounds_opt_global.taper_out_lim    = (0.025,  1.00,    0.2)
+bounds_opt_global.tc_root_lim      = (0.04,   0.6,     0.1)
+bounds_opt_global.tc_span_lim      = (0.04,   0.6,     0.1)
+bounds_opt_global.rcls_lim         = (0.40,   2.0,     0.3)
+bounds_opt_global.rclt_lim         = (0.40,   2.0,     0.3)
+bounds_opt_global.Tt4_lim          = (1000.0, 2000.0,  200.0) # Change to 50
+bounds_opt_global.PR_hpc_lim       = (1.25,   50.0,    5.0)   # Change to 0.1
+bounds_opt_global.PR_fan_lim       = (1.25,   4.0,     0.2)
+bounds_opt_global.PR_lpc_lim       = (2.999,  3.001,   0.0)   # Change to 0.00001
+bounds_opt_global.BPR_lim          = (1.0,    30.0,    3.0)
+# Create a local boundary
+bounds_opt_local                   = BoundsOpt()
+bounds_opt_local.Tt4_lim = (bounds_opt_local.Tt4_lim[1], bounds_opt_local.Tt4_lim[2], 50.0)
+bounds_opt_local.PR_hpc_lim = (bounds_opt_local.PR_hpc_lim[1], bounds_opt_local.PR_hpc_lim[2], 0.2)
+bounds_opt_local.PR_lpc_lim = (bounds_opt_local.PR_lpc_lim[1], bounds_opt_local.PR_lpc_lim[2], 0.00001)
 
 ####Initialize the log
 status_log = joinpath(save_dir, "$(save_name)_Log.txt")
@@ -47,7 +67,7 @@ function main()
         mission_req.range_des = (ran_cur * 1852.0)  #Design flight range (m)
 
         #### Run the optimization
-        status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bounds_opt, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt)
+        status_cur, hist_optim_cur = optimize_rangefuel_fun!(ac; mission_req=mission_req, bounds_opt=bounds_opt_local, constraints_opt=constraints_opt, iters_max_opt=iters_max_opt)
 
         #### Judging and save the result
         if status_cur in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
