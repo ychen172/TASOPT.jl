@@ -11,7 +11,7 @@ using .PostProcess: save_hist_compact!, save_struct
 save_dir  = "ModelSaved"
 load_name = "acOptimized_Bat" #jld2
 # Save to
-save_name = "acOptimized_BatOptJet" #jld2
+save_name = "acOptimized_BatOptEth" #jld2
 
 #### Setup optimization parameters
 iters_max_opt_coarse = 500 #Initial optimizations steps to find a good search bound
@@ -19,9 +19,9 @@ iters_max_opt_fine = 100000 #After the good search bound is estabilished
 
 #### Setup the mission requirement
 mission_req = MissionReq()
-mission_req.idx_fuel = 24 #Fuel Index: Jet Fuel(24), Ethanol(32)
-mission_req.rho_fuel = 817.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
-mission_req.hvap_fuel = 358694.0 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
+mission_req.idx_fuel = 32 #Fuel Index: Jet Fuel(24), Ethanol(32)
+mission_req.rho_fuel = 789.0 #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
+mission_req.hvap_fuel = 918187.9 #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
 # Range list to iterate through
 range_lst = collect(300:100:3000) #collect(300:100:3000) #[3000,2900] #Range in nmi (Need to be turned to meter for input) #collect(3000.0:-100:300) #28 cases
 
@@ -32,7 +32,7 @@ constraints_opt = ConstraintsOpt()
 bounds_opt_global                  = BoundsOpt() #This hard limits should be fixed across all cases
 bounds_opt_global.AR_lim           = (5.0,    20.0,    3.0) # Use the third entry to set the minimum half-local-search-range 
 bounds_opt_global.CL_lim           = (0.30,   1.00,    0.14)
-bounds_opt_global.sweep_deg_lim    = (0.0,    40.0,    5.0)
+bounds_opt_global.sweep_deg_lim    = (0.0,    60.0,    5.0)
 bounds_opt_global.alt_cruise_m_lim = (4000.0, 20000.0, 2000.0)
 bounds_opt_global.taper_in_lim     = (0.025,  1.00,    0.2)
 bounds_opt_global.taper_out_lim    = (0.025,  1.00,    0.2)
