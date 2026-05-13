@@ -14,7 +14,7 @@ using .PostProcess.OptimizeRangeFuel: BoundsOpt, ConstraintsOpt
 # I
 model_dir   = "ModelSaved"
 model_name  = "acOptimized_BatOptJet1500" #Frontal key name for the models(FuelRange)
-bounds_name = "acOptimized_BatOptJet2800_BoundLocal" #.csv the bounds for the optimized parameters
+bounds_name = "acOptimized_BatOptJet1500_BoundLocal" #.csv the bounds for the optimized parameters
 # O
 save_dir    = "ModelProcessed" #Outer Directory for saving models
 save_name   = "BatOptJet1500" #The total save name for jet and ethanol comparison
