@@ -14,13 +14,13 @@ using Plots
 
 #### File Name Creation
 function modelFileName(model_prefix::String, curFuel::String, curRange::String)
-    #return "$(model_prefix)$(curFuel)$(curRange)"
-    return "$(curFuel)$(model_prefix)$(curRange)"
+    return "$(model_prefix)$(curFuel)$(curRange)"
+    # return "$(curFuel)$(model_prefix)$(curRange)"
 end
 
 #### Setup IO
 model_dir    = "ModelSaved"
-model_prefix = "_300_3000_SpanLar_FanLar" #Frontal key name for the models(FuelRange)
+model_prefix = "acOptimized_BatOpt" #Frontal key name for the models(FuelRange)
 save_dir     = "ModelProcessed" #Outer Directory for saving models
 save_prefix  = "Eth_Jet_Comparison" #The total save name for jet and ethanol comparison
 mkpath(model_dir)
@@ -29,7 +29,7 @@ save_dirSub = joinpath(save_dir,save_prefix) #Sub-directory to save comparison d
 mkpath(save_dirSub)
 
 #### Missions Parameters to Compare
-Fuels = ["JetFuel","Ethanol"] #These corresponding to the model file name
+Fuels = ["Jet","Eth"] #These corresponding to the model file name
 Ranges = collect(300:100:3000) #Prefixex+Fuel+Range.jld2
 flgSaveIndividual = false #Whether to save an output for individual case
 flgPlotBounds = false #Whether to plots the optimization bounds
@@ -39,8 +39,8 @@ flgPlotConstraints = true #Whether to plots the constraints
 constraints_names = ["diaFan", "TMetalMax", "Tt3Max", "gamTOC", "lenFieldBalanced", "spanWing"]
 if flgPlotConstraints
     constraints_opt = ConstraintsOpt()
-    constraints_opt.DiaFan_max = 3.0 #Overwrite
-    constraints_opt.span_max = 65.0 #Overwrite
+    # constraints_opt.DiaFan_max = 3.0 #Overwrite
+    # constraints_opt.span_max = 65.0 #Overwrite
     constraints = [constraints_opt.DiaFan_max,
                    constraints_opt.TMetal_max,
                    constraints_opt.Tt3_max,
@@ -66,9 +66,9 @@ for (i,curFuel) in enumerate(Fuels)
         try
             # Load the aircraft model
             ac = quickload_aircraft(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange)))).jld2"))
-            # Load the parameter bounds
-            bdcsv = CSV.read(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange))))_BoundLocal.csv"), DataFrame)
             if flgPlotBounds
+                # Load the parameter bounds
+                bdcsv = CSV.read(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange))))_BoundLocal.csv"), DataFrame)
                 bounds_opt = BoundsOpt()
                 for fName in fieldnames(typeof(bounds_opt))
                     fNameSym = Symbol(fName)
@@ -76,6 +76,7 @@ for (i,curFuel) in enumerate(Fuels)
                 end
             else
                 bounds_opt = nothing
+            end
             # Extract the design parameters and optionally save individual case
             design_para = ExtractDes(ac, save_dir, "$(model_prefix)$(caseCur)"; flg_save=flgSaveIndividual,
                           bounds_opt=bounds_opt, constraints_opt=constraints_opt)
