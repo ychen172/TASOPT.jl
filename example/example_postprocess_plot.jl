@@ -36,16 +36,21 @@ flgPlotBounds = false #Whether to plots the optimization bounds
 flgPlotConstraints = true #Whether to plots the constraints
 
 #### Load the default constraints which is believed at this point to be common to call cases
-constraints_opt = ConstraintsOpt()
-constraints_opt.DiaFan_max = 3.0 #Overwrite
-constraints_opt.span_max = 65.0 #Overwrite
 constraints_names = ["diaFan", "TMetalMax", "Tt3Max", "gamTOC", "lenFieldBalanced", "spanWing"]
-constraints = [constraints_opt.DiaFan_max,
-               constraints_opt.TMetal_max,
-               constraints_opt.Tt3_max,
-               constraints_opt.TOCGamma_min*180.0/pi, #deg for consistency
-               constraints_opt.lenField_max,
-               constraints_opt.span_max]
+if flgPlotConstraints
+    constraints_opt = ConstraintsOpt()
+    constraints_opt.DiaFan_max = 3.0 #Overwrite
+    constraints_opt.span_max = 65.0 #Overwrite
+    constraints = [constraints_opt.DiaFan_max,
+                   constraints_opt.TMetal_max,
+                   constraints_opt.Tt3_max,
+                   constraints_opt.TOCGamma_min*180.0/pi, #deg for consistency
+                   constraints_opt.lenField_max,
+                   constraints_opt.span_max]
+else
+    constraints_opt = nothing
+    constraints = []
+end
 
 #### Extract data for each case
 paraSet = [] # Each element is one fuel
@@ -63,11 +68,14 @@ for (i,curFuel) in enumerate(Fuels)
             ac = quickload_aircraft(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange)))).jld2"))
             # Load the parameter bounds
             bdcsv = CSV.read(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange))))_BoundLocal.csv"), DataFrame)
-            bounds_opt = BoundsOpt()
-            for fName in fieldnames(typeof(bounds_opt))
-                fNameSym = Symbol(fName)
-                setfield!(bounds_opt, fName, (Float64(bdcsv[1, fNameSym]), Float64(bdcsv[2, fNameSym]), Float64(bdcsv[3, fNameSym])))
-            end
+            if flgPlotBounds
+                bounds_opt = BoundsOpt()
+                for fName in fieldnames(typeof(bounds_opt))
+                    fNameSym = Symbol(fName)
+                    setfield!(bounds_opt, fName, (Float64(bdcsv[1, fNameSym]), Float64(bdcsv[2, fNameSym]), Float64(bdcsv[3, fNameSym])))
+                end
+            else
+                bounds_opt = nothing
             # Extract the design parameters and optionally save individual case
             design_para = ExtractDes(ac, save_dir, "$(model_prefix)$(caseCur)"; flg_save=flgSaveIndividual,
                           bounds_opt=bounds_opt, constraints_opt=constraints_opt)
