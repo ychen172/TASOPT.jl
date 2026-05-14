@@ -14,6 +14,7 @@ using Plots
 
 #### File Name Creation
 function modelFileName(model_prefix::String, curFuel::String, curRange::String)
+    #return "$(model_prefix)$(curFuel)$(curRange)"
     return "$(curFuel)$(model_prefix)$(curRange)"
 end
 
