@@ -12,9 +12,14 @@ using .PostProcess: ExtractDes
 using .PostProcess.OptimizeRangeFuel: BoundsOpt, ConstraintsOpt, extract_opt_para
 using Plots
 
+#### File Name Creation
+function modelFileName(model_prefix::String, curFuel::String, curRange::String)
+    return "$(curFuel)$(model_prefix)$(curRange)"
+end
+
 #### Setup IO
-model_dir    = "ModelSavedTest"
-model_prefix = "acOptimized_BatOpt" #Frontal key name for the models(FuelRange)
+model_dir    = "ModelSaved"
+model_prefix = "_300_3000_SpanLar_FanLar" #Frontal key name for the models(FuelRange)
 save_dir     = "ModelProcessed" #Outer Directory for saving models
 save_prefix  = "Eth_Jet_Comparison" #The total save name for jet and ethanol comparison
 mkpath(model_dir)
@@ -23,7 +28,7 @@ save_dirSub = joinpath(save_dir,save_prefix) #Sub-directory to save comparison d
 mkpath(save_dirSub)
 
 #### Missions Parameters to Compare
-Fuels = ["Jet","Eth"] #These corresponding to the model file name
+Fuels = ["JetFuel","Ethanol"] #These corresponding to the model file name
 Ranges = collect(300:100:3000) #Prefixex+Fuel+Range.jld2
 flgSaveIndividual = false #Whether to save an output for individual case
 flgPlotBounds = false #Whether to plots the optimization bounds
@@ -31,6 +36,15 @@ flgPlotConstraints = true #Whether to plots the constraints
 
 #### Load the default constraints which is believed at this point to be common to call cases
 constraints_opt = ConstraintsOpt()
+constraints_opt.DiaFan_max = 3.0 #Overwrite
+constraints_opt.span_max = 65.0 #Overwrite
+constraints_names = ["diaFan", "TMetalMax", "Tt3Max", "gamTOC", "lenFieldBalanced", "spanWing"]
+constraints = [constraints_opt.DiaFan_max,
+               constraints_opt.TMetal_max,
+               constraints_opt.Tt3_max,
+               constraints_opt.TOCGamma_min*180.0/pi, #deg for consistency
+               constraints_opt.lenField_max,
+               constraints_opt.span_max]
 
 #### Extract data for each case
 paraSet = [] # Each element is one fuel
@@ -45,9 +59,9 @@ for (i,curFuel) in enumerate(Fuels)
         println("Attempt to read case: Fuel type: $(curFuel), Range: $(curRange)")
         try
             # Load the aircraft model
-            ac = quickload_aircraft(joinpath(model_dir,"$(model_prefix)$(caseCur).jld2"))
+            ac = quickload_aircraft(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange)))).jld2"))
             # Load the parameter bounds
-            bdcsv = CSV.read(joinpath(model_dir,"$(model_prefix)$(caseCur)_BoundLocal.csv"), DataFrame)
+            bdcsv = CSV.read(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange))))_BoundLocal.csv"), DataFrame)
             bounds_opt = BoundsOpt()
             for fName in fieldnames(typeof(bounds_opt))
                 fNameSym = Symbol(fName)
@@ -112,14 +126,6 @@ for idxPara = 1:numOptParas #Loop through all the parameters
 end
 
 #### Plot out the constraints parameter comparison between the fuels
-constraints_names = ["diaFan", "TMetalMax", "Tt3Max", "gamTOC", "lenFieldBalanced", "spanWing"]
-constraints = [constraints_opt.DiaFan_max,
-               constraints_opt.TMetal_max,
-               constraints_opt.Tt3_max,
-               constraints_opt.TOCGamma_min*180.0/pi, #deg for consistency
-               constraints_opt.lenField_max,
-               constraints_opt.span_max]
-# Plot all constrained parameters
 for idxPara = 1:length(constraints_names) #Loop through all the parameters
     p = plot(xlabel="Range [nmi]", ylabel="$(constraints_names[idxPara])", dpi=800)
     for idxFuel in eachindex(Fuels) #Through each fuel    
