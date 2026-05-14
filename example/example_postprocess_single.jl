@@ -36,4 +36,4 @@ end
 
 #### Setup parameters
 ac = quickload_aircraft(joinpath(model_dir,"$(model_name).jld2"))
-designParam = ExtractDes(ac, save_dir, save_name; flg_save=true, bounds_opt=bounds_opt, constraints_opt=constraints_opt)
+designParam , _ = ExtractDes(ac, save_dir, save_name; flg_save=true, bounds_opt=bounds_opt, constraints_opt=constraints_opt)

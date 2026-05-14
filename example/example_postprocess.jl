@@ -35,7 +35,7 @@ for (i,curFuel) in enumerate(Fuels)
         # Try to load and extract the design parameters
         try
             ac = quickload_aircraft(joinpath(model_dir,model_file))
-            designParam = ExtractDes(ac, save_dir, case_id; flg_save=false)
+            designParam, _  = ExtractDes(ac, save_dir, case_id; flg_save=false)
             push!(desParamRows, (; case = case_id, designParam...))
         catch err
             println("$(model_file) not readable")

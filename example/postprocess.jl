@@ -27,6 +27,7 @@ Saves(Activated if flg_save):
     BoundaryParameters.csv: Design parameters plots (if bounds_opt provided)
 Outputs:
     designParam: name tuple: extracted design parameters
+    mission_param: dataframe: ["Time[s]", "Pt3[psi]", "Pt4[psi]", "Tt3[R]", "Tt4[R]", "Wf[lbm/s]", "W3[lbm/s]"]
 """
 function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::AbstractString;
     flg_save::Bool=true, bounds_opt::Union{Nothing,BoundsOpt}=nothing, constraints_opt::Union{Nothing,ConstraintsOpt}=nothing)
@@ -85,6 +86,15 @@ function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::Ab
     gamTOC = ac.para[iagamV, ipclimbn, 1]*180/pi #Top of climb flight angle (deg)
     lenFieldBalanced = ac.parm[imlBF, 1] #balanced field length (m)
     spanWing = ac.wing.span #Wing span (m)
+    # Missions parameters for combustor emissions simulation
+    time_miss = ac.para[iatime, :, 1]  #(s) Time of the phases
+    Pt3_miss = ac.pare[iept3, : ,1]/6895.0 #(psi) combustor inlet pressure
+    Pt4_miss = ac.pare[iept4, : ,1]/6895.0 #(psi) combustor outlet pressure
+    Tt3_miss = ac.pare[ieTt3, : ,1]*1.8 #(R) combustor inlet temperature
+    Tt4_miss = ac.pare[ieTt4, : ,1]*1.8 #(R) combustor outlet temperature
+    mdot_core_miss_single_ = ac.pare[iemcore, :, 1] #(kg/s) single engine core mass flow range
+    mdot_fuel_miss_single = ieff*mdot_core_miss_single_*2.204622 #(lbm/s) single engine combustor fuel flow rate
+    mdot_air_miss_single = (mdot_core_miss_single_ - ac.pare[iemofft, :, 1] - mdot_core_miss_single_*pare[iefc, :, 1])*2.204622 #(lbm/s) single engine combustor air flow rate
 
     # Create a named tuple for these design parameters
     designParam = (;
@@ -129,8 +139,19 @@ function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::Ab
     lenFieldBalanced,
     spanWing
     )
+
+    # Create mission parameters for combustor
+    mission_param = DataFrame()
+    mission_param[!, Symbol("Time[s]")] = time_miss
+    mission_param[!, Symbol("Pt3[psi]")] = Pt3_miss
+    mission_param[!, Symbol("Pt4[psi]")] = Pt4_miss
+    mission_param[!, Symbol("Tt3[R]")] = Tt3_miss
+    mission_param[!, Symbol("Tt4[R]")] = Tt4_miss
+    mission_param[!, Symbol("Wf[lbm/s]")] = mdot_fuel_miss_single
+    mission_param[!, Symbol("W3[lbm/s]")] =  mdot_air_miss_single
+    
     # Quick exit if not saving anything
-    !flg_save && return designParam
+    !flg_save && return designParam, mission_param
 
     #### Create save directory
     out_dir = joinpath(save_dir, save_name)
@@ -376,7 +397,7 @@ function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::Ab
         CSV.write(joinpath(out_dir, "BoundPara_$(save_name).csv"), df_bndVar)
     end
     
-    return designParam
+    return designParam, mission_param
 end
 
 ####History Saving function

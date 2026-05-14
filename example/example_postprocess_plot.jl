@@ -80,7 +80,7 @@ for (i,curFuel) in enumerate(Fuels)
                 bounds_opt = nothing
             end
             # Extract the design parameters and optionally save individual case
-            design_para = ExtractDes(ac, save_dir, "$(model_prefix)$(caseCur)"; flg_save=flgSaveIndividual,
+            design_para, _  = ExtractDes(ac, save_dir, "$(model_prefix)$(caseCur)"; flg_save=flgSaveIndividual,
                           bounds_opt=bounds_opt, constraints_opt=constraints_opt)
             # Extract the subset of design parameters that have bounds corresponds to
             optimi_para = extract_opt_para(ac) #vector{Float64} Those parameters having bounds. Same order as the bound
