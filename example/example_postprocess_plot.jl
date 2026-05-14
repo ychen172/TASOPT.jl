@@ -32,12 +32,14 @@ mkpath(save_dirSub)
 Fuels = ["Jet","Eth"] #These corresponding to the model file name
 Ranges = collect(300:100:3000) #Prefixex+Fuel+Range.jld2
 flgSaveIndividual = false #Whether to save an output for individual case
+flgExtrBounds = true
 flgPlotBounds = false #Whether to plots the optimization bounds
-flgPlotConstraints = true #Whether to plots the constraints
+flgExtrConstraints = true
+flgPlotConstraints = false #Whether to plots the constraints
 
 #### Load the default constraints which is believed at this point to be common to call cases
 constraints_names = ["diaFan", "TMetalMax", "Tt3Max", "gamTOC", "lenFieldBalanced", "spanWing"]
-if flgPlotConstraints
+if flgExtrConstraints
     constraints_opt = ConstraintsOpt()
     # constraints_opt.DiaFan_max = 3.0 #Overwrite
     # constraints_opt.span_max = 65.0 #Overwrite
@@ -66,7 +68,7 @@ for (i,curFuel) in enumerate(Fuels)
         try
             # Load the aircraft model
             ac = quickload_aircraft(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange)))).jld2"))
-            if flgPlotBounds
+            if flgExtrBounds
                 # Load the parameter bounds
                 bdcsv = CSV.read(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange))))_BoundLocal.csv"), DataFrame)
                 bounds_opt = BoundsOpt()
