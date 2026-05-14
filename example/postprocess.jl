@@ -87,14 +87,14 @@ function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::Ab
     lenFieldBalanced = ac.parm[imlBF, 1] #balanced field length (m)
     spanWing = ac.wing.span #Wing span (m)
     # Missions parameters for combustor emissions simulation
-    time_miss = ac.para[iatime, :, 1]  #(s) Time of the phases
-    Pt3_miss = ac.pare[iept3, : ,1]/6895.0 #(psi) combustor inlet pressure
-    Pt4_miss = ac.pare[iept4, : ,1]/6895.0 #(psi) combustor outlet pressure
-    Tt3_miss = ac.pare[ieTt3, : ,1]*1.8 #(R) combustor inlet temperature
-    Tt4_miss = ac.pare[ieTt4, : ,1]*1.8 #(R) combustor outlet temperature
-    mdot_core_miss_single_ = ac.pare[iemcore, :, 1] #(kg/s) single engine core mass flow range
-    mdot_fuel_miss_single = ieff*mdot_core_miss_single_*2.204622 #(lbm/s) single engine combustor fuel flow rate
-    mdot_air_miss_single = (mdot_core_miss_single_ - ac.pare[iemofft, :, 1] - mdot_core_miss_single_*pare[iefc, :, 1])*2.204622 #(lbm/s) single engine combustor air flow rate
+    time_miss = ac.para[iatime, ipclimb1:ipdescentn, 1]  #(s) Time of the phases
+    Pt3_miss = ac.pare[iept3, ipclimb1:ipdescentn ,1]/6895.0 #(psi) combustor inlet pressure
+    Pt4_miss = ac.pare[iept4, ipclimb1:ipdescentn ,1]/6895.0 #(psi) combustor outlet pressure
+    Tt3_miss = ac.pare[ieTt3, ipclimb1:ipdescentn ,1]*1.8 #(R) combustor inlet temperature
+    Tt4_miss = ac.pare[ieTt4, ipclimb1:ipdescentn ,1]*1.8 #(R) combustor outlet temperature
+    mdot_core_miss_single_ = ac.pare[iemcore, ipclimb1:ipdescentn, 1] #(kg/s) single engine core mass flow range
+    mdot_fuel_miss_single = ac.pare[ieff, ipclimb1:ipdescentn, 1] .* mdot_core_miss_single_ .* 2.204622 #(lbm/s) single engine combustor fuel flow rate
+    mdot_air_miss_single = (mdot_core_miss_single_ .- ac.pare[iemofft, ipclimb1:ipdescentn, 1] .- mdot_core_miss_single_ .* ac.pare[iefc, ipclimb1:ipdescentn, 1]) .* 2.204622 #(lbm/s) single engine combustor air flow rate
 
     # Create a named tuple for these design parameters
     designParam = (;
