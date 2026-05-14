@@ -27,6 +27,7 @@ range_lst = collect(300:100:3000) #collect(300:100:3000) #[3000,2900] #Range in 
 
 #### Setup constraints
 constraints_opt = ConstraintsOpt()
+save_struct(constraints_opt, joinpath(save_dir, "$(save_name)_GlobalConstraints.csv"))
 
 #### Setup search ranges for optimized parameters
 bounds_opt_global                  = BoundsOpt() #This hard limits should be fixed across all cases
