@@ -137,3 +137,19 @@ for idxPara = 1:length(constraints_names) #Loop through all the parameters
     end
     savefig(p, joinpath(save_dirSub, "CompConstr_$(constraints_names[idxPara]).png"))
 end
+
+#### Plot out other design parameters
+other_para_names = ["PFEI", "LD_cruise","LHV_cruise", "TSFC_cruise", "TSEC_cruise", "vel_cruise", "massTO", "massFuelReserved", "massFuelBurned", "massEmpty", "rangeBreguet", "thrustOneEngine_takeoff", "thrustOneEngine_cruise1"]
+for idxPara = 1:length(other_para_names) #Loop through all the parameter names
+    p = plot(xlabel="Range [nmi]", ylabel="$(other_para_names[idxPara])", dpi=800)
+    for idxFuel in eachindex(Fuels) #Through each fuel    
+        # Get constrained parameters
+        value_lst = []
+        for idxRange in eachindex(paraSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
+            push!(value_lst, getfield(paraSet[idxFuel][idxRange], Symbol(other_para_names[idxPara])))
+        end
+        # Plot parameters
+        plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
+    end
+    savefig(p, joinpath(save_dirSub, "CompOtherPara_$(other_para_names[idxPara]).png"))
+end
