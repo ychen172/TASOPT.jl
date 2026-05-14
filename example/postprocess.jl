@@ -254,6 +254,11 @@ function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::Ab
     pic = TASOPT.stickfig(ac)
     savefig(pic, joinpath(out_dir,"StickPlot_$(save_name).png"))
 
+    #### Save the combustor operating conditions for different phases of flight
+    # Add additional water-to-air ratio needed for pycaso
+    mission_param[!, Symbol("WAR[m]")] = fill(0.0, length(time_miss))
+    CSV.write(joinpath(out_dir,"MissPara_$(save_name).csv"), mission_param)
+
     #### Output constraints
     if !isnothing(constraints_opt)
         # Extract the constraints
