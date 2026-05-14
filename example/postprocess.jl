@@ -88,8 +88,8 @@ function ExtractDes(ac::TASOPT.aircraft, save_dir::AbstractString, save_name::Ab
     spanWing = ac.wing.span #Wing span (m)
     # Missions parameters for combustor emissions simulation
     time_miss = ac.para[iatime, ipclimb1:ipdescentn, 1]  #(s) Time of the phases
-    Pt3_miss = ac.pare[iept3, ipclimb1:ipdescentn ,1]/6895.0 #(psi) combustor inlet pressure
-    Pt4_miss = ac.pare[iept4, ipclimb1:ipdescentn ,1]/6895.0 #(psi) combustor outlet pressure
+    Pt3_miss = ac.pare[iept3, ipclimb1:ipdescentn ,1]/6894.757 #(psi) combustor inlet pressure
+    Pt4_miss = ac.pare[iept4, ipclimb1:ipdescentn ,1]/6894.757 #(psi) combustor outlet pressure
     Tt3_miss = ac.pare[ieTt3, ipclimb1:ipdescentn ,1]*1.8 #(R) combustor inlet temperature
     Tt4_miss = ac.pare[ieTt4, ipclimb1:ipdescentn ,1]*1.8 #(R) combustor outlet temperature
     mdot_core_miss_single_ = ac.pare[iemcore, ipclimb1:ipdescentn, 1] #(kg/s) single engine core mass flow range
