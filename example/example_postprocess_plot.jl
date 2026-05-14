@@ -13,7 +13,7 @@ using .PostProcess.OptimizeRangeFuel: BoundsOpt, ConstraintsOpt, extract_opt_par
 using Plots
 
 #### Setup IO
-model_dir    = "ModelSaved"
+model_dir    = "ModelSavedTest"
 model_prefix = "acOptimized_BatOpt" #Frontal key name for the models(FuelRange)
 save_dir     = "ModelProcessed" #Outer Directory for saving models
 save_prefix  = "Eth_Jet_Comparison" #The total save name for jet and ethanol comparison
@@ -27,6 +27,7 @@ Fuels = ["Jet","Eth"] #These corresponding to the model file name
 Ranges = collect(300:100:3000) #Prefixex+Fuel+Range.jld2
 flgSaveIndividual = false #Whether to save an output for individual case
 flgPlotBounds = false #Whether to plots the optimization bounds
+flgPlotConstraints = true #Whether to plots the constraints
 
 #### Load the default constraints which is believed at this point to be common to call cases
 constraints_opt = ConstraintsOpt()
@@ -107,5 +108,32 @@ for idxPara = 1:numOptParas #Loop through all the parameters
             plot!(p, range_matrix[idxFuel], UB_lst, lw=0.5, label="$(Fuels[idxFuel]) High Bound")
         end
     end
-    savefig(p, joinpath(save_dirSub, "Compare_$(fNamesOptPara[idxPara]).png"))
+    savefig(p, joinpath(save_dirSub, "CompBound_$(fNamesOptPara[idxPara]).png"))
+end
+
+#### Plot out the constraints parameter comparison between the fuels
+constraints_names = ["diaFan", "TMetalMax", "Tt3Max", "gamTOC", "lenFieldBalanced", "spanWing"]
+constraints = [constraints_opt.DiaFan_max,
+               constraints_opt.TMetal_max,
+               constraints_opt.Tt3_max,
+               constraints_opt.TOCGamma_min*180.0/pi, #deg for consistency
+               constraints_opt.lenField_max,
+               constraints_opt.span_max]
+# Plot all constrained parameters
+for idxPara = 1:length(constraints_names) #Loop through all the parameters
+    p = plot(xlabel="Range [nmi]", ylabel="$(constraints_names[idxPara])", dpi=800)
+    for idxFuel in eachindex(Fuels) #Through each fuel    
+        # Get constrained parameters
+        value_lst = []
+        for idxRange in eachindex(paraSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
+            push!(value_lst, getfield(paraSet[idxFuel][idxRange], Symbol(constraints_names[idxPara])))
+        end
+        # Plot parameters
+        plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
+        # Plot constraints
+        if flgPlotConstraints
+            plot!(p, range_matrix[idxFuel], fill(constraints[idxPara], length(range_matrix[idxFuel])), lw=0.5, label="$(Fuels[idxFuel]) Constraints")
+        end
+    end
+    savefig(p, joinpath(save_dirSub, "CompConstr_$(constraints_names[idxPara]).png"))
 end
