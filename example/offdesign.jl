@@ -5,7 +5,8 @@ using TASOPT
 include(__TASOPTindices__)
 
 """
-off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; epsWpay::Float64 = 1e-8)
+off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
+               epsWpay::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign")
 
 This function determine the maximum payload range envelope with a prescribe list of possible flight range
     Assume fixed CL for off-design
@@ -15,12 +16,15 @@ Inputs:
     idxFuel: int: the fuel to be use
     rhoFuel: float: fuel density (kg/m3)
     hvap_fuel: float: Heat of vaporization of the fuel (J/kg)
-    ranges: Vector{Float64}: A list of potential off-design ranges to test [m]
+    ranges: vector{float}: A list of potential off-design ranges to test [m]
+    epsWpay: float: fractional search range for convergence
+    save_dir: String: name of the save directory
+    save_name: String: name for the saved model (save_name*string(round(Int,ran_cur))*".jld2")
 Outpus:
     output: Dict: ["payload_weight_N": Vector{Float64} , "range_m": Vector{Float64}, "PFEI_JJ": Vector{Float64}]
 """
 function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-    epsWpay::Float64 = 1e-4)
+    epsWpay::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign")
 
     #### Check on sizing
     ac.is_sized[1] || error("Aircraft model needs to be sized before runing offdesign.")
@@ -155,6 +159,8 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
                 push!(payloads_feasible, ac.parm[imWpay,2])
                 push!(ranges_feasible, range_cur)
                 push!(PFEI_list, ac.parm[imPFEI, 2])
+                ## Save the current off-design model
+                quicksave_aircraft(ac, joinpath(save_dir, "$(save_name*string(round(Int,range_cur))).jld2"))
             end
         catch err
             println(err)
