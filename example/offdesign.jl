@@ -16,12 +16,12 @@ Inputs:
     idxFuel: int: the fuel to be use
     rhoFuel: float: fuel density (kg/m3)
     hvap_fuel: float: Heat of vaporization of the fuel (J/kg)
-    ranges: vector{float}: A list of potential off-design ranges to test [m]
+    ranges: vector{float}: A list of potential off-design ranges to test [nmi]
     epsWpay: float: fractional search range for convergence
     save_dir: String: name of the save directory
     save_name: String: name for the saved model (save_name*string(round(Int,ran_cur))*".jld2")
 Outpus:
-    output: Dict: ["payload_weight_N": Vector{Float64} , "range_m": Vector{Float64}, "PFEI_JJ": Vector{Float64}]
+    output: Dict: ["payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}]
 """
 function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
     epsWpay::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign")
@@ -50,7 +50,7 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
 
     #### Parameters to collect
     payloads_feasible = Vector{Float64}() #N
-    ranges_feasible = Vector{Float64}()
+    ranges_feasible = Vector{Float64}() #nmi
     PFEI_list = Vector{Float64}()
     
     #### Initialization
@@ -66,7 +66,7 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
         range_cur < range_max_found || continue
 
         # Set the range
-        ac.parm[imRange,2] = range_cur
+        ac.parm[imRange,2] = range_cur * 1852.0 # m
 
         # Set the fuel
         ac.options.ifuel = idxFuel
@@ -151,27 +151,29 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
             weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
             vol_fuel = ac.parm[imWfuel,2] / gee / ac.parg[igrhofuel] #m3
             if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO < 0.0 || vol_fuel < 0.0
-                println("The final rerun did not work: Wpay: $(payload_good) at range $(range_cur) with weight_TO/max 
+                println("The final rerun did not work: Wpay: $(payload_good) N at range $(range_cur) nmi with weight_TO/max 
                 $(weight_TO/weight_TO_max) and vol_fuel/max $(vol_fuel/vol_fuel_max)")
                 continue
             else
+                println("For off_design at range $(range_cur) nmi, find good payload $(payload_good) N with PFEI $(ac.parm[imPFEI, 2]) J/J")
                 ## Logging the current good result
                 push!(payloads_feasible, ac.parm[imWpay,2])
-                push!(ranges_feasible, range_cur)
+                push!(ranges_feasible, range_cur) #nmi
                 push!(PFEI_list, ac.parm[imPFEI, 2])
                 ## Save the current off-design model
+                mkpath(save_dir)
                 quicksave_aircraft(ac, joinpath(save_dir, "$(save_name*string(round(Int,range_cur))).jld2"))
             end
         catch err
             println(err)
-            println("The final rerun did not work: Wpay: $(payload_good) at range $(range_cur)")
+            println("The final rerun did not work: Wpay: $(payload_good) N at range $(range_cur) nmi")
             continue
         end
     end
     #### prepare output
     output = Dict(
         "payload_weight_N" => payloads_feasible,
-        "range_m" => ranges_feasible,
+        "range_nmi" => ranges_feasible,
         "PFEI_JJ" => PFEI_list
     )
     return output
