@@ -20,13 +20,13 @@ model_prefix = "acOptimized_BatOpt" #Frontal key name for the models(FuelRange)
 save_dir_prefix = "ModelSaved" #Outer Directory for saving the offdesign models
 save_prefix  = "off_design" #added with fuel and designed_range to create a sub folder name. Each then contain sub-model for off-design sweep
 mkpath(model_dir)
-Fuels = ["Eth"] #["Eth", "Jet"] #These corresponding to the model file name
-Ranges_design = [300] #collect(300:100:3000) #Prefixex+Fuel+Range.jld2
+Fuels = ["Eth", "Jet"] #["Eth", "Jet"] #These corresponding to the model file name
+Ranges_design = collect(300:100:3000) #collect(300:100:3000) #Prefixex+Fuel+Range.jld2
 #### Offdesign parameter
 Ranges_sweep = Float64.(collect(100:100:18000)) #off design range to sweep [nmi]
-fuel_idx = [32] #[32 , 24]
-rho_fuel = [789.0] #[789.0 , 817.0] #kg/m3
-hvap_fuel = [918187.9] #[918187.9 , 358694.0] #J/kg
+fuel_idx = [32 , 24] #[32 , 24]
+rho_fuel = [789.0 , 817.0] #[789.0 , 817.0] #kg/m3
+hvap_fuel = [918187.9 , 358694.0] #[918187.9 , 358694.0] #J/kg
 
 #### Extract data for each case
 for (i,curFuel) in enumerate(Fuels)
