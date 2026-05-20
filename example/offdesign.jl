@@ -200,7 +200,7 @@ Inputs:
 Outpus:
     output: Dict: ["payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}]
 """
-function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}, weights_payload::Vector{Float64};
+function off_design_specified(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}, weights_payload::Vector{Float64};
                         save_dir::String = "ModelSaved", save_name::String = "OffDesign")
 
     #### Check on sizing
