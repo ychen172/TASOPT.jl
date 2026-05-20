@@ -17,10 +17,10 @@ Inputs:
     hvap_fuel: float: Heat of vaporization of the fuel (J/kg)
     ranges: Vector{Float64}: A list of potential off-design ranges to test [m]
 Outpus:
-    output: Dict: ["weight_pay_list": [N] , "range_list": [m], "PFEI_list": [J/J]]
+    output: Dict: ["payload_weight_N": Vector{Float64} , "range_m": Vector{Float64}, "PFEI_JJ": Vector{Float64}]
 """
 function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-    epsWpay::Float64 = 1e-8)
+    epsWpay::Float64 = 1e-4)
 
     #### Check on sizing
     ac.is_sized[1] || error("Aircraft model needs to be sized before runing offdesign.")
@@ -50,7 +50,7 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
     PFEI_list = Vector{Float64}()
     
     #### Initialization
-    range_max_found = 1e10 #above which skip the test
+    range_max_found = Inf #above which skip the test
     weight_payload_LB_ref = weight_one_passen #N Bound the problem
     weight_payload_UB_ref = weight_payload_max #N
     weight_payload_ini_ref = 0.5*(weight_payload_LB_ref+weight_payload_UB_ref)
@@ -84,15 +84,14 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
                 range_max_found = range_cur
                 continue
             end
-        catch
+        catch err
+            println(err)
             range_max_found = range_cur
             continue
         end
 
-        # Record the minimum result
+        # Record the minimum feasible result
         payload_good = weight_payload_LB_ref
-        ranges_good = range_cur
-        PFEI_good = ac.parm[imPFEI, 2]
 
         #### Solve for the actual maximum payload at this point
         weight_payload_LB = weight_payload_LB_ref
@@ -117,7 +116,8 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
                 else
                     flg_good = true
                 end
-            catch
+            catch err
+                println(err)
                 flg_good = false
             end
 
@@ -125,7 +125,6 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
             if flg_good
                 # Record
                 payload_good = weight_payload_cur
-                PFEI_good = ac.parm[imPFEI, 2]
                 # Update bound
                 weight_payload_LB = weight_payload_cur
             else
@@ -138,16 +137,36 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
             count_iter += 1
         end
 
-        #### logging the current good value
-        push!(payloads_feasible, payload_good)
-        push!(ranges_feasible, ranges_good)
-        push!(PFEI_list, PFEI_good)
+        #### Rerun the working case
+        ac.para[iaalt,ipcruise1,2] = ac.para[iaalt,ipcruise1,1] #Reset aerodynamics requirement
+        ac.para[iaCL,ipcruise1,2] = ac.para[iaCL,ipcruise1,1] #Reset aerodynamics requirement
+        payload_good = min(payload_good, weight_payload_max)  #N
+        ac.parm[imWpay,2] = payload_good
+        try
+            fly_mission!(ac, 2; itermax = 100, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
+            weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
+            vol_fuel = ac.parm[imWfuel,2] / gee / ac.parg[igrhofuel] #m3
+            if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO < 0.0 || vol_fuel < 0.0
+                println("The final rerun did not work: Wpay: $(payload_good) at range $(range_cur) with weight_TO/max 
+                $(weight_TO/weight_TO_max) and vol_fuel/max $(vol_fuel/vol_fuel_max)")
+                continue
+            else
+                ## Logging the current good result
+                push!(payloads_feasible, ac.parm[imWpay,2])
+                push!(ranges_feasible, range_cur)
+                push!(PFEI_list, ac.parm[imPFEI, 2])
+            end
+        catch err
+            println(err)
+            println("The final rerun did not work: Wpay: $(payload_good) at range $(range_cur)")
+            continue
+        end
     end
     #### prepare output
     output = Dict(
-        "weight_pay_list" => payloads_feasible,
-        "range_list" => ranges_feasible,
-        "PFEI_list" => PFEI_list
+        "payload_weight_N" => payloads_feasible,
+        "range_m" => ranges_feasible,
+        "PFEI_JJ" => PFEI_list
     )
     return output
 end
