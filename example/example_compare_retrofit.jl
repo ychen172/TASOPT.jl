@@ -19,6 +19,7 @@ save_dir      = "ModelProcessed"
 save_name     = "compare" #sub_folder will be created
 # Test conditions
 offdes_ranges = float.(collect(0:100:8000)) # (nmi)
+idx_R1R2IdxCorrection = [2,3] #3->2
 
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
@@ -36,6 +37,8 @@ massPay_lst = [] #(Ton)
 LD_cru_lst = [] #Cruise lift to drag ratio
 eta_tot_cru_lst = [] #Total engine efficiency at cruise
 LHV_lst = [] #Cruise heating value including evaporation (J/kg)
+idx_R1_lst = []
+idx_R2_lst = []
 
 #### Extract data for each scenerio
 for (i, keyword_cur) in enumerate(case_keywords)
@@ -51,6 +54,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
     LD_cru_lst_sub = [] #Cruise lift to drag ratio
     eta_tot_cru_lst_sub = [] #Total engine efficiency at cruise
     LHV_lst_sub = [] #Cruise heating value including evaporation (J/kg)
+    idx_R1_lst_sub = []
+    idx_R2_lst_sub = []
     # Extract data for each design case
     for (j, des_range_cur) in enumerate(des_ranges)
         model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(round(Int,des_range_cur))")
@@ -111,6 +116,12 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 nothing
             end
         end
+        # Range threshold identification
+        m,i = findmax(massPay_lst_sub_sub)
+        idx_R1 = findnext(x -> x < m*0.999, massPay_lst_sub_sub, i) - 1 #index for R1 range (Not applicable to matching case)
+        m,i = findmax(voluFuel_lst_sub_sub)
+        idx_R2 = findprev(x -> x < m*0.999, voluFuel_lst_sub_sub, i) +1 #index for R2 range (Matching case should follow retrofit)
+        # Store
         push!(range_lst_sub,range_lst_sub_sub)
         push!(PFEI_lst_sub,PFEI_lst_sub_sub)
         push!(massEmp_lst_sub,massEmp_lst_sub_sub)
@@ -122,7 +133,10 @@ for (i, keyword_cur) in enumerate(case_keywords)
         push!(LD_cru_lst_sub,LD_cru_lst_sub_sub)
         push!(eta_tot_cru_lst_sub,eta_tot_cru_lst_sub_sub)
         push!(LHV_lst_sub,LHV_lst_sub_sub)
+        push!(idx_R1_lst_sub,idx_R1)
+        push!(idx_R2_lst_sub,idx_R2)
     end
+    # Store
     push!(range_lst,range_lst_sub)
     push!(PFEI_lst,PFEI_lst_sub)
     push!(massEmp_lst,massEmp_lst_sub)
@@ -134,7 +148,13 @@ for (i, keyword_cur) in enumerate(case_keywords)
     push!(LD_cru_lst,LD_cru_lst_sub)
     push!(eta_tot_cru_lst,eta_tot_cru_lst_sub)
     push!(LHV_lst,LHV_lst_sub)
+    push!(idx_R1_lst,idx_R1_lst_sub)
+    push!(idx_R2_lst,idx_R2_lst_sub)
 end
+
+#### Correct the R1 R2 Index for the matching case
+idx_R1_lst[idx_R1R2IdxCorrection[1]] = idx_R1_lst[idx_R1R2IdxCorrection[2]]
+idx_R2_lst[idx_R1R2IdxCorrection[1]] = idx_R2_lst[idx_R1R2IdxCorrection[2]]
 
 #### Plotting
 # PFEI
@@ -143,6 +163,9 @@ plot_PFEI = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_PFEI, range_lst[i][j], PFEI_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_PFEI, [range_lst[i][j][idx_R1_lst[i][j]]], [PFEI_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_PFEI, [range_lst[i][j][idx_R2_lst[i][j]]], [PFEI_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
     end
 end
 savefig(plot_PFEI, joinpath(save_dir_sub, "PFEI_comparison.png"))
@@ -153,6 +176,9 @@ plot!(plot_mEmpty, ylims=(0.0, massEmp_lst[1][1][1]+30.0))
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_mEmpty, range_lst[i][j], massEmp_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_mEmpty, [range_lst[i][j][idx_R1_lst[i][j]]], [massEmp_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_mEmpty, [range_lst[i][j][idx_R2_lst[i][j]]], [massEmp_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
     end
 end
 savefig(plot_mEmpty, joinpath(save_dir_sub, "mass_empty_comparison.png"))
@@ -163,6 +189,9 @@ plot_volfuel = plot(xlabel="Range (nmi)", ylabel="Fuel Volume (m3)", dpi=800)
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_volfuel, range_lst[i][j], voluFuel_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_volfuel, [range_lst[i][j][idx_R1_lst[i][j]]], [voluFuel_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_volfuel, [range_lst[i][j][idx_R2_lst[i][j]]], [voluFuel_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
     end
 end
 # for (i, keyword_cur) in enumerate(case_keywords)
@@ -177,6 +206,9 @@ plot_MTO = plot(xlabel="Range (nmi)", ylabel="Takeoff Mass (Ton)", dpi=800)
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_MTO, range_lst[i][j], massTO_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_MTO, [range_lst[i][j][idx_R1_lst[i][j]]], [massTO_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_MTO, [range_lst[i][j][idx_R2_lst[i][j]]], [massTO_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
     end
 end
 for (i, keyword_cur) in enumerate(case_keywords)
@@ -191,6 +223,9 @@ plot_mPay = plot(xlabel="Range (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_mPay, range_lst[i][j], massPay_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_mPay, [range_lst[i][j][idx_R1_lst[i][j]]], [massPay_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_mPay, [range_lst[i][j][idx_R2_lst[i][j]]], [massPay_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
     end
 end
 savefig(plot_mPay, joinpath(save_dir_sub, "mass_payload_comparison.png"))
@@ -200,6 +235,9 @@ plot_LD = plot(xlabel="Range (nmi)", ylabel="Lift-to-drag at Cruise", dpi=800)
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_LD, range_lst[i][j], LD_cru_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_LD, [range_lst[i][j][idx_R1_lst[i][j]]], [LD_cru_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_LD, [range_lst[i][j][idx_R2_lst[i][j]]], [LD_cru_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
     end
 end
 savefig(plot_LD, joinpath(save_dir_sub, "Lift_to_drag_comparison.png"))
@@ -209,6 +247,9 @@ plot_etaEng = plot(xlabel="Range (nmi)", ylabel="Engine Total Efficiency at Crui
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_etaEng, range_lst[i][j], eta_tot_cru_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_etaEng, [range_lst[i][j][idx_R1_lst[i][j]]], [eta_tot_cru_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_etaEng, [range_lst[i][j][idx_R2_lst[i][j]]], [eta_tot_cru_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
     end
 end
 savefig(plot_etaEng, joinpath(save_dir_sub, "Engine_total_efficiency_comparison.png"))
@@ -218,6 +259,9 @@ plot_LHV = plot(xlabel="Range (nmi)", ylabel="Fuel Heating Value (J/kg)", dpi=80
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_LHV, range_lst[i][j], LHV_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_LHV, [range_lst[i][j][idx_R1_lst[i][j]]], [LHV_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_LHV, [range_lst[i][j][idx_R2_lst[i][j]]], [LHV_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
     end
 end
 savefig(plot_LHV, joinpath(save_dir_sub, "Fuel_heating_value_comparison.png"))
