@@ -112,8 +112,8 @@ end
 
 #### Plotting
 # PFEI
-plot_PFEI = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800)
-plot!(plot_PFEI, xlims=(100,1600),ylims=(0.6, 1.0))
+plot_PFEI = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
+# plot!(plot_PFEI, xlims=(100,1600),ylims=(0.6, 1.0))
 for (i, keyword_cur) in enumerate(case_keywords)
     for (j, des_range_cur) in enumerate(des_ranges)
         plot!(plot_PFEI, range_lst[i][j], PFEI_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
