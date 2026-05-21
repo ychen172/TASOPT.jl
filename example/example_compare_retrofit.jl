@@ -30,6 +30,8 @@ PFEI_lst = [] #(J/J)
 massEmp_lst = [] #(Ton)
 voluFuel_lst = [] #(m3)
 voluFuelMax_lst = [] #(m3)
+massTO_lst = [] #(Ton)
+massTOMax_lst = [] #(Ton)
 
 #### Extract data for each scenerio
 for (i, keyword_cur) in enumerate(case_keywords)
@@ -39,6 +41,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
     massEmp_lst_sub = [] #(Ton)
     voluFuel_lst_sub = [] #(m3)
     voluFuelMax_lst_sub = [] #(m3)
+    massTO_lst_sub = [] #(Ton)
+    massTOMax_lst_sub = [] #(Ton)
     # Extract data for each design case
     for (j, des_range_cur) in enumerate(des_ranges)
         model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(round(Int,des_range_cur))")
@@ -47,6 +51,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
         massEmp_lst_sub_sub = [] #(Ton)
         voluFuel_lst_sub_sub = [] #(m3)
         voluFuelMax_lst_sub_sub = [] #(m3)
+        massTO_lst_sub_sub = [] #(Ton)
+        massTOMax_lst_sub_sub = [] #(Ton)
         ## extract for each off-design case
         for (k, offdes_range_cur) in enumerate(offdes_ranges)
             model_dir_sub_sub_sub = joinpath(model_dir_sub_sub, keyword_cur*"$(round(Int,des_range_cur))_$(round(Int,offdes_range_cur)).jld2")
@@ -63,6 +69,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 massFuelTot = ac_cur.parm[imWfuel,2]/gee/1000.0 #Fuel mass (Ton)(Include reserved and burned)
                 massPayload = ac_cur.parm[imWpay, 2]/gee/1000.0 #(Ton)
                 massEmpty = massTO - massFuelTot - massPayload #(Ton) empty weight
+                massTOMax = ac_cur.parg[igWMTO] / gee / 1000.0 #Maximum takeoff mass (Ton)
                 ## Check on volume
                 rhoFuel = ac_cur.parg[igrhofuel] #kg/m3
                 volFuel = massFuelTot * 1000.0 / rhoFuel #m3
@@ -74,6 +81,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 push!(massEmp_lst_sub_sub, massEmpty)
                 push!(voluFuel_lst_sub_sub, volFuel)
                 push!(voluFuelMax_lst_sub_sub, volFuelMax)
+                push!(massTO_lst_sub_sub, massTO)
+                push!(massTOMax_lst_sub_sub, massTOMax)
             catch
                 nothing
             end
@@ -83,12 +92,16 @@ for (i, keyword_cur) in enumerate(case_keywords)
         push!(massEmp_lst_sub,massEmp_lst_sub_sub)
         push!(voluFuel_lst_sub,voluFuel_lst_sub_sub)
         push!(voluFuelMax_lst_sub,voluFuelMax_lst_sub_sub)
+        push!(massTO_lst_sub,massTO_lst_sub_sub)
+        push!(massTOMax_lst_sub,massTOMax_lst_sub_sub)
     end
     push!(range_lst,range_lst_sub)
     push!(PFEI_lst,PFEI_lst_sub)
     push!(massEmp_lst,massEmp_lst_sub)
     push!(voluFuel_lst,voluFuel_lst_sub)
     push!(voluFuelMax_lst,voluFuelMax_lst_sub)
+    push!(massTO_lst,massTO_lst_sub)
+    push!(massTOMax_lst,massTOMax_lst_sub)
 end
 
 #### Plotting
@@ -126,3 +139,17 @@ end
 #     end
 # end
 savefig(plot_volfuel, joinpath(save_dir_sub, "volume_fuel_comparison.png"))
+
+# Takeeoff weight
+plot_MTO = plot(xlabel="Range (nmi)", ylabel="Takeoff Mass (Ton)", dpi=800)
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_MTO, range_lst[i][j], massTO_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+    end
+end
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_MTO, range_lst[i][j], massTOMax_lst[i][j], marker=:none, lw=0.5, label=false)
+    end
+end
+savefig(plot_MTO, joinpath(save_dir_sub, "takeoff_mass_comparison.png"))
