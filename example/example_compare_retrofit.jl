@@ -19,7 +19,7 @@ save_dir      = "ModelProcessed"
 save_name     = "compare" #sub_folder will be created
 # Test conditions
 offdes_ranges = float.(collect(0:100:8000)) # (nmi)
-idx_R1R2IdxCorrection = [2,3] #3->2
+idx_R1R2IdxCorrection = [[2,3]] #3->2
 
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
@@ -120,7 +120,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
         m,i = findmax(massPay_lst_sub_sub)
         idx_R1 = findnext(x -> x < m*0.999, massPay_lst_sub_sub, i) - 1 #index for R1 range (Not applicable to matching case)
         m,i = findmax(voluFuel_lst_sub_sub)
-        idx_R2 = findprev(x -> x < m*0.999, voluFuel_lst_sub_sub, i) +1 #index for R2 range (Matching case should follow retrofit)
+        idx_R2 = findprev(x -> x < m*0.999, voluFuel_lst_sub_sub, i) + 1 #index for R2 range (Matching case should follow retrofit)
         # Store
         push!(range_lst_sub,range_lst_sub_sub)
         push!(PFEI_lst_sub,PFEI_lst_sub_sub)
@@ -153,8 +153,10 @@ for (i, keyword_cur) in enumerate(case_keywords)
 end
 
 #### Correct the R1 R2 Index for the matching case
-idx_R1_lst[idx_R1R2IdxCorrection[1]] = idx_R1_lst[idx_R1R2IdxCorrection[2]]
-idx_R2_lst[idx_R1R2IdxCorrection[1]] = idx_R2_lst[idx_R1R2IdxCorrection[2]]
+for idxSwap in idx_R1R2IdxCorrection
+    idx_R1_lst[idxSwap[1]] = idx_R1_lst[idxSwap[2]]
+    idx_R2_lst[idxSwap[1]] = idx_R2_lst[idxSwap[2]]
+end
 
 #### Plotting
 # PFEI
