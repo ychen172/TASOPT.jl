@@ -20,6 +20,7 @@ save_name     = "compare" #sub_folder will be created
 # Test conditions
 offdes_ranges = float.(collect(0:100:8000)) # (nmi)
 idx_R1R2IdxCorrection = [[2,3]] #3->2
+range_comparison_index = [3,1] #(case 1 - case 3) / case1
 
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
@@ -158,6 +159,20 @@ for idxSwap in idx_R1R2IdxCorrection
     idx_R2_lst[idxSwap[1]] = idx_R2_lst[idxSwap[2]]
 end
 
+#### Calculate range reduction
+idx_Rcomp_base = range_comparison_index[2]
+idx_Rcomp_targ = range_comparison_index[1]
+frac_change_R1 = []
+frac_change_R2 = []
+for (i, des_range_cur) in enumerate(des_ranges)
+    R1_base = range_lst[idx_Rcomp_base][i][idx_R1_lst[idx_Rcomp_base][i]]
+    R1_targ = range_lst[idx_Rcomp_targ][i][idx_R1_lst[idx_Rcomp_targ][i]]
+    push!(frac_change_R1,(R1_targ-R1_base)/(R1_base))
+    R2_base = range_lst[idx_Rcomp_base][i][idx_R2_lst[idx_Rcomp_base][i]]
+    R2_targ = range_lst[idx_Rcomp_targ][i][idx_R2_lst[idx_Rcomp_targ][i]]
+    push!(frac_change_R2,(R2_targ-R2_base)/(R2_base))
+end
+
 #### Plotting
 # PFEI
 plot_PFEI = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
@@ -267,3 +282,9 @@ for (i, keyword_cur) in enumerate(case_keywords)
     end
 end
 savefig(plot_LHV, joinpath(save_dir_sub, "Fuel_heating_value_comparison.png"))
+
+# Percentage range reduction
+plot_R1R2Red = plot(xlabel="Design Range (nmi)", ylabel="Change of Ranges WRT Baseline (%)", dpi=800)
+plot!(plot_R1R2Red, des_ranges, frac_change_R1 .* 100.0, marker=:cross, lw=2, label="R1")
+plot!(plot_R1R2Red, des_ranges, frac_change_R2 .* 100.0, marker=:cross, lw=2, label="R2")
+savefig(plot_R1R2Red, joinpath(save_dir_sub, "R1R2RangeChange.png"))
