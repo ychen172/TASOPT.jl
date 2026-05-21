@@ -28,6 +28,8 @@ mkpath(save_dir_sub)
 range_lst = [] #(nmi)
 PFEI_lst = [] #(J/J)
 massEmp_lst = [] #(Ton)
+voluFuel_lst = [] #(m3)
+voluFuelMax_lst = [] #(m3)
 
 #### Extract data for each scenerio
 for (i, keyword_cur) in enumerate(case_keywords)
@@ -35,12 +37,16 @@ for (i, keyword_cur) in enumerate(case_keywords)
     range_lst_sub = [] #(nmi)
     PFEI_lst_sub = [] #(J/J)
     massEmp_lst_sub = [] #(Ton)
+    voluFuel_lst_sub = [] #(m3)
+    voluFuelMax_lst_sub = [] #(m3)
     # Extract data for each design case
     for (j, des_range_cur) in enumerate(des_ranges)
         model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(round(Int,des_range_cur))")
         range_lst_sub_sub = [] #(nmi)
         PFEI_lst_sub_sub = [] #(J/J)
         massEmp_lst_sub_sub = [] #(Ton)
+        voluFuel_lst_sub_sub = [] #(m3)
+        voluFuelMax_lst_sub_sub = [] #(m3)
         ## extract for each off-design case
         for (k, offdes_range_cur) in enumerate(offdes_ranges)
             model_dir_sub_sub_sub = joinpath(model_dir_sub_sub, keyword_cur*"$(round(Int,des_range_cur))_$(round(Int,offdes_range_cur)).jld2")
@@ -57,11 +63,17 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 massFuelTot = ac_cur.parm[imWfuel,2]/gee/1000.0 #Fuel mass (Ton)(Include reserved and burned)
                 massPayload = ac_cur.parm[imWpay, 2]/gee/1000.0 #(Ton)
                 massEmpty = massTO - massFuelTot - massPayload #(Ton) empty weight
+                ## Check on volume
+                rhoFuel = ac_cur.parg[igrhofuel] #kg/m3
+                volFuel = massFuelTot * 1000.0 / rhoFuel #m3
+                volFuelMax = ac_cur.parg[igWfmax] / gee / rhoFuel #m3 (The design mission fuel mass might be different from the maximum fuel mass with off-design fuel density)
                 
                 ## store
                 push!(range_lst_sub_sub, range_cur)
                 push!(PFEI_lst_sub_sub, PFEI_cur)
                 push!(massEmp_lst_sub_sub, massEmpty)
+                push!(voluFuel_lst_sub_sub, volFuel)
+                push!(voluFuelMax_lst_sub_sub, volFuelMax)
             catch
                 nothing
             end
@@ -69,10 +81,14 @@ for (i, keyword_cur) in enumerate(case_keywords)
         push!(range_lst_sub,range_lst_sub_sub)
         push!(PFEI_lst_sub,PFEI_lst_sub_sub)
         push!(massEmp_lst_sub,massEmp_lst_sub_sub)
+        push!(voluFuel_lst_sub,voluFuel_lst_sub_sub)
+        push!(voluFuelMax_lst_sub,voluFuelMax_lst_sub_sub)
     end
     push!(range_lst,range_lst_sub)
     push!(PFEI_lst,PFEI_lst_sub)
     push!(massEmp_lst,massEmp_lst_sub)
+    push!(voluFuel_lst,voluFuel_lst_sub)
+    push!(voluFuelMax_lst,voluFuelMax_lst_sub)
 end
 
 #### Plotting
@@ -95,3 +111,18 @@ for (i, keyword_cur) in enumerate(case_keywords)
     end
 end
 savefig(plot_mEmpty, joinpath(save_dir_sub, "mass_empty_comparison.png"))
+
+# Fuel volume
+plot_volfuel = plot(xlabel="Range (nmi)", ylabel="Fuel Volume (m3)", dpi=800)
+# plot!(plot_volfuel, ylims=(0.0, massEmp_lst[1][1][1]+30.0))
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_volfuel, range_lst[i][j], voluFuel_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+    end
+end
+# for (i, keyword_cur) in enumerate(case_keywords)
+#     for (j, des_range_cur) in enumerate(des_ranges)
+#         plot!(plot_volfuel, range_lst[i][j], voluFuelMax_lst[i][j], marker=:none, lw=0.5, label=label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+#     end
+# end
+savefig(plot_volfuel, joinpath(save_dir_sub, "volume_fuel_comparison.png"))
