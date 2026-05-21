@@ -1,51 +1,68 @@
 """
-This script take a design point and sweep an off-design payload-range envelope around it
+This script read in a baseline model and a series of off-design cases from maybe another model.
+Then, the off-design cases are run on the basedline model.
+New off-design models are then saved.
 """
 
 using TASOPT
-using DataFrames, CSV
+# using DataFrames, CSV
 include(__TASOPTindices__)
 include(joinpath(@__DIR__, "offdesign.jl"))
-using .PRD: off_design_PRD
-
-#### File Name Creation
-function modelFileName(model_prefix::String, curFuel::String, curRange::String)
-    return "$(model_prefix)$(curFuel)$(curRange)"
-    # return "$(curFuel)$(model_prefix)$(curRange)"
-end
+using .PRD: off_design_specified
 
 #### Setup IO
-model_dir    = "ModelSaved"
-model_prefix = "acOptimized_BatOpt" #Frontal key name for the models(FuelRange)
-save_dir_prefix = "ModelSaved" #Outer Directory for saving the offdesign models
-save_prefix  = "off_design" #added with fuel and designed_range to create a sub folder name. Each then contain sub-model for off-design sweep
-mkpath(model_dir)
-Fuels = ["Eth", "Jet"] #["Eth", "Jet"] #These corresponding to the model file name
-Ranges_design = collect(300:100:3000) #collect(300:100:3000) #Prefixex+Fuel+Range.jld2
-#### Offdesign parameter
-Ranges_sweep = Float64.(collect(100:100:18000)) #off design range to sweep [nmi]
-fuel_idx = [32 , 24] #[32 , 24]
-rho_fuel = [789.0 , 817.0] #[789.0 , 817.0] #kg/m3
-hvap_fuel = [918187.9 , 358694.0] #[918187.9 , 358694.0] #J/kg
+model_dir    = "ModelSaved" # Setup Directory
+des_model_prefix = "acOptimized_BatOptJet" # Setup baseline model for offdesign to read
+offdes_model_prefix = "jetfuel_to_ethanolJet" # Setup off-design model to read
+save_model_prefix = "jetfuel_match_payload" # Setup off-design result to save to 
+range_des = Float64.(collect(300:100:3000)) # Setup design mission
+range_offdes = Float64.(collect(100:100:2100)) # Setup offdesign mission
+# Setup fuel to run the off-design missions
+fuel_idx = 24        #Eth: 32 ,       Jet: 24
+rho_fuel = 817.0     #Eth: 789.0 ,    Jet: 817.0 (kg/m3)
+hvap_fuel = 358694.0 #Eth: 918187.9 , Jet: 358694.0 (J/kg)
 
-#### Extract data for each case
-for (i,curFuel) in enumerate(Fuels)
-    for (j,curRange) in enumerate(Ranges_design)
-        model_name = modelFileName(model_prefix,curFuel,string(round(Int,curRange)))
-        println("Compute off design for: Fuel type: $(curFuel), Range: $(curRange)")
+#### Run the off-design missions
+for (i, range_des_cur) in enumerate(range_des)
+    #### Collect off-design missions requirements
+    weight_payload_to_test = Vector{Float64}() #(N)
+    range_to_test = Vector{Float64}() #(nmi)
+    for (j, range_offdes_cur) in enumerate(range_offdes)
+        offdes_file_name = joinpath(model_dir,offdes_model_prefix*"$(round(Int,range_des_cur))",
+                                    offdes_model_prefix*"$(round(Int,range_des_cur))_$(round(Int,range_offdes_cur)).jld2")
+        println("Attempt to read: $(offdes_file_name)")
         try
-            #### Load the aircraft model
-            ac = quickload_aircraft(joinpath(model_dir,"$(model_name).jld2"))
-            #### run off-design
-            # Create a sub-folder as save Directory
-            save_dir_sub = joinpath(save_dir_prefix,"$(save_prefix)$(curFuel)$(string(round(Int,curRange)))")
-            mkpath(save_dir_sub)
-            out_off = off_design_PRD(ac, fuel_idx[i], rho_fuel[i], hvap_fuel[i], Ranges_sweep; 
-                      save_dir = save_dir_sub, save_name = "$(save_prefix)$(curFuel)$(string(round(Int,curRange)))_")
-            println("Get off-design maximum ranges: $(out_off["range_nmi"])")
-        catch err
-            println(err)
-            println("Reading case failed for Fuel type: $(curFuel), Range: $(curRange)")
+            ac_offdes = quickload_aircraft(offdes_file_name)
+            push!(weight_payload_to_test, ac_offdes.parm[imWpay,2]) #(N) off-design mission payload
+            push!(range_to_test, ac_offdes.parm[imRange,2]/1852.0 ) #(nmi) off-design range
+        catch
+            ac_offdes = nothing
         end
+    end
+    println("For design range $(range_des_cur) nmi, read off-design ranges $(range_to_test) nmi")
+
+    #### Collect the design mission model
+    des_file_name = joinpath(model_dir, des_model_prefix*"$(round(Int,range_des_cur)).jld2")
+    println("Attempt to get the design model: $(des_file_name)")
+    ac_des = nothing
+    try
+        ac_des = quickload_aircraft(des_file_name)
+    catch
+        ac_des = nothing
+        continue
+    end
+
+    #### Use the design model to run off-design missions
+    # Create the sub-directory for this saving
+    save_dir_sub = joinpath(model_dir,save_model_prefix*"$(round(Int,range_des_cur))")
+    # Run offdesign
+    println("Attempt to run off-design for the design range model of R: $(round(Int,range_des_cur))")
+    try
+        out_off = off_design_specified(ac_des, fuel_idx, rho_fuel, hvap_fuel, range_to_test, weight_payload_to_test;
+                                       save_dir = save_dir_sub, save_name = save_model_prefix*"$(round(Int,range_des_cur))_")
+        println("Get off-design for ranges: $(out_off["range_nmi"])")
+        println("Get off-design with PFEI: $(out_off["PFEI_JJ"])")
+    catch err
+        showerror(stderr, err, catch_backtrace())
     end
 end
