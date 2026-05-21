@@ -8,6 +8,35 @@ using DataFrames, CSV
 include(__TASOPTindices__)
 using Plots
 
+#### Helpers
+function interp_range_at_threshold(range, y, i_peak, eps; side::Symbol)
+    yth = y[i_peak] * (1 - eps)
+
+    if side == :right
+        # first point to the RIGHT of peak below threshold
+        k2 = findnext(v -> v < yth, y, i_peak + 1)
+        isnothing(k2) && return nothing
+        k1 = k2 - 1
+    elseif side == :left
+        # first point to the LEFT of peak below threshold
+        k1 = findprev(v -> v < yth, y, i_peak - 1)
+        isnothing(k1) && return nothing
+        k2 = k1 + 1
+    else
+        error("side must be :right or :left")
+    end
+
+    x1, x2 = range[k1], range[k2]
+    y1, y2 = y[k1], y[k2]
+
+    # linear interpolation: x at y=yth
+    if y2 == y1
+        return x1  # degenerate case
+    end
+    xth = x1 + (yth - y1) * (x2 - x1) / (y2 - y1)
+    return xth
+end
+
 #### Setup IO
 # I
 case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
@@ -41,6 +70,8 @@ eta_tot_cru_lst = [] #Total engine efficiency at cruise
 LHV_lst = [] #Cruise heating value including evaporation (J/kg)
 idx_R1_lst = []
 idx_R2_lst = []
+R1_lst = []
+R2_lst = []
 
 #### Extract data for each scenerio
 for (i, keyword_cur) in enumerate(case_keywords)
@@ -58,6 +89,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
     LHV_lst_sub = [] #Cruise heating value including evaporation (J/kg)
     idx_R1_lst_sub = []
     idx_R2_lst_sub = []
+    R1_lst_sub = []
+    R2_lst_sub = []
     # Extract data for each design case
     for (j, des_range_cur) in enumerate(des_ranges)
         model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(round(Int,des_range_cur))")
@@ -121,8 +154,10 @@ for (i, keyword_cur) in enumerate(case_keywords)
         # Range threshold identification
         m,i = findmax(massPay_lst_sub_sub)
         idx_R1 = findnext(x -> x < m*(1.0-epsR1R2), massPay_lst_sub_sub, i) - 1 #index for R1 range (Not applicable to matching case)
+        R1 = interp_range_at_threshold(range_lst_sub_sub, massPay_lst_sub_sub, i, epsR1R2; side=:right)
         m,i = findmax(voluFuel_lst_sub_sub)
         idx_R2 = findprev(x -> x < m*(1.0-epsR1R2), voluFuel_lst_sub_sub, i) + 1 #index for R2 range (Matching case should follow retrofit)
+        R2 = interp_range_at_threshold(range_lst_sub_sub, voluFuel_lst_sub_sub, i, epsR1R2; side=:left)
         # Store
         push!(range_lst_sub,range_lst_sub_sub)
         push!(PFEI_lst_sub,PFEI_lst_sub_sub)
@@ -137,6 +172,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
         push!(LHV_lst_sub,LHV_lst_sub_sub)
         push!(idx_R1_lst_sub,idx_R1)
         push!(idx_R2_lst_sub,idx_R2)
+        push!(R1_lst_sub,R1)
+        push!(R2_lst_sub,R2)
     end
     # Store
     push!(range_lst,range_lst_sub)
@@ -152,6 +189,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
     push!(LHV_lst,LHV_lst_sub)
     push!(idx_R1_lst,idx_R1_lst_sub)
     push!(idx_R2_lst,idx_R2_lst_sub)
+    push!(R1_lst,R1_lst_sub)
+    push!(R2_lst,R2_lst_sub)
 end
 
 #### Correct the R1 R2 Index for the matching case
@@ -168,11 +207,11 @@ frac_change_R2 = []
 des_range_R1R2 = [] #extracted design range just to compare R1 and R2
 for (i, des_range_cur) in enumerate(des_ranges)
     if (idx_R1_lst[idx_Rcomp_base][i] != 1) && (idx_R1_lst[idx_Rcomp_targ][i] != 1) #R1 touch the left bound
-        R1_base = range_lst[idx_Rcomp_base][i][idx_R1_lst[idx_Rcomp_base][i]]
-        R1_targ = range_lst[idx_Rcomp_targ][i][idx_R1_lst[idx_Rcomp_targ][i]]
+        R1_base = R1_lst[idx_Rcomp_base][i]
+        R1_targ = R1_lst[idx_Rcomp_targ][i]
         push!(frac_change_R1,(R1_targ-R1_base)/(R1_base))
-        R2_base = range_lst[idx_Rcomp_base][i][idx_R2_lst[idx_Rcomp_base][i]]
-        R2_targ = range_lst[idx_Rcomp_targ][i][idx_R2_lst[idx_Rcomp_targ][i]]
+        R2_base = R2_lst[idx_Rcomp_base][i]
+        R2_targ = R2_lst[idx_Rcomp_targ][i]
         push!(frac_change_R2,(R2_targ-R2_base)/(R2_base))
         push!(des_range_R1R2, des_range_cur)
     end
