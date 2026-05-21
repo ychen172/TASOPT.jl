@@ -33,6 +33,9 @@ voluFuelMax_lst = [] #(m3)
 massTO_lst = [] #(Ton)
 massTOMax_lst = [] #(Ton)
 massPay_lst = [] #(Ton)
+LD_cru_lst = [] #Cruise lift to drag ratio
+eta_tot_cru_lst = [] #Total engine efficiency at cruise
+LHV_lst = [] #Cruise heating value including evaporation (J/kg)
 
 #### Extract data for each scenerio
 for (i, keyword_cur) in enumerate(case_keywords)
@@ -45,6 +48,9 @@ for (i, keyword_cur) in enumerate(case_keywords)
     massTO_lst_sub = [] #(Ton)
     massTOMax_lst_sub = [] #(Ton)
     massPay_lst_sub = [] #(Ton)
+    LD_cru_lst_sub = [] #Cruise lift to drag ratio
+    eta_tot_cru_lst_sub = [] #Total engine efficiency at cruise
+    LHV_lst_sub = [] #Cruise heating value including evaporation (J/kg)
     # Extract data for each design case
     for (j, des_range_cur) in enumerate(des_ranges)
         model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(round(Int,des_range_cur))")
@@ -56,6 +62,9 @@ for (i, keyword_cur) in enumerate(case_keywords)
         massTO_lst_sub_sub = [] #(Ton)
         massTOMax_lst_sub_sub = [] #(Ton)
         massPay_lst_sub_sub = [] #(Ton)
+        LD_cru_lst_sub_sub = [] #Cruise lift to drag ratio
+        eta_tot_cru_lst_sub_sub = [] #Total engine efficiency at cruise
+        LHV_lst_sub_sub = [] #Cruise heating value including evaporation (J/kg)
         ## extract for each off-design case
         for (k, offdes_range_cur) in enumerate(offdes_ranges)
             model_dir_sub_sub_sub = joinpath(model_dir_sub_sub, keyword_cur*"$(round(Int,des_range_cur))_$(round(Int,offdes_range_cur)).jld2")
@@ -77,7 +86,15 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 rhoFuel = ac_cur.parg[igrhofuel] #kg/m3
                 volFuel = massFuelTot * 1000.0 / rhoFuel #m3
                 volFuelMax = ac_cur.parg[igWfmax] / gee / rhoFuel #m3 (The design mission fuel mass might be different from the maximum fuel mass with off-design fuel density)
-                
+                ## Check on flight performance
+                LD_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, 2]/ac_cur.para[iaCD, ipcruise1, 2] + 
+                                   ac_cur.para[iaCL, ipcruise2, 2]/ac_cur.para[iaCD, ipcruise2, 2]) #Averaged cruise lift-to-drag ratio
+                LHV_cruise = 0.5 * (ac_cur.pare[iehfuel, ipcruise1, 2] + ac_cur.pare[iehfuel, ipcruise2, 2]) #Averaged cruise heating value (J/kg) (Include vaporization already)
+                TSFC_cruise = 0.5 * (ac_cur.pare[ieTSFC, ipcruise1, 2] + ac_cur.pare[ieTSFC, ipcruise2, 2]) / gee #Averaged cruise thrust specfic heat consumption (kg/s/N)
+                vel_cruise = 0.5 * (cos(ac_cur.para[iagamV, ipcruise1, 2]) * ac_cur.pare[ieu0, ipcruise1, 2] + 
+                                    cos(ac_cur.para[iagamV, ipcruise2, 2]) * ac_cur.pare[ieu0, ipcruise2, 2]) #Averaged cruise horizontal velocity (m/s)
+                eta_total_cruise = (1.0/TSFC_cruise)*(vel_cruise/LHV_cruise) #total cruise engine efficiency
+
                 ## store
                 push!(range_lst_sub_sub, range_cur)
                 push!(PFEI_lst_sub_sub, PFEI_cur)
@@ -87,6 +104,9 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 push!(massTO_lst_sub_sub, massTO)
                 push!(massTOMax_lst_sub_sub, massTOMax)
                 push!(massPay_lst_sub_sub, massPayload)
+                push!(LD_cru_lst_sub_sub, LD_cruise)
+                push!(eta_tot_cru_lst_sub_sub, eta_total_cruise)
+                push!(LHV_lst_sub_sub, LHV_cruise)
             catch
                 nothing
             end
@@ -99,6 +119,9 @@ for (i, keyword_cur) in enumerate(case_keywords)
         push!(massTO_lst_sub,massTO_lst_sub_sub)
         push!(massTOMax_lst_sub,massTOMax_lst_sub_sub)
         push!(massPay_lst_sub,massPay_lst_sub_sub)
+        push!(LD_cru_lst_sub,LD_cru_lst_sub_sub)
+        push!(eta_tot_cru_lst_sub,eta_tot_cru_lst_sub_sub)
+        push!(LHV_lst_sub,LHV_lst_sub_sub)
     end
     push!(range_lst,range_lst_sub)
     push!(PFEI_lst,PFEI_lst_sub)
@@ -108,6 +131,9 @@ for (i, keyword_cur) in enumerate(case_keywords)
     push!(massTO_lst,massTO_lst_sub)
     push!(massTOMax_lst,massTOMax_lst_sub)
     push!(massPay_lst,massPay_lst_sub)
+    push!(LD_cru_lst,LD_cru_lst_sub)
+    push!(eta_tot_cru_lst,eta_tot_cru_lst_sub)
+    push!(LHV_lst,LHV_lst_sub)
 end
 
 #### Plotting
@@ -168,3 +194,30 @@ for (i, keyword_cur) in enumerate(case_keywords)
     end
 end
 savefig(plot_mPay, joinpath(save_dir_sub, "mass_payload_comparison.png"))
+
+# Lift-to-drag ratio
+plot_LD = plot(xlabel="Range (nmi)", ylabel="Lift-to-drag at Cruise", dpi=800)
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_LD, range_lst[i][j], LD_cru_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+    end
+end
+savefig(plot_LD, joinpath(save_dir_sub, "Lift_to_drag_comparison.png"))
+
+# Engine total efficiency
+plot_etaEng = plot(xlabel="Range (nmi)", ylabel="Engine Total Efficiency at Cruise", dpi=800)
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_etaEng, range_lst[i][j], eta_tot_cru_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+    end
+end
+savefig(plot_etaEng, joinpath(save_dir_sub, "Engine_total_efficiency_comparison.png"))
+
+# Heating value
+plot_LHV = plot(xlabel="Range (nmi)", ylabel="Fuel Heating Value (J/kg)", dpi=800)
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_LHV, range_lst[i][j], LHV_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+    end
+end
+savefig(plot_LHV, joinpath(save_dir_sub, "Fuel_heating_value_comparison.png"))
