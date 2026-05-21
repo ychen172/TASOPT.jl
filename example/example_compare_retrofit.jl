@@ -32,6 +32,7 @@ voluFuel_lst = [] #(m3)
 voluFuelMax_lst = [] #(m3)
 massTO_lst = [] #(Ton)
 massTOMax_lst = [] #(Ton)
+massPay_lst = [] #(Ton)
 
 #### Extract data for each scenerio
 for (i, keyword_cur) in enumerate(case_keywords)
@@ -43,6 +44,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
     voluFuelMax_lst_sub = [] #(m3)
     massTO_lst_sub = [] #(Ton)
     massTOMax_lst_sub = [] #(Ton)
+    massPay_lst_sub = [] #(Ton)
     # Extract data for each design case
     for (j, des_range_cur) in enumerate(des_ranges)
         model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(round(Int,des_range_cur))")
@@ -53,6 +55,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
         voluFuelMax_lst_sub_sub = [] #(m3)
         massTO_lst_sub_sub = [] #(Ton)
         massTOMax_lst_sub_sub = [] #(Ton)
+        massPay_lst_sub_sub = [] #(Ton)
         ## extract for each off-design case
         for (k, offdes_range_cur) in enumerate(offdes_ranges)
             model_dir_sub_sub_sub = joinpath(model_dir_sub_sub, keyword_cur*"$(round(Int,des_range_cur))_$(round(Int,offdes_range_cur)).jld2")
@@ -83,6 +86,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 push!(voluFuelMax_lst_sub_sub, volFuelMax)
                 push!(massTO_lst_sub_sub, massTO)
                 push!(massTOMax_lst_sub_sub, massTOMax)
+                push!(massPay_lst_sub_sub, massPayload)
             catch
                 nothing
             end
@@ -94,6 +98,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
         push!(voluFuelMax_lst_sub,voluFuelMax_lst_sub_sub)
         push!(massTO_lst_sub,massTO_lst_sub_sub)
         push!(massTOMax_lst_sub,massTOMax_lst_sub_sub)
+        push!(massPay_lst_sub,massPay_lst_sub_sub)
     end
     push!(range_lst,range_lst_sub)
     push!(PFEI_lst,PFEI_lst_sub)
@@ -102,6 +107,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
     push!(voluFuelMax_lst,voluFuelMax_lst_sub)
     push!(massTO_lst,massTO_lst_sub)
     push!(massTOMax_lst,massTOMax_lst_sub)
+    push!(massPay_lst,massPay_lst_sub)
 end
 
 #### Plotting
@@ -153,3 +159,12 @@ for (i, keyword_cur) in enumerate(case_keywords)
     end
 end
 savefig(plot_MTO, joinpath(save_dir_sub, "takeoff_mass_comparison.png"))
+
+# Empty weight
+plot_mPay = plot(xlabel="Range (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_mPay, range_lst[i][j], massPay_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+    end
+end
+savefig(plot_mPay, joinpath(save_dir_sub, "mass_payload_comparison.png"))
