@@ -21,6 +21,7 @@ save_name     = "compare" #sub_folder will be created
 offdes_ranges = float.(collect(0:100:8000)) # (nmi)
 idx_R1R2IdxCorrection = [[2,3]] #3->2
 range_comparison_index = [3,1] #(case 1 - case 3) / case1
+epsR1R2 = 0.005
 
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
@@ -119,9 +120,9 @@ for (i, keyword_cur) in enumerate(case_keywords)
         end
         # Range threshold identification
         m,i = findmax(massPay_lst_sub_sub)
-        idx_R1 = findnext(x -> x < m*0.999, massPay_lst_sub_sub, i) - 1 #index for R1 range (Not applicable to matching case)
+        idx_R1 = findnext(x -> x < m*(1.0-epsR1R2), massPay_lst_sub_sub, i) - 1 #index for R1 range (Not applicable to matching case)
         m,i = findmax(voluFuel_lst_sub_sub)
-        idx_R2 = findprev(x -> x < m*0.999, voluFuel_lst_sub_sub, i) + 1 #index for R2 range (Matching case should follow retrofit)
+        idx_R2 = findprev(x -> x < m*(1.0-epsR1R2), voluFuel_lst_sub_sub, i) + 1 #index for R2 range (Matching case should follow retrofit)
         # Store
         push!(range_lst_sub,range_lst_sub_sub)
         push!(PFEI_lst_sub,PFEI_lst_sub_sub)
