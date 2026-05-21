@@ -1,173 +1,73 @@
 """
-This script compare the design point performance between ethanol and jet
-Adaptive design parameter bounds across different cases
-Fixed and default constraints across different cases
+This script compare the off-design performance between cases in terms of PFEI
+and flight range
 """
 
 using TASOPT
 using DataFrames, CSV
 include(__TASOPTindices__)
-include(joinpath(@__DIR__, "postprocess.jl"))
-using .PostProcess: ExtractDes
-using .PostProcess.OptimizeRangeFuel: BoundsOpt, ConstraintsOpt, extract_opt_para
 using Plots
 
-#### File Name Creation
-function modelFileName(model_prefix::String, curFuel::String, curRange::String)
-    return "$(model_prefix)$(curFuel)$(curRange)"
-    # return "$(curFuel)$(model_prefix)$(curRange)"
-end
-
 #### Setup IO
-model_dir    = "ModelSaved"
-model_prefix = "acOptimized_BatOpt" #Frontal key name for the models(FuelRange)
-save_dir     = "ModelProcessed" #Outer Directory for saving models
-save_prefix  = "Eth_Jet_Comparison" #The total save name for jet and ethanol comparison
-mkpath(model_dir)
-mkpath(save_dir)
-save_dirSub = joinpath(save_dir,save_prefix) #Sub-directory to save comparison data
-mkpath(save_dirSub)
+# I
+case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
+case_names    = ["Base", "Match", "Retrofit"]
+model_dir     = "ModelSaved"
+des_ranges    = [3000] #design range to compare (nmi)
+# O
+save_dir      = "ModelProcessed"
+save_name     = "compare" #sub_folder will be created
+# Test conditions
+offdes_ranges = float.(collect(0:100:8000)) # (nmi)
 
-#### Missions Parameters to Compare
-Fuels = ["Jet","Eth"] #These corresponding to the model file name
-Ranges = collect(300:100:3000) #Prefixex+Fuel+Range.jld2
-flgSaveIndividual = false #Whether to save an output for individual case
-flgExtrBounds = true
-flgPlotBounds = false #Whether to plots the optimization bounds
-flgExtrConstraints = true
-flgPlotConstraints = false #Whether to plots the constraints
+#### Save directory
+save_dir_sub  = joinpath(save_dir,save_name)
+mkpath(save_dir_sub)
 
-#### Load the default constraints which is believed at this point to be common to call cases
-constraints_names = ["diaFan", "TMetalMax", "Tt3Max", "gamTOC", "lenFieldBalanced", "spanWing"]
-if flgExtrConstraints
-    constraints_opt = ConstraintsOpt()
-    # constraints_opt.DiaFan_max = 3.0 #Overwrite
-    # constraints_opt.span_max = 65.0 #Overwrite
-    constraints = [constraints_opt.DiaFan_max,
-                   constraints_opt.TMetal_max,
-                   constraints_opt.Tt3_max,
-                   constraints_opt.TOCGamma_min*180.0/pi, #deg for consistency
-                   constraints_opt.lenField_max,
-                   constraints_opt.span_max]
-else
-    constraints_opt = nothing
-    constraints = []
-end
+#### Initialization
+range_lst = [] #(nmi)
+PFEI_lst = [] #(J/J)
 
-#### Extract data for each case
-paraSet = [] # Each element is one fuel
-boundSet = [] # Each element is one fuel
-optParSet = []
-for (i,curFuel) in enumerate(Fuels)
-    paraSetSub = [] # Each element is one range
-    boundSetSub = [] # Each element is one range
-    optParSetSub = []
-    for (j,curRange) in enumerate(Ranges)
-        caseCur = "$(curFuel)$(round(Int,curRange))"
-        println("Attempt to read case: Fuel type: $(curFuel), Range: $(curRange)")
-        try
-            # Load the aircraft model
-            ac = quickload_aircraft(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange)))).jld2"))
-            if flgExtrBounds
-                # Load the parameter bounds
-                bdcsv = CSV.read(joinpath(model_dir,"$(modelFileName(model_prefix, curFuel, string(round(Int,curRange))))_BoundLocal.csv"), DataFrame)
-                bounds_opt = BoundsOpt()
-                for fName in fieldnames(typeof(bounds_opt))
-                    fNameSym = Symbol(fName)
-                    setfield!(bounds_opt, fName, (Float64(bdcsv[1, fNameSym]), Float64(bdcsv[2, fNameSym]), Float64(bdcsv[3, fNameSym])))
-                end
-            else
-                bounds_opt = nothing
+#### Extract data for each scenerio
+for (i, keyword_cur) in enumerate(case_keywords)
+    model_dir_sub = joinpath(model_dir, keyword_cur)
+    range_lst_sub = [] #(nmi)
+    PFEI_lst_sub = [] #(J/J)
+    # Extract data for each design case
+    for (j, des_range_cur) in enumerate(des_ranges)
+        model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(round(Int,des_range_cur))")
+        range_lst_sub_sub = [] #(nmi)
+        PFEI_lst_sub_sub = [] #(J/J)
+        ## extract for each off-design case
+        for (k, offdes_range_cur) in enumerate(offdes_ranges)
+            model_dir_sub_sub_sub = joinpath(model_dir_sub_sub, keyword_cur*"$(round(Int,des_range_cur))_$(round(Int,offdes_range_cur)).jld2")
+            ## reading
+            println("Attempt to read from $(model_dir_sub_sub_sub)")
+            try
+                ac_cur = quickload_aircraft(model_dir_sub_sub_sub)
+                ## extract data
+                range_cur = ac_cur.parm[imRange,2] / 1852.0 #(nmi)
+                PFEI_cur = ac_cur.parm[imPFEI, 2] #(J/J)
+                push!(range_lst_sub_sub, range_cur)
+                push!(PFEI_lst_sub_sub, PFEI_cur)
+            catch
+                nothing
             end
-            # Extract the design parameters and optionally save individual case
-            design_para, _  = ExtractDes(ac, save_dir, "$(model_prefix)$(caseCur)"; flg_save=flgSaveIndividual,
-                          bounds_opt=bounds_opt, constraints_opt=constraints_opt)
-            # Extract the subset of design parameters that have bounds corresponds to
-            optimi_para = extract_opt_para(ac) #vector{Float64} Those parameters having bounds. Same order as the bound
-            # Append the data
-            push!(paraSetSub, (; range_id = string(round(Int,curRange)), fuel_id = curFuel, design_para...))
-            push!(boundSetSub, (bounds_opt))
-            push!(optParSetSub, (optimi_para))
-        catch err
-            println("Reading case failed for Fuel type: $(curFuel), Range: $(curRange)")
         end
+        push!(range_lst_sub,range_lst_sub_sub)
+        push!(PFEI_lst_sub,PFEI_lst_sub_sub)
     end
-    push!(paraSet, (paraSetSub))
-    push!(boundSet, (boundSetSub))
-    push!(optParSet, (optParSetSub))
+    push!(range_lst,range_lst_sub)
+    push!(PFEI_lst,PFEI_lst_sub)
 end
 
-####Plot out the operation parameter comparison between the fuels over the ranges
-fNamesOptPara = fieldnames(BoundsOpt)
-numOptParas = length(fNamesOptPara)
-# Get the range out
-range_matrix = []
-for idxFuel in eachindex(Fuels) #Through each fuel
-    # Read out the ranges first
-    range_lst = []
-    for idxRange in eachindex(paraSet[idxFuel])
-        push!(range_lst, paraSet[idxFuel][idxRange].range) #[nmi]
+#### Plotting
+# PFEI
+plot_PFEI = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800)
+plot!(plot_PFEI, xlims=(100,1600),ylims=(0.6, 1.0))
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_PFEI, range_lst[i][j], PFEI_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
     end
-    push!(range_matrix, range_lst)
 end
-# Get and compare each design parameters
-for idxPara = 1:numOptParas #Loop through all the parameters
-    p = plot(xlabel="Range [nmi]", ylabel="$(fNamesOptPara[idxPara])", dpi=800)
-    for idxFuel in eachindex(Fuels) #Through each fuel    
-        # Get parameters
-        value_lst = []
-        for idxRange in eachindex(optParSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
-            push!(value_lst, optParSet[idxFuel][idxRange][idxPara])
-        end
-        # Plot parameters
-        plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
-        # Get bounds
-        if flgPlotBounds
-            LB_lst = []
-            UB_lst = []
-            for idxRange in eachindex(boundSet[idxFuel])
-                push!(LB_lst, getfield(boundSet[idxFuel][idxRange], fNamesOptPara[idxPara])[1])
-                push!(UB_lst, getfield(boundSet[idxFuel][idxRange], fNamesOptPara[idxPara])[2])
-            end
-            # Plot bounds
-            plot!(p, range_matrix[idxFuel], LB_lst, lw=0.5, label="$(Fuels[idxFuel]) Low Bound")
-            plot!(p, range_matrix[idxFuel], UB_lst, lw=0.5, label="$(Fuels[idxFuel]) High Bound")
-        end
-    end
-    savefig(p, joinpath(save_dirSub, "CompBound_$(fNamesOptPara[idxPara]).png"))
-end
-
-#### Plot out the constraints parameter comparison between the fuels
-for idxPara = 1:length(constraints_names) #Loop through all the parameters
-    p = plot(xlabel="Range [nmi]", ylabel="$(constraints_names[idxPara])", dpi=800)
-    for idxFuel in eachindex(Fuels) #Through each fuel    
-        # Get constrained parameters
-        value_lst = []
-        for idxRange in eachindex(paraSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
-            push!(value_lst, getfield(paraSet[idxFuel][idxRange], Symbol(constraints_names[idxPara])))
-        end
-        # Plot parameters
-        plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
-        # Plot constraints
-        if flgPlotConstraints
-            plot!(p, range_matrix[idxFuel], fill(constraints[idxPara], length(range_matrix[idxFuel])), lw=0.5, label="$(Fuels[idxFuel]) Constraints")
-        end
-    end
-    savefig(p, joinpath(save_dirSub, "CompConstr_$(constraints_names[idxPara]).png"))
-end
-
-#### Plot out other design parameters
-other_para_names = ["PFEI", "LD_cruise","LHV_cruise", "TSFC_cruise", "TSEC_cruise", "vel_cruise", "massTO", "massFuelReserved", "massFuelBurned", "massEmpty", "rangeBreguet", "thrustOneEngine_takeoff", "thrustOneEngine_cruise1"]
-for idxPara = 1:length(other_para_names) #Loop through all the parameter names
-    p = plot(xlabel="Range [nmi]", ylabel="$(other_para_names[idxPara])", dpi=800)
-    for idxFuel in eachindex(Fuels) #Through each fuel    
-        # Get constrained parameters
-        value_lst = []
-        for idxRange in eachindex(paraSet[idxFuel]) # Assume optparaset have the same number of valid fuel and ranges as the paraset
-            push!(value_lst, getfield(paraSet[idxFuel][idxRange], Symbol(other_para_names[idxPara])))
-        end
-        # Plot parameters
-        plot!(p, range_matrix[idxFuel], value_lst, marker=:cross, lw=2, label=Fuels[idxFuel])
-    end
-    savefig(p, joinpath(save_dirSub, "CompOtherPara_$(other_para_names[idxPara]).png"))
-end
+savefig(plot_PFEI, joinpath(save_dir_sub, "PFEI_comparison.png"))
