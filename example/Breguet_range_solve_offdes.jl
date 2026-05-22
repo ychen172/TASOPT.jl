@@ -30,6 +30,12 @@ module Breguet
         gee = Float64(gee)
 
         # Check for inputs
+        if wPay_N == 0.0
+            wPay_N = 1e-10 #(N)
+        end
+        if ranges_m == 0.0
+            ranges_m = 1e-10 #(m)
+        end
         @assert (ranges_m>=0.0)
         @assert (wPay_N>=0.0)
         @assert (LD>0)
@@ -42,12 +48,6 @@ module Breguet
         @assert (wPay_Max_N>0.0)
         @assert (volFuel_Max_m3>0.0)
         @assert (gee>0)
-        if wPay_N == 0.0
-            wPay_N = 1e-10 #(N)
-        end
-        if ranges_m == 0.0
-            ranges_m = 1e-10 #(m)
-        end
         
         #### Constants
         C1 = LHV_Jkg * eta * LD / gee
