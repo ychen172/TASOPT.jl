@@ -42,7 +42,7 @@ end
 case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
 case_names    = ["Base", "Match", "Retrofit"]
 model_dir     = "ModelSaved"
-des_ranges    = [3000.0] #float.(collect(300:100:3000)) #design range to compare (nmi)
+des_ranges    = [3000] #float.(collect(300:100:3000)) #design range to compare (nmi)
 # O
 save_dir      = "ModelProcessed"
 save_name     = "compare" #sub_folder will be created
@@ -221,21 +221,26 @@ end
 PFEI_change = []
 PFEI_ranges = []
 PFEI_R1R2_idx = []
+energy_flight_change = [] 
 for (i, des_range_cur) in enumerate(des_ranges)
     # Extract and PFEI and range
     range_base = range_lst[idx_Rcomp_base][i]
     range_targ = range_lst[idx_Rcomp_targ][i]
     PFEI_base  = PFEI_lst[idx_Rcomp_base][i] #vector of off-design
     PFEI_targ  = PFEI_lst[idx_Rcomp_targ][i] #vector of off-design
+    mass_payload_base = massPay_lst[idx_Rcomp_base][i] #Ton
+    mass_payload_targ = massPay_lst[idx_Rcomp_targ][i]
+    # Filter the PFEI and range for common subset
     min_range  = max(minimum(range_base),minimum(range_targ)) #common range bound (assume same spacing)
     max_range  = min(maximum(range_base),maximum(range_targ))
-    # Filter the PFEI and range for common subset
     msk_base   = (range_base .>= min_range) .& (range_base .<= max_range)
     msk_targ   = (range_targ .>= min_range) .& (range_targ .<= max_range)
     range_base = range_base[msk_base] 
     PFEI_base  = PFEI_base[msk_base] 
     range_targ = range_targ[msk_targ] 
     PFEI_targ  = PFEI_targ[msk_targ]
+    mass_payload_base = mass_payload_base[msk_base] #Ton
+    mass_payload_targ = mass_payload_targ[msk_targ]
     # find the PFEI change
     push!(PFEI_change, (PFEI_targ .- PFEI_base) ./ PFEI_base)
     push!(PFEI_ranges, range_base)
@@ -243,6 +248,10 @@ for (i, des_range_cur) in enumerate(des_ranges)
     R1_targ = R1_lst[idx_Rcomp_targ][i]
     R2_targ = R2_lst[idx_Rcomp_targ][i]
     push!(PFEI_R1R2_idx, [argmin(abs.(range_base .- R1_targ)) , argmin(abs.(range_base .- R2_targ))])
+    # find the flight energy from payload mass
+    energy_flight_base = PFEI_base .* mass_payload_base .* (1000.0*gee*1852.0) .* range_base #(J)
+    energy_flight_target = PFEI_targ .* mass_payload_targ .* (1000.0*gee*1852.0) .* range_targ #(J)
+    push!(energy_flight_change, (energy_flight_target .- energy_flight_base) ./ energy_flight_base)
 end
 
 #### Plotting
@@ -384,3 +393,14 @@ for (i, des_range_cur) in enumerate(des_ranges)
     scatter!(plot_PFEI_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][2]]], [PFEI_change[i][PFEI_R1R2_idx[i][2]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
 end
 savefig(plot_PFEI_Change, joinpath(save_dir_sub, "PFEI_change.png"))
+
+# Flight Energy Change
+plot_Ene_Change = plot(xlabel="Range (nmi)", ylabel="Change of Flight Energy WRT Baseline (%)", dpi=800)
+plot!(plot_Ene_Change,ylims=(-1, 25))
+for (i, des_range_cur) in enumerate(des_ranges)
+    plot!(plot_Ene_Change, PFEI_ranges[i], energy_flight_change[i] .* 100.0, marker=:cross, lw=2, label="$(round(Int,des_ranges[i]))")
+    # Mark down R1 R2
+    scatter!(plot_Ene_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][1]]], [energy_flight_change[i][PFEI_R1R2_idx[i][1]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+    scatter!(plot_Ene_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][2]]], [energy_flight_change[i][PFEI_R1R2_idx[i][2]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+end
+savefig(plot_Ene_Change, joinpath(save_dir_sub, "Ene_change.png"))
