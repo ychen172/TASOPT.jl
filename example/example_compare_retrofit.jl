@@ -42,7 +42,7 @@ end
 case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
 case_names    = ["Base", "Match", "Retrofit"]
 model_dir     = "ModelSaved"
-des_ranges    = float.(collect(300:100:3000)) #design range to compare (nmi)
+des_ranges    = [3000.0] #float.(collect(300:100:3000)) #design range to compare (nmi)
 # O
 save_dir      = "ModelProcessed"
 save_name     = "compare" #sub_folder will be created
@@ -217,6 +217,34 @@ for (i, des_range_cur) in enumerate(des_ranges)
     end
 end
 
+#### Calculate PFEI reduction
+PFEI_change = []
+PFEI_ranges = []
+PFEI_R1R2_idx = []
+for (i, des_range_cur) in enumerate(des_ranges)
+    # Extract and PFEI and range
+    range_base = range_lst[idx_Rcomp_base][i]
+    range_targ = range_lst[idx_Rcomp_targ][i]
+    PFEI_base  = PFEI_lst[idx_Rcomp_base][i] #vector of off-design
+    PFEI_targ  = PFEI_lst[idx_Rcomp_targ][i] #vector of off-design
+    min_range  = max(minimum(range_base),minimum(range_targ)) #common range bound (assume same spacing)
+    max_range  = min(maximum(range_base),maximum(range_targ))
+    # Filter the PFEI and range for common subset
+    msk_base   = (range_base .>= min_range) .& (range_base .<= max_range)
+    msk_targ   = (range_targ .>= min_range) .& (range_targ .<= max_range)
+    range_base = range_base[msk_base] 
+    PFEI_base  = PFEI_base[msk_base] 
+    range_targ = range_targ[msk_targ] 
+    PFEI_targ  = PFEI_targ[msk_targ]
+    # find the PFEI change
+    push!(PFEI_change, (PFEI_targ .- PFEI_base) ./ PFEI_base)
+    push!(PFEI_ranges, range_base)
+    # Identify the point closes to R1 and closest to R2
+    R1_targ = R1_lst[idx_Rcomp_targ][i]
+    R2_targ = R2_lst[idx_Rcomp_targ][i]
+    push!(PFEI_R1R2_idx, [argmin(abs.(range_base .- R1_targ)) , argmin(abs.(range_base .- R2_targ))])
+end
+
 #### Plotting
 # PFEI
 plot_PFEI = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
@@ -331,4 +359,15 @@ savefig(plot_LHV, joinpath(save_dir_sub, "Fuel_heating_value_comparison.png"))
 plot_R1R2Red = plot(xlabel="Design Range (nmi)", ylabel="Change of Ranges WRT Baseline (%)", dpi=800)
 plot!(plot_R1R2Red, des_range_R1R2, frac_change_R1 .* 100.0, marker=:cross, lw=2, label="R1")
 plot!(plot_R1R2Red, des_range_R1R2, frac_change_R2 .* 100.0, marker=:cross, lw=2, label="R2")
-savefig(plot_R1R2Red, joinpath(save_dir_sub, "R1R2RangeChange.png"))
+savefig(plot_R1R2Red, joinpath(save_dir_sub, "R1R2Change.png"))
+
+# PFEI Change
+plot_PFEI_Change = plot(xlabel="Range (nmi)", ylabel="Change of PFEI WRT Baseline (%)", dpi=800)
+plot!(plot_PFEI_Change,ylims=(-1, 25))
+for (i, des_range_cur) in enumerate(des_ranges)
+    plot!(plot_PFEI_Change, PFEI_ranges[i], PFEI_change[i] .* 100.0, marker=:cross, lw=2, label="$(round(Int,des_ranges[i]))")
+    # Mark down R1 R2
+    scatter!(plot_PFEI_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][1]]], [PFEI_change[i][PFEI_R1R2_idx[i][1]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+    scatter!(plot_PFEI_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][2]]], [PFEI_change[i][PFEI_R1R2_idx[i][2]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+end
+savefig(plot_PFEI_Change, joinpath(save_dir_sub, "PFEI_change.png"))
