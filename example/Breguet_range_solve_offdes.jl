@@ -38,7 +38,7 @@ module Breguet
         @assert (wEmp_N>0)
         @assert (rhoFuel_kgm3>0)
         @assert (frac_rese>=0.0 && frac_rese < (exp((ranges_m*gee)/(LHV_Jkg*eta*LD))-1)^(-1))
-        @assert (wTO_Max_N>(wEmp_N+wPay_Max_N) && wTO_Max_N>(wEmp_N+volFuel_Max_m3*rhoFuel_kgm3*gee))
+        @assert (wTO_Max_N>=(wEmp_N+wPay_Max_N) && wTO_Max_N>=(wEmp_N+volFuel_Max_m3*rhoFuel_kgm3*gee))
         @assert (wPay_Max_N>0.0)
         @assert (volFuel_Max_m3>0.0)
         @assert (gee>0)
@@ -60,11 +60,11 @@ module Breguet
         wPay_N_UB3 = (volFuel_Max_m3 * gee * rhoFuel_kgm3) / (C3 * (1.0 + frac_rese)) - wEmp_N #(N)
         wPay_N_max = min(wPay_N_UB1,wPay_N_UB2,wPay_N_UB3)
         if wPay_N_max<0.0
-            return Dict("range_m_out" => -1,
-                        "wPay_N_out" => -1,
-                        "wFuel_N_out" => -1,
-                        "mFuel_kg_out" => -1,
-                        "PFEI_JJ_out" => -1)
+            return Dict("range_m_out" => -1.0,
+                        "wPay_N_out" => -1.0,
+                        "wFuel_N_out" => -1.0,
+                        "mFuel_kg_out" => -1.0,
+                        "PFEI_JJ_out" => -1.0)
         end
         
         #### Test feasibility
