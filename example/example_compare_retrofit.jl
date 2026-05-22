@@ -259,6 +259,19 @@ for (i, keyword_cur) in enumerate(case_keywords)
 end
 savefig(plot_PFEI, joinpath(save_dir_sub, "PFEI_comparison.png"))
 
+# PFEI_Zoom
+plot_PFEI2 = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800)
+plot!(plot_PFEI2, xlims=(0.0,2000),ylims=(0.65, 1.1))
+for (i, keyword_cur) in enumerate(case_keywords)
+    for (j, des_range_cur) in enumerate(des_ranges)
+        plot!(plot_PFEI2, range_lst[i][j], PFEI_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
+        # Mark down R1 R2
+        scatter!(plot_PFEI2, [range_lst[i][j][idx_R1_lst[i][j]]], [PFEI_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(plot_PFEI2, [range_lst[i][j][idx_R2_lst[i][j]]], [PFEI_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+    end
+end
+savefig(plot_PFEI2, joinpath(save_dir_sub, "PFEI_comparison_zoom.png"))
+
 # Empty weight
 plot_mEmpty = plot(xlabel="Range (nmi)", ylabel="Empty Mass (Ton)", dpi=800)
 plot!(plot_mEmpty, ylims=(0.0, massEmp_lst[1][1][1]+30.0))
