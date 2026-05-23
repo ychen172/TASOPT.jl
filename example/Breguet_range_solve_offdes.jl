@@ -89,7 +89,7 @@ module Breguet
         end
         wFuel_N_out = C3*(wEmp_N + wPay_N_out)
         mFuel_kg_out = wFuel_N_out/gee
-        PFEI_JJ_out = (wPay_N_out*range_m_out)/(mFuel_kg_out*LHV_Jkg) 
+        PFEI_JJ_out = (mFuel_kg_out*LHV_Jkg)/(wPay_N_out*range_m_out)
         
         #### Output
         return Dict("range_m_out" => range_m_out,

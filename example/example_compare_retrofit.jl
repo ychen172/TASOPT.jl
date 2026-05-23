@@ -152,12 +152,12 @@ for (i, keyword_cur) in enumerate(case_keywords)
             end
         end
         # Range threshold identification
-        m,i = findmax(massPay_lst_sub_sub)
-        idx_R1 = findnext(x -> x < m*(1.0-epsR1R2), massPay_lst_sub_sub, i) - 1 #index for R1 range (Not applicable to matching case)
-        R1 = interp_range_at_threshold(range_lst_sub_sub, massPay_lst_sub_sub, i, epsR1R2; side=:right)
-        m,i = findmax(voluFuel_lst_sub_sub)
-        idx_R2 = findprev(x -> x < m*(1.0-epsR1R2), voluFuel_lst_sub_sub, i) + 1 #index for R2 range (Matching case should follow retrofit)
-        R2 = interp_range_at_threshold(range_lst_sub_sub, voluFuel_lst_sub_sub, i, epsR1R2; side=:left)
+        m,l = findmax(massPay_lst_sub_sub)
+        idx_R1 = findnext(x -> x < m*(1.0-epsR1R2), massPay_lst_sub_sub, l) - 1 #index for R1 range (Not applicable to matching case)
+        R1 = interp_range_at_threshold(range_lst_sub_sub, massPay_lst_sub_sub, l, epsR1R2; side=:right)
+        m,l = findmax(voluFuel_lst_sub_sub)
+        idx_R2 = findprev(x -> x < m*(1.0-epsR1R2), voluFuel_lst_sub_sub, l) + 1 #index for R2 range (Matching case should follow retrofit)
+        R2 = interp_range_at_threshold(range_lst_sub_sub, voluFuel_lst_sub_sub, l, epsR1R2; side=:left)
         # Store
         push!(range_lst_sub,range_lst_sub_sub)
         push!(PFEI_lst_sub,PFEI_lst_sub_sub)

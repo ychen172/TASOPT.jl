@@ -27,3 +27,4 @@ example/**/*.txt
 
 example/Movie/*.csv
 *.bak
+*.zip
