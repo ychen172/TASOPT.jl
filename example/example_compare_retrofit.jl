@@ -8,7 +8,11 @@ using DataFrames, CSV
 include(__TASOPTindices__)
 using Plots
 
-#### Helpers
+# Other constants
+epsR1R2 = 0.005
+
+#### Helpers Functions
+# Interpolation function for threshold range determination
 function interp_range_at_threshold(range, y, i_peak, eps; side::Symbol)
     yth = y[i_peak] * (1 - eps)
 
@@ -37,199 +41,167 @@ function interp_range_at_threshold(range, y, i_peak, eps; side::Symbol)
     return xth
 end
 
-#### Setup IO
-# I
-case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
-case_names    = ["Base", "Match", "Retrofit"]
-model_dir     = "ModelSaved"
-des_ranges    = [3000] #float.(collect(300:100:3000)) #design range to compare (nmi)
-# O
-save_dir      = "ModelProcessed"
-save_name     = "compare" #sub_folder will be created
-# Test conditions
-offdes_ranges = float.(collect(0:100:8000)) # (nmi)
-idx_R1R2IdxCorrection = [[2,3]] #3->2
-range_comparison_index = [3,1] #(case 1 - case 3) / case1
-epsR1R2 = 0.005
+# Design parameters output
+function init_results(case_keywords, des_ranges, offdes_ranges, fields_to_read)
+    # case_keywords, des_ranges, offdes_ranges: Vector
+    # fields_to_read: tuple of symbols
+    noff = length(offdes_ranges)
+    makevec() = fill!(Vector{Union{Missing,Float64}}(undef, noff), missing)
+    Dict(
+        kw => Dict(
+            d => Dict(
+                f => makevec() for f in fields_to_read
+            ) for d in eachindex(des_ranges)
+        ) for kw in eachindex(case_keywords)
+    )
+end
 
+#### Setup IO
+# Input case names
+case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
+case_names    = ["Baseline jet fuel aircraft", "Jet fuel aircraft with matched missions", "Retrofitted ethanol aircraft"]
+model_dir     = "ModelSaved"
+des_ranges    = [3000] #float.(collect(300:100:3000)) #design range to compare (Has to be integer (No 0.1 nmi)) (nmi) Make sure all cases have these design ranges
+offdes_ranges = float.(collect(0:100:8000)) #Off-design ranges to search through (Has to be integer (No 0.1 nmi)) (can be wider than what are available)
+# For R1 and R2 calculation
+idx_R1R2Skip  = [2] #Case to skip R1 R2 determination
+idx_base_R1R2 = 1 #Index of the base case
+idx_targ_R1R2 = 3 #Index of the target case
+# For PFEI comparison
+idx_base_PFEI = 1
+idx_targ_PFEI = 3
+
+# Output directory
+save_dir      = "ModelProcessed"
+save_name     = "Compare_Retrofit" #sub_folder will be created
+# Fields to read out
+# const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :voluFuelMax_m3, :massTO_Ton, :massTOMax_Ton,
+#                         :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg)
+const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :massTO_Ton,
+                        :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J)
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
 
 #### Initialization
-range_lst = [] #(nmi)
-PFEI_lst = [] #(J/J)
-massEmp_lst = [] #(Ton)
-voluFuel_lst = [] #(m3)
-voluFuelMax_lst = [] #(m3)
-massTO_lst = [] #(Ton)
-massTOMax_lst = [] #(Ton)
-massPay_lst = [] #(Ton)
-LD_cru_lst = [] #Cruise lift to drag ratio
-eta_tot_cru_lst = [] #Total engine efficiency at cruise
-LHV_lst = [] #Cruise heating value including evaporation (J/kg)
-idx_R1_lst = []
-idx_R2_lst = []
-R1_lst = []
-R2_lst = []
+results = init_results(case_keywords, des_ranges, offdes_ranges, fields_to_read)
 
 #### Extract data for each scenerio
 for (i, keyword_cur) in enumerate(case_keywords)
     model_dir_sub = joinpath(model_dir, keyword_cur)
-    range_lst_sub = [] #(nmi)
-    PFEI_lst_sub = [] #(J/J)
-    massEmp_lst_sub = [] #(Ton)
-    voluFuel_lst_sub = [] #(m3)
-    voluFuelMax_lst_sub = [] #(m3)
-    massTO_lst_sub = [] #(Ton)
-    massTOMax_lst_sub = [] #(Ton)
-    massPay_lst_sub = [] #(Ton)
-    LD_cru_lst_sub = [] #Cruise lift to drag ratio
-    eta_tot_cru_lst_sub = [] #Total engine efficiency at cruise
-    LHV_lst_sub = [] #Cruise heating value including evaporation (J/kg)
-    idx_R1_lst_sub = []
-    idx_R2_lst_sub = []
-    R1_lst_sub = []
-    R2_lst_sub = []
     # Extract data for each design case
-    for (j, des_range_cur) in enumerate(des_ranges)
-        model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(round(Int,des_range_cur))")
-        range_lst_sub_sub = [] #(nmi)
-        PFEI_lst_sub_sub = [] #(J/J)
-        massEmp_lst_sub_sub = [] #(Ton)
-        voluFuel_lst_sub_sub = [] #(m3)
-        voluFuelMax_lst_sub_sub = [] #(m3)
-        massTO_lst_sub_sub = [] #(Ton)
-        massTOMax_lst_sub_sub = [] #(Ton)
-        massPay_lst_sub_sub = [] #(Ton)
-        LD_cru_lst_sub_sub = [] #Cruise lift to drag ratio
-        eta_tot_cru_lst_sub_sub = [] #Total engine efficiency at cruise
-        LHV_lst_sub_sub = [] #Cruise heating value including evaporation (J/kg)
-        ## extract for each off-design case
-        for (k, offdes_range_cur) in enumerate(offdes_ranges)
-            model_dir_sub_sub_sub = joinpath(model_dir_sub_sub, keyword_cur*"$(round(Int,des_range_cur))_$(round(Int,offdes_range_cur)).jld2")
-            ## reading
-            println("Attempt to read from $(model_dir_sub_sub_sub)")
-            try
-                ac_cur = quickload_aircraft(model_dir_sub_sub_sub)
-                ## extract data
-                range_cur = ac_cur.parm[imRange,2] / 1852.0 #(nmi)
-                PFEI_cur = ac_cur.parm[imPFEI, 2] #(J/J)
-                
-                ## Check on masses
-                massTO = ac_cur.parm[imWTO,2]/gee/1000.0 #Takeoff mass (Ton)
-                massFuelTot = ac_cur.parm[imWfuel,2]/gee/1000.0 #Fuel mass (Ton)(Include reserved and burned)
-                massPayload = ac_cur.parm[imWpay, 2]/gee/1000.0 #(Ton)
-                massEmpty = massTO - massFuelTot - massPayload #(Ton) empty weight
-                massTOMax = ac_cur.parg[igWMTO] / gee / 1000.0 #Maximum takeoff mass (Ton)
-                ## Check on volume
-                rhoFuel = ac_cur.parg[igrhofuel] #kg/m3
-                volFuel = massFuelTot * 1000.0 / rhoFuel #m3
-                volFuelMax = ac_cur.parg[igWfmax] / gee / rhoFuel #m3 (The design mission fuel mass might be different from the maximum fuel mass with off-design fuel density)
-                ## Check on flight performance
-                LD_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, 2]/ac_cur.para[iaCD, ipcruise1, 2] + 
-                                   ac_cur.para[iaCL, ipcruise2, 2]/ac_cur.para[iaCD, ipcruise2, 2]) #Averaged cruise lift-to-drag ratio
-                LHV_cruise = 0.5 * (ac_cur.pare[iehfuel, ipcruise1, 2] + ac_cur.pare[iehfuel, ipcruise2, 2]) #Averaged cruise heating value (J/kg) (Include vaporization already)
-                TSFC_cruise = 0.5 * (ac_cur.pare[ieTSFC, ipcruise1, 2] + ac_cur.pare[ieTSFC, ipcruise2, 2]) / gee #Averaged cruise thrust specfic heat consumption (kg/s/N)
-                vel_cruise = 0.5 * (cos(ac_cur.para[iagamV, ipcruise1, 2]) * ac_cur.pare[ieu0, ipcruise1, 2] + 
-                                    cos(ac_cur.para[iagamV, ipcruise2, 2]) * ac_cur.pare[ieu0, ipcruise2, 2]) #Averaged cruise horizontal velocity (m/s)
-                eta_total_cruise = (1.0/TSFC_cruise)*(vel_cruise/LHV_cruise) #total cruise engine efficiency
-
-                ## store
-                push!(range_lst_sub_sub, range_cur)
-                push!(PFEI_lst_sub_sub, PFEI_cur)
-                push!(massEmp_lst_sub_sub, massEmpty)
-                push!(voluFuel_lst_sub_sub, volFuel)
-                push!(voluFuelMax_lst_sub_sub, volFuelMax)
-                push!(massTO_lst_sub_sub, massTO)
-                push!(massTOMax_lst_sub_sub, massTOMax)
-                push!(massPay_lst_sub_sub, massPayload)
-                push!(LD_cru_lst_sub_sub, LD_cruise)
-                push!(eta_tot_cru_lst_sub_sub, eta_total_cruise)
-                push!(LHV_lst_sub_sub, LHV_cruise)
-            catch
-                nothing
+    for (j, des_ranges_cur) in enumerate(des_ranges)
+        dkey = round(Int, des_ranges_cur)
+        model_dir_sub_sub = joinpath(model_dir_sub, keyword_cur*"$(dkey)")
+        results_cur = results[i][j] #field * off-design
+        # extract for each off-design case
+        k = 0
+        for offdes_range_cur in offdes_ranges
+            odkey = round(Int, offdes_range_cur) #off-design range key
+            model_name_to_read = joinpath(model_dir_sub_sub, keyword_cur*"$(dkey)_$(odkey).jld2")
+            #### reading in the model
+            if !isfile(model_name_to_read) #check if the file exist
+                continue
             end
+            println("Read: $(model_name_to_read)")
+            # Get the aircraft model
+            ac_cur = quickload_aircraft(model_name_to_read)
+            
+            #### overall performance data
+            range_cur = ac_cur.parm[imRange,2] / 1852.0 #(nmi)
+            PFEI_cur = ac_cur.parm[imPFEI, 2] #(J/J)
+            
+            #### mass data
+            massTO = ac_cur.parm[imWTO,2]/gee/1000.0 #Takeoff mass (Ton)
+            massFuelTot = ac_cur.parm[imWfuel,2]/gee/1000.0 #Fuel mass (Ton)(Include reserved and burned)
+            massPayload = ac_cur.parm[imWpay, 2]/gee/1000.0 #(Ton)
+            massEmpty = massTO - massFuelTot - massPayload #(Ton) empty weight
+            # massTOMax = ac_cur.parg[igWMTO] / gee / 1000.0 #Maximum takeoff mass (Ton)
+            
+            #### fuel volume data
+            rhoFuel = ac_cur.parg[igrhofuel] #kg/m3
+            volFuel = massFuelTot * 1000.0 / rhoFuel #m3
+            # volFuelMax = ac_cur.parg[igWfmax] / gee / rhoFuel #m3 (The design mission fuel mass might be different from the maximum fuel mass with off-design fuel density)
+            
+            #### flight performance data
+            LD_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, 2]/ac_cur.para[iaCD, ipcruise1, 2] + 
+                                ac_cur.para[iaCL, ipcruise2, 2]/ac_cur.para[iaCD, ipcruise2, 2]) #Averaged cruise lift-to-drag ratio
+            LHV_cruise = 0.5 * (ac_cur.pare[iehfuel, ipcruise1, 2] + ac_cur.pare[iehfuel, ipcruise2, 2]) #Averaged cruise heating value (J/kg) (Include vaporization already)
+            TSFC_cruise = 0.5 * (ac_cur.pare[ieTSFC, ipcruise1, 2] + ac_cur.pare[ieTSFC, ipcruise2, 2]) / gee #Averaged cruise thrust specfic heat consumption (kg/s/N)
+            vel_cruise = 0.5 * (cos(ac_cur.para[iagamV, ipcruise1, 2]) * ac_cur.pare[ieu0, ipcruise1, 2] + 
+                                cos(ac_cur.para[iagamV, ipcruise2, 2]) * ac_cur.pare[ieu0, ipcruise2, 2]) #Averaged cruise horizontal velocity (m/s)
+            eta_total_cruise = (1.0/TSFC_cruise)*(vel_cruise/LHV_cruise) #total cruise engine efficiency
+
+            #### derived data
+            energy_flight = PFEI_cur * massPayload * (1000.0 * gee * 1852.0) * range_cur #(J) total flight energy 
+
+            ## store
+            k += 1
+            results_cur[:range_nmi][k] = range_cur
+            results_cur[:PFEI_JJ][k] = PFEI_cur
+            results_cur[:massEmp_Ton][k] = massEmpty
+            results_cur[:voluFuel_m3][k] = volFuel
+            results_cur[:massTO_Ton][k] = massTO
+            results_cur[:massPay_Ton][k] = massPayload
+            results_cur[:LD_cru][k] = LD_cruise
+            results_cur[:eta_tot_cru][k] = eta_total_cruise
+            results_cur[:LHV_Jkg][k] = LHV_cruise
+            results_cur[:EneFli_J][k] = energy_flight
         end
-        # Range threshold identification
-        m,l = findmax(massPay_lst_sub_sub)
-        idx_R1 = findnext(x -> x < m*(1.0-epsR1R2), massPay_lst_sub_sub, l) - 1 #index for R1 range (Not applicable to matching case)
-        R1 = interp_range_at_threshold(range_lst_sub_sub, massPay_lst_sub_sub, l, epsR1R2; side=:right)
-        m,l = findmax(voluFuel_lst_sub_sub)
-        idx_R2 = findprev(x -> x < m*(1.0-epsR1R2), voluFuel_lst_sub_sub, l) + 1 #index for R2 range (Matching case should follow retrofit)
-        R2 = interp_range_at_threshold(range_lst_sub_sub, voluFuel_lst_sub_sub, l, epsR1R2; side=:left)
-        # Store
-        push!(range_lst_sub,range_lst_sub_sub)
-        push!(PFEI_lst_sub,PFEI_lst_sub_sub)
-        push!(massEmp_lst_sub,massEmp_lst_sub_sub)
-        push!(voluFuel_lst_sub,voluFuel_lst_sub_sub)
-        push!(voluFuelMax_lst_sub,voluFuelMax_lst_sub_sub)
-        push!(massTO_lst_sub,massTO_lst_sub_sub)
-        push!(massTOMax_lst_sub,massTOMax_lst_sub_sub)
-        push!(massPay_lst_sub,massPay_lst_sub_sub)
-        push!(LD_cru_lst_sub,LD_cru_lst_sub_sub)
-        push!(eta_tot_cru_lst_sub,eta_tot_cru_lst_sub_sub)
-        push!(LHV_lst_sub,LHV_lst_sub_sub)
-        push!(idx_R1_lst_sub,idx_R1)
-        push!(idx_R2_lst_sub,idx_R2)
-        push!(R1_lst_sub,R1)
-        push!(R2_lst_sub,R2)
-    end
-    # Store
-    push!(range_lst,range_lst_sub)
-    push!(PFEI_lst,PFEI_lst_sub)
-    push!(massEmp_lst,massEmp_lst_sub)
-    push!(voluFuel_lst,voluFuel_lst_sub)
-    push!(voluFuelMax_lst,voluFuelMax_lst_sub)
-    push!(massTO_lst,massTO_lst_sub)
-    push!(massTOMax_lst,massTOMax_lst_sub)
-    push!(massPay_lst,massPay_lst_sub)
-    push!(LD_cru_lst,LD_cru_lst_sub)
-    push!(eta_tot_cru_lst,eta_tot_cru_lst_sub)
-    push!(LHV_lst,LHV_lst_sub)
-    push!(idx_R1_lst,idx_R1_lst_sub)
-    push!(idx_R2_lst,idx_R2_lst_sub)
-    push!(R1_lst,R1_lst_sub)
-    push!(R2_lst,R2_lst_sub)
-end
-
-#### Correct the R1 R2 Index for the matching case
-for idxSwap in idx_R1R2IdxCorrection
-    idx_R1_lst[idxSwap[1]] = idx_R1_lst[idxSwap[2]]
-    idx_R2_lst[idxSwap[1]] = idx_R2_lst[idxSwap[2]]
-end
-
-#### Calculate range reduction
-idx_Rcomp_base = range_comparison_index[2]
-idx_Rcomp_targ = range_comparison_index[1]
-frac_change_R1 = []
-frac_change_R2 = []
-des_range_R1R2 = [] #extracted design range just to compare R1 and R2
-for (i, des_range_cur) in enumerate(des_ranges)
-    if (idx_R1_lst[idx_Rcomp_base][i] != 1) && (idx_R1_lst[idx_Rcomp_targ][i] != 1) #R1 touch the left bound
-        R1_base = R1_lst[idx_Rcomp_base][i]
-        R1_targ = R1_lst[idx_Rcomp_targ][i]
-        push!(frac_change_R1,(R1_targ-R1_base)/(R1_base))
-        R2_base = R2_lst[idx_Rcomp_base][i]
-        R2_targ = R2_lst[idx_Rcomp_targ][i]
-        push!(frac_change_R2,(R2_targ-R2_base)/(R2_base))
-        push!(des_range_R1R2, des_range_cur)
+        #### Trim the trailing missing
+        for f in fields_to_read
+            resize!(results_cur[f], k)
+        end
     end
 end
 
-#### Calculate PFEI reduction
+#### Identify the R1 and R2 for each case and each design range
+R1 = fill!(Matrix{Union{Missing,Float64}}(undef,length(case_keywords),length(des_ranges)), missing)
+R2 = fill!(Matrix{Union{Missing,Float64}}(undef,length(case_keywords),length(des_ranges)), missing)
+R1Idx = fill!(Matrix{Union{Missing,Int}}(undef,length(case_keywords),length(des_ranges)), missing)
+R2Idx = fill!(Matrix{Union{Missing,Int}}(undef,length(case_keywords),length(des_ranges)), missing)
+for i in eachindex(case_keywords)
+    if i in idx_R1R2Skip
+        continue
+    end
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        # R1
+        massPay_Max_Val, massPay_Max_Idx = findmax(results_cur[:massPay_Ton]) #assume your off-design mission reach maximum payload (if not, the first point would be picked)
+        idx_R1_approx = findnext(massPay -> massPay < massPay_Max_Val*(1.0-epsR1R2), results_cur[:massPay_Ton], massPay_Max_Idx) - 1 #approximated R1 index for plot
+        R1_interp = interp_range_at_threshold(results_cur[:range_nmi], results_cur[:massPay_Ton], massPay_Max_Idx, epsR1R2; side=:right) #inteprolated R1
+        # R2
+        volFuel_Max_Val, volFuel_Max_Idx = findmax(results_cur[:voluFuel_m3]) #assume your off-design reach maximum fuel volume (threortically always for payload range diagram)
+        idx_R2_approx = findprev(volFuel -> volFuel < volFuel_Max_Val*(1.0-epsR1R2), results_cur[:voluFuel_m3], volFuel_Max_Idx) + 1
+        R2_interp = interp_range_at_threshold(results_cur[:range_nmi], results_cur[:voluFuel_m3], volFuel_Max_Idx, epsR1R2; side=:left) #inteprolated R2
+        # Store R1 and R2
+        R1[i,j] = R1_interp
+        R2[i,j] = R2_interp
+        R1Idx[i,j] = idx_R1_approx
+        R2Idx[i,j] = idx_R2_approx
+    end
+end
+# Calculate fractional change of R1 and R2
+frac_change_R1 = (R1[idx_targ_R1R2,:] .- R1[idx_base_R1R2,:]) ./ R1[idx_base_R1R2,:]
+frac_change_R2 = (R2[idx_targ_R1R2,:] .- R2[idx_base_R1R2,:]) ./ R2[idx_base_R1R2,:]
+
+#### Calculate fractional change of PFEI
+ranges_PFEI = []
 PFEI_change = []
-PFEI_ranges = []
-PFEI_R1R2_idx = []
-energy_flight_change = [] 
-for (i, des_range_cur) in enumerate(des_ranges)
+EneFli_change = []
+R1Idx_PFEI = []
+R2Idx_PFEI = []
+for i in eachindex(des_ranges)
+    #### Extract the base and target case
+    results_base = results[idx_base_PFEI][i]
+    results_targ = results[idx_targ_PFEI][i]
     # Extract and PFEI and range
-    range_base = range_lst[idx_Rcomp_base][i]
-    range_targ = range_lst[idx_Rcomp_targ][i]
-    PFEI_base  = PFEI_lst[idx_Rcomp_base][i] #vector of off-design
-    PFEI_targ  = PFEI_lst[idx_Rcomp_targ][i] #vector of off-design
-    mass_payload_base = massPay_lst[idx_Rcomp_base][i] #Ton
-    mass_payload_targ = massPay_lst[idx_Rcomp_targ][i]
+    range_base = results_base[:range_nmi]
+    range_targ = results_targ[:range_nmi]
+    PFEI_base  = results_base[:PFEI_JJ]
+    PFEI_targ  = results_targ[:PFEI_JJ]
+    EneFli_base = results_base[:EneFli_J]
+    EneFli_targ = results_targ[:EneFli_J]
     # Filter the PFEI and range for common subset
     min_range  = max(minimum(range_base),minimum(range_targ)) #common range bound (assume same spacing)
     max_range  = min(maximum(range_base),maximum(range_targ))
@@ -237,170 +209,231 @@ for (i, des_range_cur) in enumerate(des_ranges)
     msk_targ   = (range_targ .>= min_range) .& (range_targ .<= max_range)
     range_base = range_base[msk_base] 
     PFEI_base  = PFEI_base[msk_base] 
+    EneFli_base = EneFli_base[msk_base]
     range_targ = range_targ[msk_targ] 
     PFEI_targ  = PFEI_targ[msk_targ]
-    mass_payload_base = mass_payload_base[msk_base] #Ton
-    mass_payload_targ = mass_payload_targ[msk_targ]
-    # find the PFEI change
+    EneFli_targ = EneFli_targ[msk_targ]
+    @assert round.(Int, range_base) == round.(Int, range_targ) "Base/target ranges do not match after filtering"
+
+    #### Calculate the changes
+    push!(ranges_PFEI, range_base)
     push!(PFEI_change, (PFEI_targ .- PFEI_base) ./ PFEI_base)
-    push!(PFEI_ranges, range_base)
-    # Identify the point closes to R1 and closest to R2
-    R1_targ = R1_lst[idx_Rcomp_targ][i]
-    R2_targ = R2_lst[idx_Rcomp_targ][i]
-    push!(PFEI_R1R2_idx, [argmin(abs.(range_base .- R1_targ)) , argmin(abs.(range_base .- R2_targ))])
-    # find the flight energy from payload mass
-    energy_flight_base = PFEI_base .* mass_payload_base .* (1000.0*gee*1852.0) .* range_base #(J)
-    energy_flight_target = PFEI_targ .* mass_payload_targ .* (1000.0*gee*1852.0) .* range_targ #(J)
-    push!(energy_flight_change, (energy_flight_target .- energy_flight_base) ./ energy_flight_base)
+    push!(EneFli_change, (EneFli_targ .- EneFli_base) ./ EneFli_base)
+    
+    #### Use the target R1 and R2 ranges to remap the current R1 R2 indices
+    @assert !ismissing(R1[idx_targ_PFEI,i]) "Target case for PFEI change calculation has to have a R1 R2 indicator computed"
+    push!(R1Idx_PFEI, argmin(abs.(range_base .- R1[idx_targ_PFEI,i])))
+    push!(R2Idx_PFEI, argmin(abs.(range_base .- R2[idx_targ_PFEI,i])))
 end
 
-#### Plotting
-# PFEI
-plot_PFEI = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
-# plot!(plot_PFEI, xlims=(100,1600),ylims=(0.6, 1.0))
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_PFEI, range_lst[i][j], PFEI_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_PFEI, [range_lst[i][j][idx_R1_lst[i][j]]], [PFEI_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_PFEI, [range_lst[i][j][idx_R2_lst[i][j]]], [PFEI_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+
+#### Plotting - PFEI and energy
+linestyles = [:solid, :dash, :dot, :dashdot, :dashdotdot]
+# Large PFEI
+p1 = plot(xlabel="Off-design Range (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p1, results_cur[:range_nmi], results_cur[:PFEI_JJ], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p1, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:PFEI_JJ][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p1, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:PFEI_JJ][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-savefig(plot_PFEI, joinpath(save_dir_sub, "PFEI_comparison.png"))
+savefig(p1, joinpath(save_dir_sub, "PFEI_Large.png"))
+# plot!(pExample, xlims=(100,1600),ylims=(0.6, 1.0))
 
-# PFEI_Zoom
-plot_PFEI2 = plot(xlabel="Range (nmi)", ylabel="PFEI (J/J)", dpi=800)
-plot!(plot_PFEI2, xlims=(0.0,2000),ylims=(0.65, 1.1))
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_PFEI2, range_lst[i][j], PFEI_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_PFEI2, [range_lst[i][j][idx_R1_lst[i][j]]], [PFEI_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_PFEI2, [range_lst[i][j][idx_R2_lst[i][j]]], [PFEI_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+# Zoom in plot PFEI
+p2 = plot(xlabel="Off-design Range (nmi)", ylabel="PFEI (J/J)", dpi=800)
+global il = 0
+plot!(p2, xlims=(0.0,2000),ylims=(0.65, 1.1))
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p2, results_cur[:range_nmi], results_cur[:PFEI_JJ], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p2, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:PFEI_JJ][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p2, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:PFEI_JJ][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-savefig(plot_PFEI2, joinpath(save_dir_sub, "PFEI_comparison_zoom.png"))
+savefig(p2, joinpath(save_dir_sub, "PFEI_Small.png"))
 
-# Empty weight
-plot_mEmpty = plot(xlabel="Range (nmi)", ylabel="Empty Mass (Ton)", dpi=800)
-plot!(plot_mEmpty, ylims=(0.0, massEmp_lst[1][1][1]+30.0))
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_mEmpty, range_lst[i][j], massEmp_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_mEmpty, [range_lst[i][j][idx_R1_lst[i][j]]], [massEmp_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_mEmpty, [range_lst[i][j][idx_R2_lst[i][j]]], [massEmp_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+# Large Flight Energy
+p2_5 = plot(xlabel="Off-design Range (nmi)", ylabel="Flight Energy (J)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p2_5, results_cur[:range_nmi], results_cur[:EneFli_J], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p2_5, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:EneFli_J][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p2_5, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:EneFli_J][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-savefig(plot_mEmpty, joinpath(save_dir_sub, "mass_empty_comparison.png"))
+savefig(p2_5, joinpath(save_dir_sub, "Flight_Energy.png"))
 
-# Fuel volume
-plot_volfuel = plot(xlabel="Range (nmi)", ylabel="Fuel Volume (m3)", dpi=800)
-# plot!(plot_volfuel, ylims=(0.0, massEmp_lst[1][1][1]+30.0))
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_volfuel, range_lst[i][j], voluFuel_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_volfuel, [range_lst[i][j][idx_R1_lst[i][j]]], [voluFuel_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_volfuel, [range_lst[i][j][idx_R2_lst[i][j]]], [voluFuel_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+#### Plotting - Payload Range
+p3 = plot(xlabel="Off-design Range (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p3, results_cur[:range_nmi], results_cur[:massPay_Ton], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p3, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:massPay_Ton][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p3, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:massPay_Ton][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-# for (i, keyword_cur) in enumerate(case_keywords)
-#     for (j, des_range_cur) in enumerate(des_ranges)
-#         plot!(plot_volfuel, range_lst[i][j], voluFuelMax_lst[i][j], marker=:none, lw=0.5, label=label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-#     end
-# end
-savefig(plot_volfuel, joinpath(save_dir_sub, "volume_fuel_comparison.png"))
+savefig(p3, joinpath(save_dir_sub, "Payload.png"))
 
-# Takeeoff weight
-plot_MTO = plot(xlabel="Range (nmi)", ylabel="Takeoff Mass (Ton)", dpi=800)
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_MTO, range_lst[i][j], massTO_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_MTO, [range_lst[i][j][idx_R1_lst[i][j]]], [massTO_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_MTO, [range_lst[i][j][idx_R2_lst[i][j]]], [massTO_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+#### Plotting - Other Weight and Volumes (sanity check)
+# Emtpy weight
+p4 = plot(xlabel="Off-design Range (nmi)", ylabel="Empty Mass (Ton)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p4, results_cur[:range_nmi], results_cur[:massEmp_Ton], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p4, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:massEmp_Ton][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p4, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:massEmp_Ton][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_MTO, range_lst[i][j], massTOMax_lst[i][j], marker=:none, lw=0.5, label=false)
+savefig(p4, joinpath(save_dir_sub, "Empty.png"))
+
+# Takeoff weight
+p5 = plot(xlabel="Off-design Range (nmi)", ylabel="Takeoff Mass (Ton)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p5, results_cur[:range_nmi], results_cur[:massTO_Ton], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p5, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:massTO_Ton][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p5, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:massTO_Ton][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-savefig(plot_MTO, joinpath(save_dir_sub, "takeoff_mass_comparison.png"))
+savefig(p5, joinpath(save_dir_sub, "TakeoffWeight.png"))
 
-# Empty weight
-plot_mPay = plot(xlabel="Range (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_mPay, range_lst[i][j], massPay_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_mPay, [range_lst[i][j][idx_R1_lst[i][j]]], [massPay_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_mPay, [range_lst[i][j][idx_R2_lst[i][j]]], [massPay_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+#Fuel volume
+p6 = plot(xlabel="Off-design Range (nmi)", ylabel="Fuel Volume (m3)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p6, results_cur[:range_nmi], results_cur[:voluFuel_m3], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p6, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:voluFuel_m3][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p6, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:voluFuel_m3][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-savefig(plot_mPay, joinpath(save_dir_sub, "mass_payload_comparison.png"))
+savefig(p6, joinpath(save_dir_sub, "FuelVolume.png"))
 
-# Lift-to-drag ratio
-plot_LD = plot(xlabel="Range (nmi)", ylabel="Lift-to-drag at Cruise", dpi=800)
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_LD, range_lst[i][j], LD_cru_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_LD, [range_lst[i][j][idx_R1_lst[i][j]]], [LD_cru_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_LD, [range_lst[i][j][idx_R2_lst[i][j]]], [LD_cru_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+#### Plotting - Breguet Range Related
+# Flight Efficiency
+p7 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Lift-to-drag Ratio", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p7, results_cur[:range_nmi], results_cur[:LD_cru], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p7, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:LD_cru][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p7, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:LD_cru][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-savefig(plot_LD, joinpath(save_dir_sub, "Lift_to_drag_comparison.png"))
+savefig(p7, joinpath(save_dir_sub, "LD_Ratio.png"))
 
-# Engine total efficiency
-plot_etaEng = plot(xlabel="Range (nmi)", ylabel="Engine Total Efficiency at Cruise", dpi=800)
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_etaEng, range_lst[i][j], eta_tot_cru_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_etaEng, [range_lst[i][j][idx_R1_lst[i][j]]], [eta_tot_cru_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_etaEng, [range_lst[i][j][idx_R2_lst[i][j]]], [eta_tot_cru_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+# Engine Total Efficiency
+p8 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Engine Total Efficiency", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p8, results_cur[:range_nmi], results_cur[:eta_tot_cru], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p8, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:eta_tot_cru][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p8, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:eta_tot_cru][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-savefig(plot_etaEng, joinpath(save_dir_sub, "Engine_total_efficiency_comparison.png"))
+savefig(p8, joinpath(save_dir_sub, "eta_tot_Engine.png"))
 
-# Heating value
-plot_LHV = plot(xlabel="Range (nmi)", ylabel="Fuel Heating Value (J/kg)", dpi=800)
-for (i, keyword_cur) in enumerate(case_keywords)
-    for (j, des_range_cur) in enumerate(des_ranges)
-        plot!(plot_LHV, range_lst[i][j], LHV_lst[i][j], marker=:cross, lw=2, label=case_names[i]*"_$(round(Int,des_ranges[j]))")
-        # Mark down R1 R2
-        scatter!(plot_LHV, [range_lst[i][j][idx_R1_lst[i][j]]], [LHV_lst[i][j][idx_R1_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-        scatter!(plot_LHV, [range_lst[i][j][idx_R2_lst[i][j]]], [LHV_lst[i][j][idx_R2_lst[i][j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+# Fuel Heating Value (sanity check)
+p9 = plot(xlabel="Off-design Range (nmi)", ylabel="Fuel Heating Value (kg/J)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global il += 1
+        plot!(p9, results_cur[:range_nmi], results_cur[:LHV_Jkg], marker=:cross, lw=2, linestyle=linestyles[il], label=case_names[i]*"Baseline R2: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p9, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:LHV_Jkg][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p9, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:LHV_Jkg][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
     end
 end
-savefig(plot_LHV, joinpath(save_dir_sub, "Fuel_heating_value_comparison.png"))
+savefig(p9, joinpath(save_dir_sub, "Fuel_heating_value.png"))
 
-# Percentage range reduction
-plot_R1R2Red = plot(xlabel="Design Range (nmi)", ylabel="Change of Ranges WRT Baseline (%)", dpi=800)
-plot!(plot_R1R2Red, des_range_R1R2, frac_change_R1 .* 100.0, marker=:cross, lw=2, label="R1")
-plot!(plot_R1R2Red, des_range_R1R2, frac_change_R2 .* 100.0, marker=:cross, lw=2, label="R2")
-savefig(plot_R1R2Red, joinpath(save_dir_sub, "R1R2Change.png"))
+#### Plotting - Change between cases
+# Change of R1 and R2
+p10 = plot(xlabel="Baseline R2 Range (nmi)", ylabel="Range Reduction from Retrofitting (%)", dpi=800)
+scatter!(p10, R2[idx_base_R1R2,:], -frac_change_R1 .* 100.0, marker=:cross, ms=4, msw=2.5, label="R1 Reduction")
+scatter!(p10, R2[idx_base_R1R2,:], -frac_change_R2 .* 100.0, marker=:cross, ms=4, msw=2.5, label="R2 Reduction")
+savefig(p10, joinpath(save_dir_sub, "R1_R2_Change.png"))
 
-# PFEI Change
-plot_PFEI_Change = plot(xlabel="Range (nmi)", ylabel="Change of PFEI WRT Baseline (%)", dpi=800)
-plot!(plot_PFEI_Change,ylims=(-1, 25))
-for (i, des_range_cur) in enumerate(des_ranges)
-    plot!(plot_PFEI_Change, PFEI_ranges[i], PFEI_change[i] .* 100.0, marker=:cross, lw=2, label="$(round(Int,des_ranges[i]))")
-    # Mark down R1 R2
-    scatter!(plot_PFEI_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][1]]], [PFEI_change[i][PFEI_R1R2_idx[i][1]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-    scatter!(plot_PFEI_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][2]]], [PFEI_change[i][PFEI_R1R2_idx[i][2]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+# PFEI Increase
+p11 = plot(xlabel="Off-design Range (nmi)", ylabel="PFEI Increase from Retrofitting(%)", dpi=800)
+global il = 0
+for i in eachindex(des_ranges)
+    global il += 1
+    plot!(p11, ranges_PFEI[i], PFEI_change[i] .* 100.0, marker=:cross, lw=2, linestyle=linestyles[il], label="Baseline R2: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+    if !ismissing(R1Idx_PFEI[i])
+        # Mark down R1 R2 location
+        scatter!(p11, [ranges_PFEI[i][R1Idx_PFEI[i]]], [PFEI_change[i][R1Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(p11, [ranges_PFEI[i][R2Idx_PFEI[i]]], [PFEI_change[i][R2Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+    end
 end
-savefig(plot_PFEI_Change, joinpath(save_dir_sub, "PFEI_change.png"))
+savefig(p11, joinpath(save_dir_sub, "PFEI_Change.png"))
 
-# Flight Energy Change
-plot_Ene_Change = plot(xlabel="Range (nmi)", ylabel="Change of Flight Energy WRT Baseline (%)", dpi=800)
-plot!(plot_Ene_Change,ylims=(-1, 25))
-for (i, des_range_cur) in enumerate(des_ranges)
-    plot!(plot_Ene_Change, PFEI_ranges[i], energy_flight_change[i] .* 100.0, marker=:cross, lw=2, label="$(round(Int,des_ranges[i]))")
-    # Mark down R1 R2
-    scatter!(plot_Ene_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][1]]], [energy_flight_change[i][PFEI_R1R2_idx[i][1]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-    scatter!(plot_Ene_Change, [PFEI_ranges[i][PFEI_R1R2_idx[i][2]]], [energy_flight_change[i][PFEI_R1R2_idx[i][2]] * 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+# Flight Energy Increase
+p12 = plot(xlabel="Off-design Range (nmi)", ylabel="Flight Energy Increase from Retrofitting(%)", dpi=800)
+global il = 0
+for i in eachindex(des_ranges)
+    global il += 1
+    plot!(p12, ranges_PFEI[i], EneFli_change[i] .* 100.0, marker=:cross, lw=2, linestyle=linestyles[il], label="Baseline R2: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+    if !ismissing(R1Idx_PFEI[i])
+        # Mark down R1 R2 location
+        scatter!(p12, [ranges_PFEI[i][R1Idx_PFEI[i]]], [EneFli_change[i][R1Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+        scatter!(p12, [ranges_PFEI[i][R2Idx_PFEI[i]]], [EneFli_change[i][R2Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+    end
 end
-savefig(plot_Ene_Change, joinpath(save_dir_sub, "Ene_change.png"))
+savefig(p12, joinpath(save_dir_sub, "Flight_Energy_Change.png"))
