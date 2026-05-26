@@ -64,7 +64,7 @@ case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJe
 case_names    = ["Baseline", "Matched Baseline", "Retrofit"]
 model_dir     = "ModelSaved"
 des_ranges    = [3000] #float.(collect(300:100:3000)) #design range to compare (Has to be integer (No 0.1 nmi)) (nmi) Make sure all cases have these design ranges
-offdes_ranges = float.(collect(0:100:8000)) #Off-design ranges to search through (Has to be integer (No 0.1 nmi)) (can be wider than what are available)
+offdes_ranges = float.(collect(300:100:8000)) #Off-design ranges to search through (Has to be integer (No 0.1 nmi)) (can be wider than what are available)
 # For R1 and R2 calculation
 idx_R1R2Skip  = [2] #Case to skip R1 R2 determination
 idx_base_R1R2 = 1 #Index of the base case
@@ -82,7 +82,7 @@ save_name     = "Compare_Retrofit" #sub_folder will be created
 # const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :voluFuelMax_m3, :massTO_Ton, :massTOMax_Ton,
 #                         :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg)
 const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :massTO_Ton,
-                        :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J, :frac_rese, :rhoFuel_kgm3)
+                        :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J, :frac_rese, :rhoFuel_kgm3, :PFEI_cru_JJ, :range_cru_m)
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
@@ -141,6 +141,10 @@ for (i, keyword_cur) in enumerate(case_keywords)
 
             #### parameters for Breguet range
             frac_rese = ac_cur.parg[igfreserve] #W_reserveFuel / W_fuelburned
+            PFEI_cru = (LHV_cruise*(ac_cur.para[iafracW, ipcruise1, 2]-ac_cur.para[iafracW, ipcruise2, 2])*ac_cur.parg[igWMTO]/gee)/
+                       (ac_cur.parm[imWpay, 2] * ac_cur.parm[imRange, 2]) #Cruise Only PFEI (J/J)
+            range_cru = ac_cur.para[iaRange, ipcruise2, 2] - ac_cur.para[iaRange, ipcruise1, 2] #(m)
+            @assert range_cru>0.0 "Find a negative cruise range, likely range to short"
 
             ## store
             k += 1
@@ -156,6 +160,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
             results_cur[:EneFli_J][k] = energy_flight
             results_cur[:frac_rese][k] = frac_rese
             results_cur[:rhoFuel_kgm3][k] = rhoFuel
+            results_cur[:PFEI_cru_JJ][k] = PFEI_cru
+            results_cur[:range_cru_m][k] = range_cru
         end
         #### Trim the trailing missing
         for f in fields_to_read
@@ -236,13 +242,14 @@ for i in eachindex(des_ranges)
 end
 
 #### Use Breguet Range to calculate the PRD for checking
-const fields_breguet = (:range_Bre_nmi,:PFEI_Bre_JJ)
+const fields_breguet = (:range_Bre_nmi,:PFEI_Bre_JJ,:range_cru_Bre_nmi,:PFEI_cru_Bre_JJ)
 results_Bre = init_results(case_keywords, des_ranges, offdes_ranges, fields_breguet)
 for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         #### Use the parameter for each case compute a Breguet range counter part
         results_cur = results[i][j]
         results_Bre_cur = results_Bre[i][j]
+        # Full mission PFEI
         for k in eachindex(results_cur[:massPay_Ton])
             outDict   = Bre_off_des(results_cur[:range_nmi][k] * 1852.0, results_cur[:massPay_Ton][k] * 1000.0 * gee;
                                     LD=results_cur[:LD_cru][k], eta=results_cur[:eta_tot_cru][k], LHV_Jkg=results_cur[:LHV_Jkg][k],
@@ -255,6 +262,20 @@ for i in eachindex(case_keywords)
             @assert abs(massPay_Bre_Ton-results_cur[:massPay_Ton][k])<0.001 "Breguet computed payload mass is more than 1 kg different"
             results_Bre_cur[:range_Bre_nmi][k] = range_Bre_nmi
             results_Bre_cur[:PFEI_Bre_JJ][k] = outDict["PFEI_JJ_out"]
+        end
+        # Cruise only PFEI (Normalize still by full mission flight range)
+        for k in eachindex(results_cur[:massPay_Ton])
+            outDict   = Bre_off_des(results_cur[:range_cru_m][k], results_cur[:massPay_Ton][k] * 1000.0 * gee;
+                        LD=results_cur[:LD_cru][k], eta=results_cur[:eta_tot_cru][k], LHV_Jkg=results_cur[:LHV_Jkg][k],
+                        wEmp_N=results_cur[:massEmp_Ton][k] * 1000.0 * gee, rhoFuel_kgm3=results_cur[:rhoFuel_kgm3][k], frac_rese=results_cur[:frac_rese][k],
+                        wTO_Max_N=results_cur[:massTO_Ton][k] * 1000.0 * gee, wPay_Max_N=results_cur[:massPay_Ton][k] * 1000.0 * gee, volFuel_Max_m3=results_cur[:voluFuel_m3][k],
+                        gee=gee) #Due to cruise flight effciency use, it is believe the predicted missions requires less fuel and less TO weight.
+            massPay_Bre_Ton = outDict["wPay_N_out"] / gee / 1000.0
+            @assert abs(outDict["range_m_out"]-results_cur[:range_cru_m][k])<1 "Breguet computed range is different from requested"
+            @assert abs(massPay_Bre_Ton-results_cur[:massPay_Ton][k])<0.001 "Breguet computed payload mass is more than 1 kg different"
+            PFEI_cru_Bre_JJ = outDict["PFEI_JJ_out"]*results_cur[:range_cru_m][k]/(results_cur[:range_nmi][k] * 1852.0) #Renormalized by total flight range
+            results_Bre_cur[:range_cru_Bre_nmi][k] = outDict["range_m_out"] / 1852.0
+            results_Bre_cur[:PFEI_cru_Bre_JJ][k] = PFEI_cru_Bre_JJ
         end
         for f in fields_breguet #Cut off the missing part
             resize!(results_Bre_cur[f], length(results_cur[:massPay_Ton]))
@@ -304,6 +325,22 @@ for i in eachindex(case_keywords)
     end
 end
 savefig(p2, joinpath(save_dir_sub, "PFEI_Small.png"))
+if flg_plot_Breguet
+    # Plot cruise PFEI comparison with Breguet range prediction
+    p2_4 = plot(xlabel="Off-design Cruise Range (nmi)", ylabel="Cruise only PFEI (J/J)", dpi=800)
+    global il = 0
+    plot!(p2_4, xlims=(0.0,2000),ylims=(0.0, 1.5))
+    for i in eachindex(case_keywords)
+        for j in eachindex(des_ranges)
+            results_cur = results[i][j]
+            results_Bre_cur = results_Bre[i][j]
+            global il += 1
+            plot!(p2_4, results_cur[:range_cru_m] / 1852.0, results_cur[:PFEI_cru_JJ], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+            plot!(p2_4, results_Bre_cur[:range_cru_Bre_nmi], results_Bre_cur[:PFEI_cru_Bre_JJ], marker=:none, color=:black, lw=0.75, linestyle=linestyles[il], label="$(case_names[i]) (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        end
+    end
+    savefig(p2_4, joinpath(save_dir_sub, "PFEI_Cruise.png"))
+end
 
 # Large Flight Energy
 p2_5 = plot(xlabel="Off-design Range (nmi)", ylabel="Flight Energy (J)", dpi=800)
