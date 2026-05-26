@@ -74,6 +74,7 @@ idx_base_PFEI = 1
 idx_targ_PFEI = 3
 # For Breguet range plot
 flg_plot_Breguet = true
+idx_base_Breguet = 1 #Base case to fixed parameters from
 
 # Output directory
 save_dir      = "ModelProcessed"
@@ -242,7 +243,7 @@ for i in eachindex(des_ranges)
 end
 
 #### Use Breguet Range to calculate the PRD for checking
-const fields_breguet = (:range_Bre_nmi,:PFEI_Bre_JJ,:range_cru_Bre_nmi,:PFEI_cru_Bre_JJ)
+const fields_breguet = (:range_Bre_nmi,:PFEI_Bre_JJ,:range_cru_Bre_nmi,:PFEI_cru_Bre_JJ,:range_fix_Bre_nmi,:PFEI_fix_Bre_JJ)
 results_Bre = init_results(case_keywords, des_ranges, offdes_ranges, fields_breguet)
 for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
@@ -277,7 +278,25 @@ for i in eachindex(case_keywords)
             results_Bre_cur[:range_cru_Bre_nmi][k] = outDict["range_m_out"] / 1852.0
             results_Bre_cur[:PFEI_cru_Bre_JJ][k] = PFEI_cru_Bre_JJ
         end
-        for f in fields_breguet #Cut off the missing part
+        # Full mission PFEI with fixed parameters (Use the parameter from R2 of the base case)
+        results_fix = results[idx_base_Breguet][j]
+        idxR2_fix = R2Idx[idx_base_Breguet,j]
+        @assert !ismissing(idxR2_fix) # The base Breguet case has no R2
+        for k in eachindex(results_cur[:massPay_Ton])
+            outDict   = Bre_off_des(results_cur[:range_nmi][k] * 1852.0, results_cur[:massPay_Ton][k] * 1000.0 * gee;
+                                    LD=results_fix[:LD_cru][idxR2_fix], eta=results_fix[:eta_tot_cru][idxR2_fix], LHV_Jkg=results_fix[:LHV_Jkg][idxR2_fix],
+                                    wEmp_N=results_fix[:massEmp_Ton][idxR2_fix] * 1000.0 * gee, rhoFuel_kgm3=results_fix[:rhoFuel_kgm3][idxR2_fix], frac_rese=results_fix[:frac_rese][idxR2_fix],
+                                    wTO_Max_N=maximum(results_fix[:massTO_Ton]) * 1000.0 * gee, wPay_Max_N=maximum(results_fix[:massPay_Ton]) * 1000.0 * gee, volFuel_Max_m3=maximum(results_fix[:voluFuel_m3]),
+                                    gee=gee) #Due to cruise flight effciency use, it is believe the predicted missions requires less fuel and less TO weight.
+            range_fix_Bre_nmi = outDict["range_m_out"] / 1852.0
+            massPay_Bre_Ton = outDict["wPay_N_out"] / gee / 1000.0
+            @assert abs(range_fix_Bre_nmi-results_cur[:range_nmi][k])<1 "Breguet computed range is different from requested"
+            @assert abs(massPay_Bre_Ton-results_cur[:massPay_Ton][k])<0.001 "Breguet computed payload mass is more than 1 kg different"
+            results_Bre_cur[:range_fix_Bre_nmi][k] = range_fix_Bre_nmi
+            results_Bre_cur[:PFEI_fix_Bre_JJ][k] = outDict["PFEI_JJ_out"]
+        end
+        #Cut off the missing part
+        for f in fields_breguet
             resize!(results_Bre_cur[f], length(results_cur[:massPay_Ton]))
         end
     end
