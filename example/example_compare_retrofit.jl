@@ -67,8 +67,8 @@ function find_frac_change(results,idx_base,idx_targ,numDesRan,xSymb,ySymb)
     y_change = []
     for i in 1:numDesRan
         #### Extract the base and target case
-        results_base = results[idx_base]
-        results_targ = results[idx_targ]
+        results_base = results[idx_base][i]
+        results_targ = results[idx_targ][i]
         x_base = results_base[xSymb]
         x_targ = results_targ[xSymb]
         y_base = results_base[ySymb]
@@ -112,8 +112,6 @@ idx_constraints_Breguet = 1 #Index of case to obtain limiting parameters includi
 save_dir      = "ModelProcessed"
 save_name     = "Compare_Retrofit" #sub_folder will be created
 # Fields to read out
-# const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :voluFuelMax_m3, :massTO_Ton, :massTOMax_Ton,
-#                         :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg)
 const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :massTO_Ton,
                         :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J, :frac_rese, :rhoFuel_kgm3, :PFEI_cru_JJ, :range_cru_m)
 #### Save directory
@@ -312,74 +310,21 @@ if flg_plot_Breguet
 end
 
 #### Calculate fractional change of PFEI
-ranges_PFEI = []
-PFEI_change = []
-EneFli_change = []
 R1Idx_PFEI = []
 R2Idx_PFEI = []
+ranges_PFEI, PFEI_change = find_frac_change(results,idx_base_PFEI,idx_targ_PFEI,length(des_ranges),:range_nmi,:PFEI_JJ)
+_, EneFli_change = find_frac_change(results,idx_base_PFEI,idx_targ_PFEI,length(des_ranges),:range_nmi,:EneFli_J)
 for i in eachindex(des_ranges)
-    #### Extract the base and target case
-    results_base = results[idx_base_PFEI][i]
-    results_targ = results[idx_targ_PFEI][i]
-    # Extract and PFEI and range
-    range_base = results_base[:range_nmi]
-    range_targ = results_targ[:range_nmi]
-    PFEI_base  = results_base[:PFEI_JJ]
-    PFEI_targ  = results_targ[:PFEI_JJ]
-    EneFli_base = results_base[:EneFli_J]
-    EneFli_targ = results_targ[:EneFli_J]
-    # Filter the PFEI and range for common subset
-    min_range  = max(minimum(range_base),minimum(range_targ)) #common range bound (assume same spacing)
-    max_range  = min(maximum(range_base),maximum(range_targ))
-    msk_base   = (range_base .>= min_range) .& (range_base .<= max_range)
-    msk_targ   = (range_targ .>= min_range) .& (range_targ .<= max_range)
-    range_base = range_base[msk_base] 
-    PFEI_base  = PFEI_base[msk_base] 
-    EneFli_base = EneFli_base[msk_base]
-    range_targ = range_targ[msk_targ] 
-    PFEI_targ  = PFEI_targ[msk_targ]
-    EneFli_targ = EneFli_targ[msk_targ]
-    @assert round.(Int, range_base) == round.(Int, range_targ) "Base/target ranges do not match after filtering"
-
-    #### Calculate the changes
-    push!(ranges_PFEI, range_base)
-    push!(PFEI_change, (PFEI_targ .- PFEI_base) ./ PFEI_base)
-    push!(EneFli_change, (EneFli_targ .- EneFli_base) ./ EneFli_base)
-    
     #### Use the target R1 and R2 ranges to remap the current R1 R2 indices
     @assert !ismissing(R1[idx_targ_PFEI,i]) "Target case for PFEI change calculation has to have a R1 R2 indicator computed"
-    push!(R1Idx_PFEI, argmin(abs.(range_base .- R1[idx_targ_PFEI,i])))
-    push!(R2Idx_PFEI, argmin(abs.(range_base .- R2[idx_targ_PFEI,i])))
+    push!(R1Idx_PFEI, argmin(abs.(ranges_PFEI[i] .- R1[idx_targ_PFEI,i])))
+    push!(R2Idx_PFEI, argmin(abs.(ranges_PFEI[i] .- R2[idx_targ_PFEI,i])))
 end
 
 #### Calculate fractional change of PFEI from Breguet Range Analysis
 if flg_plot_Breguet
-    ranges_PFEI_Bre = [] #(nmi)
-    PFEI_change_Bre = [] #Change of constant coefficients Breguet PFEI between base and target
-    for i in eachindex(des_ranges)
-        #### Extract the base and target case
-        results_base_Bre = results_Bre[idx_base_PFEI][i] #Used for fixed coefficient base case
-        results_targ_Bre = results_Bre[idx_targ_PFEI][i] #Used for fixed coefficient target case
-        # Extract and PFEI and range
-        range_base_Bre = results_base_Bre[:range_fix_Bre_nmi]
-        range_targ_Bre = results_targ_Bre[:range_fix_Bre_nmi]
-        PFEI_base_Bre = results_base_Bre[:PFEI_fix_Bre_JJ]
-        PFEI_targ_Bre = results_targ_Bre[:PFEI_fix_Bre_JJ]
-        # Filter the PFEI and range for common subset
-        min_range  = max(minimum(range_base_Bre),minimum(range_targ_Bre)) #common range bound (assume same spacing)
-        max_range  = min(maximum(range_base_Bre),maximum(range_targ_Bre))
-        msk_base_Bre = (range_base_Bre .>= min_range) .& (range_base_Bre .<= max_range)
-        msk_targ_Bre = (range_targ_Bre .>= min_range) .& (range_targ_Bre .<= max_range)
-        range_base_Bre = range_base_Bre[msk_base_Bre]
-        range_targ_Bre = range_targ_Bre[msk_targ_Bre]
-        PFEI_base_Bre = PFEI_base_Bre[msk_base_Bre]
-        PFEI_targ_Bre = PFEI_targ_Bre[msk_targ_Bre]
-        @assert (round.(Int, range_base_Bre) == round.(Int, range_targ_Bre)) "Base/target ranges do not match after filtering"
-
-        #### Calculate the changes
-        push!(ranges_PFEI_Bre, range_base_Bre) #(nmi)
-        push!(PFEI_change_Bre, (PFEI_targ_Bre .- PFEI_base_Bre) ./ PFEI_base_Bre)
-    end
+    ranges_PFEI_Bre_Fix, PFEI_change_Bre_Fix = find_frac_change(results_Bre,idx_base_PFEI,idx_targ_PFEI,length(des_ranges),:range_fix_Bre_nmi,:PFEI_fix_Bre_JJ)
+    ranges_PFEI_Bre_Var, PFEI_change_Bre_Var = find_frac_change(results_Bre,idx_base_PFEI,idx_targ_PFEI,length(des_ranges),:range_Bre_nmi,:PFEI_Bre_JJ)
 end
 
 #### Plotting - PFEI and energy
@@ -600,7 +545,8 @@ for i in eachindex(des_ranges)
         scatter!(p5_2, [ranges_PFEI[i][R2Idx_PFEI[i]]], [PFEI_change[i][R2Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
     end
     if flg_plot_Breguet
-        plot!(p5_2, ranges_PFEI_Bre[i], PFEI_change_Bre[i] .* 100.0, marker=:none, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="Fixed Parameters (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+        plot!(p5_2, ranges_PFEI_Bre_Fix[i], PFEI_change_Bre_Fix[i] .* 100.0, marker=:none, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="Fixed Parameters (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+        plot!(p5_2, ranges_PFEI_Bre_Var[i], PFEI_change_Bre_Var[i] .* 100.0, marker=:none, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="Variable Parameters (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
     end
 end
 savefig(p5_2, joinpath(save_dir_sub, "PFEI_Change.png"))
