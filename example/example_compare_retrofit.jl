@@ -74,7 +74,7 @@ idx_base_PFEI = 1
 idx_targ_PFEI = 3
 # For Breguet range plot
 flg_plot_Breguet = true
-idx_base_Breguet = 1 #Base case to fixed parameters from
+idx_constraints_Breguet = 1 #Index of case to obtain limiting parameters including fuel volume, maximum takeoff weight, and maximum payload weight
 
 # Output directory
 save_dir      = "ModelProcessed"
@@ -238,26 +238,42 @@ if flg_plot_Breguet
                 results_Bre_cur[:range_cru_Bre_nmi][k] = outDict["range_m_out"] / 1852.0
                 results_Bre_cur[:PFEI_cru_Bre_JJ][k] = PFEI_cru_Bre_JJ
             end
-            # Full mission PFEI with fixed parameters (Use the parameter from R2 of the base case)
-            results_fix = results[idx_base_Breguet][j]
-            idxR2_fix = R2Idx[idx_base_Breguet,j]
-            @assert !ismissing(idxR2_fix) # The base Breguet case has no R2
-            for k in eachindex(results_cur[:massPay_Ton])
-                outDict   = Bre_off_des(results_cur[:range_nmi][k] * 1852.0, results_cur[:massPay_Ton][k] * 1000.0 * gee;
-                                        LD=results_fix[:LD_cru][idxR2_fix], eta=results_fix[:eta_tot_cru][idxR2_fix], LHV_Jkg=results_fix[:LHV_Jkg][idxR2_fix],
-                                        wEmp_N=results_fix[:massEmp_Ton][idxR2_fix] * 1000.0 * gee, rhoFuel_kgm3=results_fix[:rhoFuel_kgm3][idxR2_fix], frac_rese=results_fix[:frac_rese][idxR2_fix],
-                                        wTO_Max_N=maximum(results_fix[:massTO_Ton]) * 1000.0 * gee, wPay_Max_N=maximum(results_fix[:massPay_Ton]) * 1000.0 * gee, volFuel_Max_m3=maximum(results_fix[:voluFuel_m3]),
-                                        gee=gee) #Due to cruise flight effciency use, it is believe the predicted missions requires less fuel and less TO weight.
-                range_fix_Bre_nmi = outDict["range_m_out"] / 1852.0
-                massPay_Bre_Ton = outDict["wPay_N_out"] / gee / 1000.0
-                @assert abs(range_fix_Bre_nmi-results_cur[:range_nmi][k])<1 "Breguet computed range is different from requested"
-                @assert abs(massPay_Bre_Ton-results_cur[:massPay_Ton][k])<0.001 "Breguet computed payload mass is more than 1 kg different"
-                results_Bre_cur[:range_fix_Bre_nmi][k] = range_fix_Bre_nmi
-                results_Bre_cur[:PFEI_fix_Bre_JJ][k] = outDict["PFEI_JJ_out"]
-            end
             #Cut off the missing part
             for f in fields_breguet
                 resize!(results_Bre_cur[f], length(results_cur[:massPay_Ton]))
+            end
+        end
+    end
+    #### Use fixed parameters to compute Breguet range performance
+    for i in eachindex(case_keywords)
+        for j in eachindex(des_ranges)
+            results_cur = results[i][j]
+            results_fix = results[idx_base_PFEI][j]
+            results_lim = results[idx_constraints_Breguet][j] #Case to extract aircraft limitations
+            results_Bre_cur = results_Bre[i][j]
+            idxOD_fix = argmin(results_fix[:PFEI_JJ]) #Index of the off-design range for the fixed case where parameter will be extracted
+            global kend = length(results_cur[:massPay_Ton])
+            for k in eachindex(results_cur[:massPay_Ton])
+                outDict   = Bre_off_des(results_cur[:range_nmi][k] * 1852.0, results_cur[:massPay_Ton][k] * 1000.0 * gee;
+                                        LD=results_fix[:LD_cru][idxOD_fix], eta=results_fix[:eta_tot_cru][idxOD_fix], LHV_Jkg=results_cur[:LHV_Jkg][k],
+                                        wEmp_N=results_fix[:massEmp_Ton][idxOD_fix] * 1000.0 * gee, rhoFuel_kgm3=results_cur[:rhoFuel_kgm3][k], frac_rese=results_fix[:frac_rese][idxOD_fix],
+                                        wTO_Max_N=maximum(results_lim[:massTO_Ton]) * 1000.0 * gee, wPay_Max_N=maximum(results_lim[:massPay_Ton]) * 1000.0 * gee, volFuel_Max_m3=maximum(results_lim[:voluFuel_m3]),
+                                        gee=gee) #Due to cruise flight effciency use, it is believe the predicted missions requires less fuel and less TO weight.
+                range_fix_Bre_nmi = outDict["range_m_out"] / 1852.0
+                massPay_Bre_Ton = outDict["wPay_N_out"] / gee / 1000.0
+                (abs(massPay_Bre_Ton-results_cur[:massPay_Ton][k]) < 0.001) || println("Warning: Breguet range leads to change in payload range, probably limited by flight efficiency")
+                if range_fix_Bre_nmi > 0
+                    results_Bre_cur[:range_fix_Bre_nmi][k] = range_fix_Bre_nmi
+                    results_Bre_cur[:PFEI_fix_Bre_JJ][k] = outDict["PFEI_JJ_out"]
+                else
+                    global kend = k-1
+                    println("Warning: Breguet range infeasible solution at $(results_cur[:range_nmi][k]) nmi")
+                    break
+                end
+            end
+            #Cut off the missing part just for this fixed parameter calculation
+            for f in (:range_fix_Bre_nmi,:PFEI_fix_Bre_JJ)
+                resize!(results_Bre_cur[f], kend)
             end
         end
     end
@@ -302,6 +318,36 @@ for i in eachindex(des_ranges)
     @assert !ismissing(R1[idx_targ_PFEI,i]) "Target case for PFEI change calculation has to have a R1 R2 indicator computed"
     push!(R1Idx_PFEI, argmin(abs.(range_base .- R1[idx_targ_PFEI,i])))
     push!(R2Idx_PFEI, argmin(abs.(range_base .- R2[idx_targ_PFEI,i])))
+end
+
+#### Calculate fractional change of PFEI from Breguet Range Analysis
+if flg_plot_Breguet
+    ranges_PFEI_Bre = [] #(nmi)
+    PFEI_change_Bre = [] #Change of constant coefficients Breguet PFEI between base and target
+    for i in eachindex(des_ranges)
+        #### Extract the base and target case
+        results_base_Bre = results_Bre[idx_base_PFEI][i] #Used for fixed coefficient base case
+        results_targ_Bre = results_Bre[idx_targ_PFEI][i] #Used for fixed coefficient target case
+        # Extract and PFEI and range
+        range_base_Bre = results_base_Bre[:range_fix_Bre_nmi]
+        range_targ_Bre = results_targ_Bre[:range_fix_Bre_nmi]
+        PFEI_base_Bre = results_base_Bre[:PFEI_fix_Bre_JJ]
+        PFEI_targ_Bre = results_targ_Bre[:PFEI_fix_Bre_JJ]
+        # Filter the PFEI and range for common subset
+        min_range  = max(minimum(range_base_Bre),minimum(range_targ_Bre)) #common range bound (assume same spacing)
+        max_range  = min(maximum(range_base_Bre),maximum(range_targ_Bre))
+        msk_base_Bre = (range_base_Bre .>= min_range) .& (range_base_Bre .<= max_range)
+        msk_targ_Bre = (range_targ_Bre .>= min_range) .& (range_targ_Bre .<= max_range)
+        range_base_Bre = range_base_Bre[msk_base_Bre]
+        range_targ_Bre = range_targ_Bre[msk_targ_Bre]
+        PFEI_base_Bre = PFEI_base_Bre[msk_base_Bre]
+        PFEI_targ_Bre = PFEI_targ_Bre[msk_targ_Bre]
+        @assert (round.(Int, range_base_Bre) == round.(Int, range_targ_Bre)) "Base/target ranges do not match after filtering"
+
+        #### Calculate the changes
+        push!(ranges_PFEI_Bre, range_base_Bre) #(nmi)
+        push!(PFEI_change_Bre, (PFEI_targ_Bre .- PFEI_base_Bre) ./ PFEI_base_Bre)
+    end
 end
 
 #### Plotting - PFEI and energy
@@ -511,6 +557,7 @@ savefig(p5_1, joinpath(save_dir_sub, "R1_R2_Change.png"))
 
 # PFEI Increase
 p5_2 = plot(xlabel="Off-design Range (nmi)", ylabel="PFEI Increase from Retrofitting(%)", dpi=800)
+# plot!(p5_2,ylims=(-1, 25))
 global il = 0
 for i in eachindex(des_ranges)
     global il += 1
@@ -519,6 +566,9 @@ for i in eachindex(des_ranges)
         # Mark down R1 R2 location
         scatter!(p5_2, [ranges_PFEI[i][R1Idx_PFEI[i]]], [PFEI_change[i][R1Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
         scatter!(p5_2, [ranges_PFEI[i][R2Idx_PFEI[i]]], [PFEI_change[i][R2Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+    end
+    if flg_plot_Breguet
+        plot!(p5_2, ranges_PFEI_Bre[i], PFEI_change_Bre[i] .* 100.0, marker=:none, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="Fixed Parameters (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
     end
 end
 savefig(p5_2, joinpath(save_dir_sub, "PFEI_Change.png"))
