@@ -95,7 +95,7 @@ end
 case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
 case_names    = ["Baseline", "Matched Baseline", "Retrofit"]
 model_dir     = "ModelSaved"
-des_ranges    = [3000] #float.(collect(300:100:3000)) #design range to compare (Has to be integer (No 0.1 nmi)) (nmi) Make sure all cases have these design ranges
+des_ranges    = float.(collect(300:100:3000)) #float.(collect(300:100:3000)) #design range to compare (Has to be integer (No 0.1 nmi)) (nmi) Make sure all cases have these design ranges
 offdes_ranges = float.(collect(300:100:8000)) #Off-design ranges to search through (Has to be integer (No 0.1 nmi)) (can be wider than what are available)
 # For R1 and R2 calculation
 idx_R1R2Skip  = [2] #Case to skip R1 R2 determination
@@ -529,8 +529,8 @@ savefig(p4_3, joinpath(save_dir_sub, "Fuel_heating_value.png"))
 # Change of R1 and R2
 p5_1 = plot(xlabel="Baseline R2 Range (nmi)", ylabel="Range Reduction from Retrofitting (%)", dpi=800)
 mskValid = R1Idx[idx_targ_R1R2,:] .> 1
-scatter!(p5_1, R2[idx_base_R1R2,:][mskValid], -frac_change_R1[mskValid] .* 100.0, marker=:cross, ms=4, msw=2.5, label="R1 Reduction")
-scatter!(p5_1, R2[idx_base_R1R2,:][mskValid], -frac_change_R2[mskValid] .* 100.0, marker=:diamond, ms=4, msw=2.5, label="R2 Reduction")
+scatter!(p5_1, R2[idx_base_R1R2,:][mskValid], -frac_change_R1[mskValid] .* 100.0, marker=:circle, ms=4, msw=0.0, label="R1 Reduction")
+scatter!(p5_1, R2[idx_base_R1R2,:][mskValid], -frac_change_R2[mskValid] .* 100.0, marker=:diamond, ms=4, msw=0.0, label="R2 Reduction")
 savefig(p5_1, joinpath(save_dir_sub, "R1_R2_Change.png"))
 
 # PFEI Increase
