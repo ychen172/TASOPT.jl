@@ -394,21 +394,21 @@ end
 savefig(p1_2, joinpath(save_dir_sub, "PFEI_Small.png"))
 
 # Plot cruise PFEI comparison with Breguet range prediction
-if flg_plot_Breguet
-    p1_3 = plot(xlabel="Off-design Cruise Range (nmi)", ylabel="Cruise only PFEI (J/J)", dpi=800)
-    global il = 0
-    plot!(p1_3, xlims=(0.0,2000),ylims=(0.0, 1.5))
-    for i in eachindex(case_keywords)
-        for j in eachindex(des_ranges)
-            results_cur = results[i][j]
+p1_3 = plot(xlabel="Off-design Cruise Range (nmi)", ylabel="Cruise only PFEI (J/J)", dpi=800)
+global il = 0
+plot!(p1_3, xlims=(0.0,2000),ylims=(0.0, 1.5))
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        global il += 1
+        results_cur = results[i][j]
+        plot!(p1_3, results_cur[:range_cru_m] / 1852.0, results_cur[:PFEI_cru_JJ], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if flg_plot_Breguet
             results_Bre_cur = results_Bre[i][j]
-            global il += 1
-            plot!(p1_3, results_cur[:range_cru_m] / 1852.0, results_cur[:PFEI_cru_JJ], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
             plot!(p1_3, results_Bre_cur[:range_cru_Bre_nmi], results_Bre_cur[:PFEI_cru_Bre_JJ], marker=:none, color=:black, lw=0.75, linestyle=linestyles[il], label="$(case_names[i]) (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         end
     end
-    savefig(p1_3, joinpath(save_dir_sub, "PFEI_Cruise.png"))
 end
+savefig(p1_3, joinpath(save_dir_sub, "PFEI_Cruise.png"))
 
 # Large Flight Energy
 p1_4 = plot(xlabel="Off-design Range (nmi)", ylabel="Flight Energy (J)", dpi=800)
