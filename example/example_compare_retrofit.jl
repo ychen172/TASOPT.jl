@@ -528,8 +528,9 @@ savefig(p4_3, joinpath(save_dir_sub, "Fuel_heating_value.png"))
 #### Plotting - Change between cases
 # Change of R1 and R2
 p5_1 = plot(xlabel="Baseline R2 Range (nmi)", ylabel="Range Reduction from Retrofitting (%)", dpi=800)
-scatter!(p5_1, R2[idx_base_R1R2,:], -frac_change_R1 .* 100.0, marker=:cross, ms=4, msw=2.5, label="R1 Reduction")
-scatter!(p5_1, R2[idx_base_R1R2,:], -frac_change_R2 .* 100.0, marker=:cross, ms=4, msw=2.5, label="R2 Reduction")
+mskValid = R1Idx[idx_targ_R1R2,:] .> 1
+scatter!(p5_1, R2[idx_base_R1R2,:][mskValid], -frac_change_R1[mskValid] .* 100.0, marker=:cross, ms=4, msw=2.5, label="R1 Reduction")
+scatter!(p5_1, R2[idx_base_R1R2,:][mskValid], -frac_change_R2[mskValid] .* 100.0, marker=:diamond, ms=4, msw=2.5, label="R2 Reduction")
 savefig(p5_1, joinpath(save_dir_sub, "R1_R2_Change.png"))
 
 # PFEI Increase
