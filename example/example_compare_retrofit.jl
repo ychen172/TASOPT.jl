@@ -7,6 +7,8 @@ using TASOPT
 using DataFrames, CSV
 include(__TASOPTindices__)
 using Plots
+include(joinpath(@__DIR__,"Breguet_range_solve_offdes.jl"))
+using .Breguet: Bre_off_des
 
 # Other constants
 epsR1R2 = 0.005
@@ -70,6 +72,8 @@ idx_targ_R1R2 = 3 #Index of the target case
 # For PFEI comparison
 idx_base_PFEI = 1
 idx_targ_PFEI = 3
+# For Breguet range plot
+flg_plot_Breguet = true
 
 # Output directory
 save_dir      = "ModelProcessed"
@@ -78,7 +82,7 @@ save_name     = "Compare_Retrofit" #sub_folder will be created
 # const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :voluFuelMax_m3, :massTO_Ton, :massTOMax_Ton,
 #                         :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg)
 const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :massTO_Ton,
-                        :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J)
+                        :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J, :frac_rese, :rhoFuel_kgm3)
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
@@ -135,6 +139,9 @@ for (i, keyword_cur) in enumerate(case_keywords)
             #### derived data
             energy_flight = PFEI_cur * massPayload * (1000.0 * gee * 1852.0) * range_cur #(J) total flight energy 
 
+            #### parameters for Breguet range
+            frac_rese = ac_cur.parg[igfreserve] #W_reserveFuel / W_fuelburned
+
             ## store
             k += 1
             results_cur[:range_nmi][k] = range_cur
@@ -147,6 +154,8 @@ for (i, keyword_cur) in enumerate(case_keywords)
             results_cur[:eta_tot_cru][k] = eta_total_cruise
             results_cur[:LHV_Jkg][k] = LHV_cruise
             results_cur[:EneFli_J][k] = energy_flight
+            results_cur[:frac_rese][k] = frac_rese
+            results_cur[:rhoFuel_kgm3][k] = rhoFuel
         end
         #### Trim the trailing missing
         for f in fields_to_read
@@ -226,9 +235,36 @@ for i in eachindex(des_ranges)
     push!(R2Idx_PFEI, argmin(abs.(range_base .- R2[idx_targ_PFEI,i])))
 end
 
+#### Use Breguet Range to calculate the PRD for checking
+const fields_breguet = (:range_Bre_nmi,:PFEI_Bre_JJ)
+results_Bre = init_results(case_keywords, des_ranges, offdes_ranges, fields_breguet)
+for i in eachindex(case_keywords)
+    for j in eachindex(des_ranges)
+        #### Use the parameter for each case compute a Breguet range counter part
+        results_cur = results[i][j]
+        results_Bre_cur = results_Bre[i][j]
+        for k in eachindex(results_cur[:massPay_Ton])
+            outDict   = Bre_off_des(results_cur[:range_nmi][k] * 1852.0, results_cur[:massPay_Ton][k] * 1000.0 * gee;
+                                    LD=results_cur[:LD_cru][k], eta=results_cur[:eta_tot_cru][k], LHV_Jkg=results_cur[:LHV_Jkg][k],
+                                    wEmp_N=results_cur[:massEmp_Ton][k] * 1000.0 * gee, rhoFuel_kgm3=results_cur[:rhoFuel_kgm3][k], frac_rese=results_cur[:frac_rese][k],
+                                    wTO_Max_N=results_cur[:massTO_Ton][k] * 1000.0 * gee, wPay_Max_N=results_cur[:massPay_Ton][k] * 1000.0 * gee, volFuel_Max_m3=results_cur[:voluFuel_m3][k],
+                                    gee=gee) #Due to cruise flight effciency use, it is believe the predicted missions requires less fuel and less TO weight.
+            range_Bre_nmi = outDict["range_m_out"] / 1852.0
+            massPay_Bre_Ton = outDict["wPay_N_out"] / gee / 1000.0
+            @assert abs(range_Bre_nmi-results_cur[:range_nmi][k])<1 "Breguet computed range is different from requested"
+            @assert abs(massPay_Bre_Ton-results_cur[:massPay_Ton][k])<0.001 "Breguet computed payload mass is more than 1 kg different"
+            results_Bre_cur[:range_Bre_nmi][k] = range_Bre_nmi
+            results_Bre_cur[:PFEI_Bre_JJ][k] = outDict["PFEI_JJ_out"]
+        end
+        for f in fields_breguet #Cut off the missing part
+            resize!(results_Bre_cur[f], length(results_cur[:massPay_Ton]))
+        end
+    end
+end
 
 #### Plotting - PFEI and energy
-linestyles = [:solid, :dash, :dot, :dashdot, :dashdotdot]
+linestyles = repeat([:solid, :dash, :dot, :dashdot, :dashdotdot],1000)
+linecolors = repeat([:blue, :red, :green, :orange, :purple],1000)
 # Large PFEI
 p1 = plot(xlabel="Off-design Range (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
 global il = 0
@@ -236,11 +272,15 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p1, results_cur[:range_nmi], results_cur[:PFEI_JJ], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p1, results_cur[:range_nmi], results_cur[:PFEI_JJ], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p1, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:PFEI_JJ][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
             scatter!(p1, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:PFEI_JJ][R2Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
+        if flg_plot_Breguet
+            results_Bre_cur = results_Bre[i][j]
+            plot!(p1, results_Bre_cur[:range_Bre_nmi], results_Bre_cur[:PFEI_Bre_JJ], marker=:none, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="$(case_names[i]) (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         end
     end
 end
@@ -255,7 +295,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p2, results_cur[:range_nmi], results_cur[:PFEI_JJ], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p2, results_cur[:range_nmi], results_cur[:PFEI_JJ], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p2, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:PFEI_JJ][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -272,7 +312,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p2_5, results_cur[:range_nmi], results_cur[:EneFli_J], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p2_5, results_cur[:range_nmi], results_cur[:EneFli_J], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p2_5, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:EneFli_J][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -289,7 +329,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p3, results_cur[:range_nmi], results_cur[:massPay_Ton], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p3, results_cur[:range_nmi], results_cur[:massPay_Ton], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p3, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:massPay_Ton][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -307,7 +347,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p4, results_cur[:range_nmi], results_cur[:massEmp_Ton], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p4, results_cur[:range_nmi], results_cur[:massEmp_Ton], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p4, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:massEmp_Ton][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -324,7 +364,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p5, results_cur[:range_nmi], results_cur[:massTO_Ton], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p5, results_cur[:range_nmi], results_cur[:massTO_Ton], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p5, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:massTO_Ton][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -341,7 +381,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p6, results_cur[:range_nmi], results_cur[:voluFuel_m3], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p6, results_cur[:range_nmi], results_cur[:voluFuel_m3], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p6, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:voluFuel_m3][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -359,7 +399,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p7, results_cur[:range_nmi], results_cur[:LD_cru], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p7, results_cur[:range_nmi], results_cur[:LD_cru], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p7, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:LD_cru][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -376,7 +416,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p8, results_cur[:range_nmi], results_cur[:eta_tot_cru], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p8, results_cur[:range_nmi], results_cur[:eta_tot_cru], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p8, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:eta_tot_cru][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -393,7 +433,7 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global il += 1
-        plot!(p9, results_cur[:range_nmi], results_cur[:LHV_Jkg], marker=:cross, lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p9, results_cur[:range_nmi], results_cur[:LHV_Jkg], marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
             scatter!(p9, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:LHV_Jkg][R1Idx[i,j]]], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -415,7 +455,7 @@ p11 = plot(xlabel="Off-design Range (nmi)", ylabel="PFEI Increase from Retrofitt
 global il = 0
 for i in eachindex(des_ranges)
     global il += 1
-    plot!(p11, ranges_PFEI[i], PFEI_change[i] .* 100.0, marker=:cross, lw=2, linestyle=linestyles[il], label="R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+    plot!(p11, ranges_PFEI[i], PFEI_change[i] .* 100.0, marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
     if !ismissing(R1Idx_PFEI[i])
         # Mark down R1 R2 location
         scatter!(p11, [ranges_PFEI[i][R1Idx_PFEI[i]]], [PFEI_change[i][R1Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
@@ -429,7 +469,7 @@ p12 = plot(xlabel="Off-design Range (nmi)", ylabel="Flight Energy Increase from 
 global il = 0
 for i in eachindex(des_ranges)
     global il += 1
-    plot!(p12, ranges_PFEI[i], EneFli_change[i] .* 100.0, marker=:cross, lw=2, linestyle=linestyles[il], label="R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+    plot!(p12, ranges_PFEI[i], EneFli_change[i] .* 100.0, marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
     if !ismissing(R1Idx_PFEI[i])
         # Mark down R1 R2 location
         scatter!(p12, [ranges_PFEI[i][R1Idx_PFEI[i]]], [EneFli_change[i][R1Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
