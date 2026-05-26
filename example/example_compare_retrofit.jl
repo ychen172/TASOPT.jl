@@ -58,6 +58,38 @@ function init_results(case_keywords, des_ranges, offdes_ranges, fields_to_read)
     )
 end
 
+function find_frac_change(results,idx_base,idx_targ,numDesRan,xSymb,ySymb)
+    #results: case*desRan*symb*offdes
+    #idx_base,idx_targ: cases
+    #numDesRan: number of design range
+    #xSymb,ySymb: symbols to find difference, Ex. x: range, y: PFEI
+    x_common = []
+    y_change = []
+    for i in 1:numDesRan
+        #### Extract the base and target case
+        results_base = results[idx_base]
+        results_targ = results[idx_targ]
+        x_base = results_base[xSymb]
+        x_targ = results_targ[xSymb]
+        y_base = results_base[ySymb]
+        y_targ = results_targ[ySymb]
+        #### Filter out the common cases using x
+        minx = max(minimum(x_base),minimum(x_targ))
+        maxx = min(maximum(x_base),maximum(x_targ))
+        msk_base = (x_base .>= minx) .& (x_base .<= maxx)
+        msk_targ = (x_targ .>= minx) .& (x_targ .<= maxx)
+        x_base = x_base[msk_base]
+        x_targ = x_targ[msk_targ]
+        y_base = y_base[msk_base]
+        y_targ = y_targ[msk_targ]
+        @assert (round.(Int, x_base) == round.(Int, x_targ)) "Base$(x_base)/target$(x_targ) x do not match after filtering"
+        #### Calculate the change
+        push!(x_common, x_base)
+        push!(y_change, (y_targ .- y_base) ./ y_base)
+    end
+    return x_common,y_change
+end
+
 #### Setup IO
 # Input case names
 case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
