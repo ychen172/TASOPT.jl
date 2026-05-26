@@ -102,7 +102,7 @@ idx_R1R2Skip  = [2] #Case to skip R1 R2 determination
 idx_base_R1R2 = 1 #Index of the base case
 idx_targ_R1R2 = 3 #Index of the target case
 # For PFEI comparison
-idx_base_PFEI = 1
+idx_base_PFEI = 2
 idx_targ_PFEI = 3
 # For Breguet range plot
 flg_plot_Breguet = true
@@ -509,7 +509,7 @@ end
 savefig(p4_2, joinpath(save_dir_sub, "eta_tot_Engine.png"))
 
 # Fuel Heating Value (sanity check)
-p4_3 = plot(xlabel="Off-design Range (nmi)", ylabel="Fuel Heating Value (kg/J)", dpi=800)
+p4_3 = plot(xlabel="Off-design Range (nmi)", ylabel="Fuel Heating Value (J/kg)", dpi=800)
 global il = 0
 for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
@@ -538,15 +538,15 @@ p5_2 = plot(xlabel="Off-design Range (nmi)", ylabel="PFEI Increase from Retrofit
 global il = 0
 for i in eachindex(des_ranges)
     global il += 1
-    plot!(p5_2, ranges_PFEI[i], PFEI_change[i] .* 100.0, marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+    plot!(p5_2, ranges_PFEI[i], PFEI_change[i] .* 100.0, marker=:cross, color=linecolors[il], lw=2, linestyle=linestyles[il], label="Variable Parameters R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
     if !ismissing(R1Idx_PFEI[i])
         # Mark down R1 R2 location
         scatter!(p5_2, [ranges_PFEI[i][R1Idx_PFEI[i]]], [PFEI_change[i][R1Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
         scatter!(p5_2, [ranges_PFEI[i][R2Idx_PFEI[i]]], [PFEI_change[i][R2Idx_PFEI[i]] .* 100.0], marker=:cross, ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
     end
     if flg_plot_Breguet
-        plot!(p5_2, ranges_PFEI_Bre_Fix[i], PFEI_change_Bre_Fix[i] .* 100.0, marker=:none, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="Fixed Parameters (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
-        plot!(p5_2, ranges_PFEI_Bre_Var[i], PFEI_change_Bre_Var[i] .* 100.0, marker=:none, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="Variable Parameters (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+        plot!(p5_2, ranges_PFEI_Bre_Fix[i], PFEI_change_Bre_Fix[i] .* 100.0, marker=:diamond, ms=3, msw=0, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="Fixed Parameters (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
+        plot!(p5_2, ranges_PFEI_Bre_Var[i], PFEI_change_Bre_Var[i] .* 100.0, marker=:utriangle, ms=3, msw=0, color=linecolors[il], lw=0.75, linestyle=linestyles[il], label="Variable Parameters (Breguet), R₂: $(round(Int,R2[idx_base_R1R2,i])) nmi")
     end
 end
 savefig(p5_2, joinpath(save_dir_sub, "PFEI_Change.png"))
