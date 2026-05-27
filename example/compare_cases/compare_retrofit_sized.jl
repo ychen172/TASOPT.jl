@@ -320,13 +320,6 @@ linestyles = repeat([:solid, :dash, :dot, :dashdot, :dashdotdot],1000)
 linecolors = repeat([:blue, :red, :green, :orange, :purple],1000)
 markers = repeat([:rect, :circle, :diamond, :utriangle, :dtriangle],1000)
 # Plot PFEI
-
-(:range_nmi,   :PFEI_JJ, :massTO_Ton, :massFuelTot_Ton, :massPayload_Ton,
-                :massEmpty_Ton, :rhoFuel_kgm3,  :volFuel_m3, :LD_cru, :LHV_cru_Jkg, :TSFC_cru_kgsN,
-                :vel_cru_ms, :eta_total_cru, :ene_fli_J, :frac_rese, :PFEI_cru_JJ, :range_cru_m,
-                :eta_therm_cru, :spe_power_cru_Jkg, :eta_propu_cru, :OPR_cru, :Tt_turbin_cru_K)
-
-
 p1_1 = plot(xlabel="Ranges (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
 global il = 1
 plot!(p1_1, results_sized[:range_nmi], results_sized[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Redesigned Aircratft")
@@ -337,7 +330,15 @@ for i in eachindex(des_range_retro)
 end
 savefig(p1_1, joinpath(save_dir_sub, "PFEI.png"))
 
-
+p1_2 = plot(xlabel="Ranges (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
+global il = 1
+plot!(p1_2, results_sized[:range_nmi], results_sized[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Redesigned Aircratft")
+for i in eachindex(des_range_retro)
+    global il += 1
+    results_retro_cur = results_retro[i]
+    plot!(p1_2, results_retro_cur[:range_nmi], results_retro_cur[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft")
+end
+savefig(p1_2, joinpath(save_dir_sub, "mass_pay.png"))
 
 # #### Identify the R1 and R2 for each case and each design range
 # R1 = fill!(Matrix{Union{Missing,Float64}}(undef,length(case_keywords),length(des_ranges)), missing)
