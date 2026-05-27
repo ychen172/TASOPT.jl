@@ -184,6 +184,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
             etaTherm_cru = Float64[]
             spePower_cru = Float64[]
             etaPropu_cru = Float64[]
+            OPR_cru = Float64[]
             for phase in [ipcruise1,ipcruise2]
                 ff_cru = ac_cur.pare[ieff, phase, 2] #mdot_fuel / mdot_core
                 BPR_cru = ac_cur.pare[ieBPR, phase, 2] #mdot_BP / mdot_core
@@ -206,14 +207,15 @@ for (i, keyword_cur) in enumerate(case_keywords)
                             0.5*mass_core_cru*(1.0 + BPR_cru)*u_inf_cru^2 + 
                             (p_coreExh_cru-p_inf_cru)*A_coreExh_cru*u_coreExh_cru +
                             (p_fanExh_cru-p_inf_cru)*A_fanExh_cru*u_fanExh_cru #Jet power (J/s)
+                push!(OPR_cru, ac_cur.pare[iepid, phase, 2]*ac_cur.pare[iepif, phase, 2]*ac_cur.pare[iepilc, phase, 2]*ac_cur.pare[iepihc, phase, 2])
                 push!(etaTherm_cru, P_Jet_cru/(mass_core_cru*ff_cru*LHV_cru)) #Thermal efficiency
                 push!(spePower_cru, P_Jet_cru/(mass_core_cru*(1.0+ff_cru+BPR_cru)-mass_offtake_cru)) #J/kg
                 push!(etaPropu_cru, (Thrust_cru*u_inf_cru)/P_Jet_cru)
             end
             spePower_cru = mean(spePower_cru) #J/kg
             etaTherm_cru = mean(etaTherm_cru)
-            etaPropu_cru = mean(etaPropu_cru)
-            OPR_cru = 0.5*(ac_cur.pare[ieOPR, ipcruise1, 2]+ac_cur.pare[ieOPR, ipcruise2, 2]) #overall pressure ratio
+            etaPropu_cru = mean(etaPropu_cru)            
+            OPR_cru = mean(OPR_cru)
 
             ## store
             k += 1
