@@ -59,6 +59,28 @@ function init_results(case_keywords, des_ranges, offdes_ranges, fields_to_read)
     )
 end
 
+function init_results_3Layers(num_des_ranges, fields, num_offdes_ranges)
+    """This function create a three layer dictionary"""
+    # num_des_ranges: Int: number of design ranges
+    # fields: tuple of symbols
+    # num_offdes_ranges: Int: number of offdesign ranges
+    makevec() = fill!(Vector{Union{Missing,Float64}}(undef, num_offdes_ranges), missing)
+    output = Dict(d => Dict(
+                    f => makevec() for f in fields
+                  ) for d = 1:num_des_ranges
+    )
+    return output
+end
+
+function init_results_2Layers(num_des_ranges, fields)
+    """This function create a two layer dictionary"""
+    # num_des_ranges: Int: number of design ranges
+    # fields: tuple of symbols
+    makevec() = fill!(Vector{Union{Missing,Float64}}(undef, num_des_ranges), missing)
+    output = Dict(f => makevec() for f in fields)
+    return output
+end
+
 function find_frac_change(results,idx_base,idx_targ,numDesRan,xSymb,ySymb)
     #results: case*desRan*symb*offdes
     #idx_base,idx_targ: cases
@@ -224,37 +246,29 @@ function findR1R2(range, massPay, volFuel, epsR1R2)
 end
 
 #### Setup IO
-# Input case names
-case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
-case_names    = ["Baseline", "Matched Baseline", "Retrofit"]
-model_dir     = "../ModelSaved"
-des_ranges    = [3000] #float.(collect(300:100:3000)) #design range to compare (Has to be integer (No 0.1 nmi)) (nmi) Make sure all cases have these design ranges
-offdes_ranges = float.(collect(300:100:8000)) #Off-design ranges to search through (Has to be integer (No 0.1 nmi)) (can be wider than what are available)
-# For R1 and R2 calculation
-idx_R1R2Skip  = [2] #Case to skip R1 R2 determination
-idx_base_R1R2 = 1 #Index of the base case
-idx_targ_R1R2 = 3 #Index of the target case
-# For PFEI comparison
-idx_base_PFEI = 2
-idx_targ_PFEI = 3
-# For Breguet range plot
-flg_plot_Breguet = false
-idx_constraints_Breguet = 1 #Index of case to obtain limiting parameters including fuel volume, maximum takeoff weight, and maximum payload weight
-
+# Input case names - Retrofit
+model_dir       = "../ModelSaved"
+key_retro       = "jetfuel_to_ethanolJet"
+des_range_retro = [3000] #float.(collect(300:100:3000)) #design range for retrofit aircraft to compare (Has to be integer) (nmi)
+OD_range_retro  = float.(collect(300:100:8000)) #Search set for off-design ranges (Has to be integer) (nmi) (can be wider than existing)
+key_sized       = "acOptimized_BatOptEth"
+des_range_sized = float.(collect(300:100:8000)) #Can be wider
 # Output directory
 save_dir      = "../ModelProcessed"
-save_name     = "Compare_Retrofit" #sub_folder will be created
+save_name     = "Compare_Retrofit_Sized" #sub_folder will be created
 # Fields to read out
-const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :massTO_Ton,
-                        :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J, :frac_rese,
-                        :rhoFuel_kgm3, :PFEI_cru_JJ, :range_cru_m, :PowSpe_cru_Jkg, :OPR_cru,
-                        :etaThe_cru, :etaPro_cru, :Tt_TurbIn_cru_K)
-#### Save directory
+const fields = (:range_nmi,   :PFEI_JJ, :massTO_Ton, :massFuelTot_Ton, :massPayload_Ton,
+                      :massEmpty_Ton, :rhoFuel_kgm3,  :volFuel_m3, :LD_cru, :LHV_cru_Jkg, :TSFC_cru_kgsN,
+                      :vel_cru_ms, :eta_total_cru, :ene_fli_J, :frac_rese, :PFEI_cru_JJ, :range_cru_m,
+                      :eta_therm_cru, :spe_power_cru_Jkg, :eta_propu_cru, :OPR_cru, :Tt_turbin_cru_K)
+
+#### Create save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
 
 #### Initialization
-results = init_results(case_keywords, des_ranges, offdes_ranges, fields_to_read)
+results_retro = init_results_3Layers(length(des_range_retro), fields, length(OD_range_retro))
+results_sized = init_results_2Layers(length(des_range_sized), fields)
 
 #### Extract data for each scenerio
 for (i, keyword_cur) in enumerate(case_keywords)
