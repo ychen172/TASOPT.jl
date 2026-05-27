@@ -7,7 +7,7 @@ using TASOPT
 using DataFrames, CSV
 include(__TASOPTindices__)
 using Plots
-include(joinpath(@__DIR__,"Breguet_range_solve_offdes.jl"))
+include(joinpath(@__DIR__,"../Breguet_range_solve_offdes.jl"))
 using .Breguet: Bre_off_des
 using Statistics
 
@@ -95,7 +95,7 @@ end
 # Input case names
 case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
 case_names    = ["Baseline", "Matched Baseline", "Retrofit"]
-model_dir     = "ModelSaved"
+model_dir     = "../ModelSaved"
 des_ranges    = [3000] #float.(collect(300:100:3000)) #design range to compare (Has to be integer (No 0.1 nmi)) (nmi) Make sure all cases have these design ranges
 offdes_ranges = float.(collect(300:100:8000)) #Off-design ranges to search through (Has to be integer (No 0.1 nmi)) (can be wider than what are available)
 # For R1 and R2 calculation
@@ -110,7 +110,7 @@ flg_plot_Breguet = false
 idx_constraints_Breguet = 1 #Index of case to obtain limiting parameters including fuel volume, maximum takeoff weight, and maximum payload weight
 
 # Output directory
-save_dir      = "ModelProcessed"
+save_dir      = "../ModelProcessed"
 save_name     = "Compare_Retrofit" #sub_folder will be created
 # Fields to read out
 const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :massTO_Ton,
