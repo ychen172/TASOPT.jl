@@ -92,6 +92,12 @@ function find_frac_change(results,idx_base,idx_targ,numDesRan,xSymb,ySymb)
 end
 
 function extract_acModel(ac_cur,idx_miss)
+    """
+    This function extract parameters from a aircraft model given a target mission
+    Inputs:
+        ac_cur: aircraft model
+        idx_miss: index of the mission to extract data
+    """
     #### overall performance data
     range_cur = ac_cur.parm[imRange, idx_miss] / 1852.0 #(nmi)
     PFEI_cur = ac_cur.parm[imPFEI, idx_miss] #(J/J)
@@ -188,6 +194,31 @@ function extract_acModel(ac_cur,idx_miss)
         "eta_propu_cru" => etaPropu_cru,
         "OPR_cru" => OPR_cru,
         "Tt_turbin_cru_K" => Tt_TurbIn_cru
+    )
+    return output
+end
+
+function findR1R2(range, massPay, volFuel, epsR1R2)
+    """
+    A function to find R1 and R2 range and their index
+    Inputs:
+        range, massPay, volFuel: Vector{Float64}, Ascending range
+        epsR1R2: Float64: eps lower than
+    """
+    # R1
+    massPay_Max_Val, massPay_Max_Idx = findmax(massPay) #assume your off-design mission reach maximum payload (if not, the first point would be picked)
+    idx_R1_approx = findnext(massPay_ -> massPay_ < massPay_Max_Val*(1.0-epsR1R2), massPay, massPay_Max_Idx) - 1 #approximated R1 index for plot
+    R1_interp = interp_range_at_threshold(range, massPay, massPay_Max_Idx, epsR1R2; side=:right) #inteprolated R1
+    # R2
+    volFuel_Max_Val, volFuel_Max_Idx = findmax(volFuel) #assume your off-design reach maximum fuel volume (threortically always for payload range diagram)
+    idx_R2_approx = findprev(volFuel_ -> volFuel_ < volFuel_Max_Val*(1.0-epsR1R2), volFuel, volFuel_Max_Idx) + 1
+    R2_interp = interp_range_at_threshold(range, volFuel, volFuel_Max_Idx, epsR1R2; side=:left) #inteprolated R2
+    # Output
+    output = Dict(
+        "idx_R1_approx" => idx_R1_approx,
+        "idx_R2_approx" => idx_R2_approx,
+        "R1_interp" => R1_interp, #Same unit as the input range
+        "R2_interp" => R2_interp,
     )
     return output
 end
