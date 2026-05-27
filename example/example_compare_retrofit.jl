@@ -9,6 +9,7 @@ include(__TASOPTindices__)
 using Plots
 include(joinpath(@__DIR__,"Breguet_range_solve_offdes.jl"))
 using .Breguet: Bre_off_des
+using Statistics
 
 # Other constants
 epsR1R2 = 0.005
@@ -95,7 +96,7 @@ end
 case_keywords = ["off_designJet", "jetfuel_match_payload", "jetfuel_to_ethanolJet"]
 case_names    = ["Baseline", "Matched Baseline", "Retrofit"]
 model_dir     = "ModelSaved"
-des_ranges    = [300,1500,3000] #float.(collect(300:100:3000)) #design range to compare (Has to be integer (No 0.1 nmi)) (nmi) Make sure all cases have these design ranges
+des_ranges    = [3000] #float.(collect(300:100:3000)) #design range to compare (Has to be integer (No 0.1 nmi)) (nmi) Make sure all cases have these design ranges
 offdes_ranges = float.(collect(300:100:8000)) #Off-design ranges to search through (Has to be integer (No 0.1 nmi)) (can be wider than what are available)
 # For R1 and R2 calculation
 idx_R1R2Skip  = [2] #Case to skip R1 R2 determination
@@ -113,7 +114,9 @@ save_dir      = "ModelProcessed"
 save_name     = "Compare_Retrofit" #sub_folder will be created
 # Fields to read out
 const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :massTO_Ton,
-                        :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J, :frac_rese, :rhoFuel_kgm3, :PFEI_cru_JJ, :range_cru_m)
+                        :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J, :frac_rese,
+                        :rhoFuel_kgm3, :PFEI_cru_JJ, :range_cru_m, :PowSpe_cru_Jkg, :OPR_cru,
+                        :etaThe_cru, :etaPro_cru)
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
@@ -177,6 +180,38 @@ for (i, keyword_cur) in enumerate(case_keywords)
             range_cru = ac_cur.para[iaRange, ipcruise2, 2] - ac_cur.para[iaRange, ipcruise1, 2] #(m)
             @assert range_cru>0.0 "Find a negative cruise range, likely range to short"
 
+            #### parameters for engine efficiency at cruise condition
+            etaTherm_cru = Float64[]
+            spePower_cru = Float64[]
+            for phase in [ipcruise1,ipcruise2]
+                ff_cru = ac_cur.pare[ieff, phase, 2] #mdot_fuel / mdot_core
+                BPR_cru = ac_cur.pare[ieBPR, phase, 2] #mdot_BP / mdot_core
+                mass_offtake_cru = ac_cur.pare[iemofft, phase, 2] #kg/s single engine
+                mass_core_cru = ac_cur.pare[iemcore, phase, 2] #kg/s single engine
+                u_coreExh_cru = ac_cur.pare[ieu6, phase, 2] #m/s
+                u_fanExh_cru = ac_cur.pare[ieu8, phase, 2] #m/s
+                u_inf_cru = ac_cur.pare[ieu0, phase, 2] #m/s
+                # u_offtake_cru = ac_cur.pare[ieu9, phase, 2] #m/s
+                p_coreExh_cru = ac_cur.pare[iep6, phase, 2] #Pa
+                p_fanExh_cru = ac_cur.pare[iep8, phase, 2] #Pa
+                p_inf_cru = ac_cur.pare[iep0, phase, 2] #Pa
+                A_coreExh_cru = ac_cur.pare[ieA6, phase, 2] #m2
+                A_fanExh_cru = ac_cur.pare[ieA8, phase, 2] #m2
+                # A_offtake_cru = ac_cur.pare[ieA9, phase, 2] #m2
+                LHV_cru = ac_cur.pare[iehfuel, phase, 2] #J/kg including vaporization heat
+                P_Jet_cru = 0.5*(mass_core_cru*(1.0+ff_cru)-mass_offtake_cru)*u_coreExh_cru^2 +
+                            0.5*mass_core_cru*BPR_cru*u_fanExh_cru^2 - 
+                            0.5*mass_core_cru*(1.0 + BPR_cru)*u_inf_cru^2 + 
+                            (p_coreExh_cru-p_inf_cru)*A_coreExh_cru*u_coreExh_cru +
+                            (p_fanExh_cru-p_inf_cru)*A_fanExh_cru*u_fanExh_cru #Jet power
+                push!(etaTherm_cru, P_Jet_cru/(mass_core_cru*ff_cru*LHV_cru)) #Thermal efficiency
+                push!(spePower_cru, P_Jet_cru/(mass_core_cru*(1.0+ff_cru+BPR_cru)-mass_offtake_cru)) #J/kg
+            end
+            spePower_cru = mean(spePower_cru) #J/kg
+            etaTherm_cru = mean(etaTherm_cru)
+            OPR_cru = 0.5*(ac_cur.pare[ieOPR, ipcruise1, 2]+ac_cur.pare[ieOPR, ipcruise2, 2]) #overall pressure ratio
+            etaPropu_cru = eta_total_cruise/etaTherm_cru
+
             ## store
             k += 1
             results_cur[:range_nmi][k] = range_cur
@@ -193,6 +228,10 @@ for (i, keyword_cur) in enumerate(case_keywords)
             results_cur[:rhoFuel_kgm3][k] = rhoFuel
             results_cur[:PFEI_cru_JJ][k] = PFEI_cru
             results_cur[:range_cru_m][k] = range_cru
+            results_cur[:PowSpe_cru_Jkg][k] = spePower_cru
+            results_cur[:OPR_cru][k] = OPR_cru
+            results_cur[:etaThe_cru][k] = etaTherm_cru
+            results_cur[:etaPro_cru][k] = etaPropu_cru
         end
         #### Trim the trailing missing
         for f in fields_to_read
@@ -511,7 +550,7 @@ end
 savefig(p4_1, joinpath(save_dir_sub, "LD_Ratio.png"))
 
 # Engine Total Efficiency
-p4_2 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Engine Total Efficiency", dpi=800)
+p4_2 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Engine Total Efficiency(%)", dpi=800)
 global il = 0
 for i in eachindex(case_keywords)
     global il += 1
@@ -519,11 +558,11 @@ for i in eachindex(case_keywords)
     for j in eachindex(des_ranges)
         results_cur = results[i][j]
         global im += 1
-        plot!(p4_2, results_cur[:range_nmi], results_cur[:eta_tot_cru], marker=markers[im], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        plot!(p4_2, results_cur[:range_nmi], results_cur[:eta_tot_cru] .* 100.0, marker=markers[im], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
         if !ismissing(R1Idx[i,j])
             # Mark down R1 R2 location
-            scatter!(p4_2, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:eta_tot_cru][R1Idx[i,j]]], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
-            scatter!(p4_2, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:eta_tot_cru][R2Idx[i,j]]], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+            scatter!(p4_2, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:eta_tot_cru][R1Idx[i,j]] * 100.0], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p4_2, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:eta_tot_cru][R2Idx[i,j]] * 100.0], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
         end
     end
 end
@@ -547,6 +586,82 @@ for i in eachindex(case_keywords)
     end
 end
 savefig(p4_3, joinpath(save_dir_sub, "Fuel_heating_value.png"))
+
+# Engine Thermal Efficiency
+p4_4 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Engine Thermal Efficiency (%)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    global il += 1
+    global im = 0
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global im += 1
+        plot!(p4_4, results_cur[:range_nmi], results_cur[:etaThe_cru] .* 100.0, marker=markers[im], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p4_4, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:etaThe_cru][R1Idx[i,j]] * 100.0], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p4_4, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:etaThe_cru][R2Idx[i,j]] * 100.0], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
+    end
+end
+savefig(p4_4, joinpath(save_dir_sub, "eta_therm_Engine.png"))
+
+# Engine Thermal Efficiency
+p4_5 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Engine Propulsive Efficiency (%)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    global il += 1
+    global im = 0
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global im += 1
+        plot!(p4_5, results_cur[:range_nmi], results_cur[:etaPro_cru] .* 100.0, marker=markers[im], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p4_5, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:etaPro_cru][R1Idx[i,j]] * 100.0], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p4_5, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:etaPro_cru][R2Idx[i,j]] * 100.0], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
+    end
+end
+savefig(p4_5, joinpath(save_dir_sub, "eta_propu_Engine.png"))
+
+# Engine Overall Pressure Ratio
+p4_6 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Engine Overall Pressure Ratio", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    global il += 1
+    global im = 0
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global im += 1
+        plot!(p4_6, results_cur[:range_nmi], results_cur[:OPR_cru], marker=markers[im], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p4_6, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:OPR_cru][R1Idx[i,j]]], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p4_6, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:OPR_cru][R2Idx[i,j]]], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
+    end
+end
+savefig(p4_6, joinpath(save_dir_sub, "OPR_Engine.png"))
+
+# Engine Specific Power
+p4_7 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Engine Specific Power (J/kg)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    global il += 1
+    global im = 0
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global im += 1
+        plot!(p4_7, results_cur[:range_nmi], results_cur[:PowSpe_cru_Jkg], marker=markers[im], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p4_7, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:PowSpe_cru_Jkg][R1Idx[i,j]]], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p4_7, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:PowSpe_cru_Jkg][R2Idx[i,j]]], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
+    end
+end
+savefig(p4_7, joinpath(save_dir_sub, "Specific_Power_Engine.png"))
 
 #### Plotting - Change between cases
 # Change of R1 and R2
