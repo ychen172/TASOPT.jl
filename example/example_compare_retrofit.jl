@@ -183,6 +183,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
             #### parameters for engine efficiency at cruise condition
             etaTherm_cru = Float64[]
             spePower_cru = Float64[]
+            etaPropu_cru = Float64[]
             for phase in [ipcruise1,ipcruise2]
                 ff_cru = ac_cur.pare[ieff, phase, 2] #mdot_fuel / mdot_core
                 BPR_cru = ac_cur.pare[ieBPR, phase, 2] #mdot_BP / mdot_core
@@ -199,18 +200,20 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 A_fanExh_cru = ac_cur.pare[ieA8, phase, 2] #m2
                 # A_offtake_cru = ac_cur.pare[ieA9, phase, 2] #m2
                 LHV_cru = ac_cur.pare[iehfuel, phase, 2] #J/kg including vaporization heat
+                Thrust_cru = ac_cur.pare[ieFsp, phase, 2] * (u_inf_cru * mass_core_cru * (1.0 + BPR_cru)) #N
                 P_Jet_cru = 0.5*(mass_core_cru*(1.0+ff_cru)-mass_offtake_cru)*u_coreExh_cru^2 +
                             0.5*mass_core_cru*BPR_cru*u_fanExh_cru^2 - 
                             0.5*mass_core_cru*(1.0 + BPR_cru)*u_inf_cru^2 + 
                             (p_coreExh_cru-p_inf_cru)*A_coreExh_cru*u_coreExh_cru +
-                            (p_fanExh_cru-p_inf_cru)*A_fanExh_cru*u_fanExh_cru #Jet power
+                            (p_fanExh_cru-p_inf_cru)*A_fanExh_cru*u_fanExh_cru #Jet power (J/s)
                 push!(etaTherm_cru, P_Jet_cru/(mass_core_cru*ff_cru*LHV_cru)) #Thermal efficiency
                 push!(spePower_cru, P_Jet_cru/(mass_core_cru*(1.0+ff_cru+BPR_cru)-mass_offtake_cru)) #J/kg
+                push!(etaPropu_cru, (Thrust_cru*u_inf_cru)/P_Jet_cru)
             end
             spePower_cru = mean(spePower_cru) #J/kg
             etaTherm_cru = mean(etaTherm_cru)
+            etaPropu_cru = mean(etaPropu_cru)
             OPR_cru = 0.5*(ac_cur.pare[ieOPR, ipcruise1, 2]+ac_cur.pare[ieOPR, ipcruise2, 2]) #overall pressure ratio
-            etaPropu_cru = eta_total_cruise/etaTherm_cru
 
             ## store
             k += 1
