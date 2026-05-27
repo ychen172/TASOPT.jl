@@ -116,7 +116,7 @@ save_name     = "Compare_Retrofit" #sub_folder will be created
 const fields_to_read = (:range_nmi,   :PFEI_JJ, :massEmp_Ton, :voluFuel_m3, :massTO_Ton,
                         :massPay_Ton, :LD_cru,  :eta_tot_cru, :LHV_Jkg, :EneFli_J, :frac_rese,
                         :rhoFuel_kgm3, :PFEI_cru_JJ, :range_cru_m, :PowSpe_cru_Jkg, :OPR_cru,
-                        :etaThe_cru, :etaPro_cru)
+                        :etaThe_cru, :etaPro_cru, :Tt_TurbIn_cru_K)
 #### Save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
@@ -185,6 +185,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
             spePower_cru = Float64[]
             etaPropu_cru = Float64[]
             OPR_cru = Float64[]
+            Tt_TurbIn_cru = Float64[]
             for phase in [ipcruise1,ipcruise2]
                 ff_cru = ac_cur.pare[ieff, phase, 2] #mdot_fuel / mdot_core
                 BPR_cru = ac_cur.pare[ieBPR, phase, 2] #mdot_BP / mdot_core
@@ -202,6 +203,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 # A_offtake_cru = ac_cur.pare[ieA9, phase, 2] #m2
                 LHV_cru = ac_cur.pare[iehfuel, phase, 2] #J/kg including vaporization heat
                 Thrust_cru = ac_cur.pare[ieFsp, phase, 2] * (u_inf_cru * mass_core_cru * (1.0 + BPR_cru)) #N
+                Tt41_cru = ac_cur.pare[ieTt41, phase, 2] #(K) turbine inlet temperature after cooling air
                 P_Jet_cru = 0.5*(mass_core_cru*(1.0+ff_cru)-mass_offtake_cru)*u_coreExh_cru^2 +
                             0.5*mass_core_cru*BPR_cru*u_fanExh_cru^2 - 
                             0.5*mass_core_cru*(1.0 + BPR_cru)*u_inf_cru^2 + 
@@ -211,11 +213,13 @@ for (i, keyword_cur) in enumerate(case_keywords)
                 push!(etaTherm_cru, P_Jet_cru/(mass_core_cru*ff_cru*LHV_cru)) #Thermal efficiency
                 push!(spePower_cru, P_Jet_cru/(mass_core_cru*(1.0+ff_cru+BPR_cru)-mass_offtake_cru)) #J/kg
                 push!(etaPropu_cru, (Thrust_cru*u_inf_cru)/P_Jet_cru)
+                push!(Tt_TurbIn_cru, Tt41_cru)
             end
             spePower_cru = mean(spePower_cru) #J/kg
             etaTherm_cru = mean(etaTherm_cru)
             etaPropu_cru = mean(etaPropu_cru)            
             OPR_cru = mean(OPR_cru)
+            Tt_TurbIn_cru = mean(Tt_TurbIn_cru) #K
 
             ## store
             k += 1
@@ -237,6 +241,7 @@ for (i, keyword_cur) in enumerate(case_keywords)
             results_cur[:OPR_cru][k] = OPR_cru
             results_cur[:etaThe_cru][k] = etaTherm_cru
             results_cur[:etaPro_cru][k] = etaPropu_cru
+            results_cur[:Tt_TurbIn_cru_K][k] = Tt_TurbIn_cru
         end
         #### Trim the trailing missing
         for f in fields_to_read
@@ -667,6 +672,25 @@ for i in eachindex(case_keywords)
     end
 end
 savefig(p4_7, joinpath(save_dir_sub, "Specific_Power_Engine.png"))
+
+# Turbine inlet temperature after cooling
+p4_8 = plot(xlabel="Off-design Range (nmi)", ylabel="Cruise Turbine Inlet Temperature (K)", dpi=800)
+global il = 0
+for i in eachindex(case_keywords)
+    global il += 1
+    global im = 0
+    for j in eachindex(des_ranges)
+        results_cur = results[i][j]
+        global im += 1
+        plot!(p4_8, results_cur[:range_nmi], results_cur[:Tt_TurbIn_cru_K], marker=markers[im], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(case_names[i]), R₂: $(round(Int,R2[idx_base_R1R2,j])) nmi")
+        if !ismissing(R1Idx[i,j])
+            # Mark down R1 R2 location
+            scatter!(p4_8, [results_cur[:range_nmi][R1Idx[i,j]]], [results_cur[:Tt_TurbIn_cru_K][R1Idx[i,j]]], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R1
+            scatter!(p4_8, [results_cur[:range_nmi][R2Idx[i,j]]], [results_cur[:Tt_TurbIn_cru_K][R2Idx[i,j]]], marker=markers[im], ms=4, msw=2.5, mc=:black, msc=:black, label=false) #Mark R2
+        end
+    end
+end
+savefig(p4_8, joinpath(save_dir_sub, "Turbine_Inlet_Temperature_Engine.png"))
 
 #### Plotting - Change between cases
 # Change of R1 and R2
