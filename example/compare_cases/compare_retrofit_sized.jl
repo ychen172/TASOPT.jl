@@ -249,10 +249,14 @@ end
 # Input case names - Retrofit
 model_dir       = "../ModelSaved"
 key_retro       = "jetfuel_to_ethanolJet"
-des_range_retro = [500,1500,3000] #float.(collect(300:100:3000)) #design range for retrofit aircraft to compare (Has to be convertable to integer) (nmi)
+des_range_retro = [2100,2400,2700] #float.(collect(300:100:3000)) #design range for retrofit aircraft to compare (Has to be convertable to integer) (nmi)
 OD_range_retro  = float.(collect(300:100:8000)) #Search set for off-design ranges (Has to be integer) (nmi) (can be wider than existing)
+# Input case names - Sized
 key_sized       = "acOptimized_BatOptEth"
 des_range_sized = float.(collect(300:100:2900)) #Has to match with existings
+# Input case names - Sized with Central Fuel Tank
+key_sized_C       = "CenterFuelTank_BatOptEth"
+des_range_sized_C = float.(collect(300:100:3000)) #Has to match with existings
 # Output directory
 save_dir      = "../ModelProcessed"
 save_name     = "Compare_Retrofit_Sized" #sub_folder will be created
@@ -269,6 +273,7 @@ mkpath(save_dir_sub)
 #### Initialization
 results_retro = init_results_3Layers(length(des_range_retro), fields, length(OD_range_retro))
 results_sized = init_results_2Layers(length(des_range_sized), fields)
+results_sized_C = init_results_2Layers(length(des_range_sized_C), fields)
 
 #### Extract data for the retrofit missions
 for (i, des_ranges_cur) in enumerate(des_range_retro)
@@ -314,29 +319,47 @@ for (i, des_ranges_cur) in enumerate(des_range_sized)
     end
 end
 
+for (i, des_ranges_cur) in enumerate(des_range_sized_C)
+    #### Read in the case
+    ac_dir_sized_C = joinpath(model_dir,key_sized_C,key_sized_C*"$(round(Int,des_ranges_cur)).jld2")
+    ac_sized_C = quickload_aircraft(ac_dir_sized_C)
+    println("File, $(ac_dir_sized_C), read successfully")
+    out_dict_C = extract_acModel(ac_sized_C,1)
+    
+    #### Output the data
+    for f in fields
+        results_sized_C[f][i] = out_dict_C[String(f)]
+    end
+end
+
 #### Plotting
 # Create style
 linestyles = repeat([:solid, :dash, :dot, :dashdot, :dashdotdot],1000)
-linecolors = repeat([:blue, :red, :green, :orange, :purple],1000)
+linecolors = repeat([:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :black, :cyan,
+                     :magenta, :teal, :navy, :maroon, :olive, :gold, :coral, :turquoise, :lime, :indigo], 1000) 
 markers = repeat([:rect, :circle, :diamond, :utriangle, :dtriangle],1000)
 # Plot PFEI
 p1_1 = plot(xlabel="Ranges (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
 global il = 1
-plot!(p1_1, results_sized[:range_nmi], results_sized[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Redesigned Aircratft")
+plot!(p1_1, results_sized[:range_nmi], results_sized[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft")
+global il += 1
+plot!(p1_1, results_sized_C[:range_nmi], results_sized_C[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft with central fuel tank")
 for i in eachindex(des_range_retro)
     global il += 1
     results_retro_cur = results_retro[i]
-    plot!(p1_1, results_retro_cur[:range_nmi], results_retro_cur[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft")
+    plot!(p1_1, results_retro_cur[:range_nmi], results_retro_cur[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft with $(round(Int, des_range_retro[i])) nmi desing range")
 end
 savefig(p1_1, joinpath(save_dir_sub, "PFEI.png"))
 
 p1_2 = plot(xlabel="Ranges (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
 global il = 1
-plot!(p1_2, results_sized[:range_nmi], results_sized[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Redesigned Aircratft")
+plot!(p1_2, results_sized[:range_nmi], results_sized[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label=label="Optimized aircratft")
+global il += 1
+plot!(p1_2, results_sized_C[:range_nmi], results_sized_C[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft with central fuel tank")
 for i in eachindex(des_range_retro)
     global il += 1
     results_retro_cur = results_retro[i]
-    plot!(p1_2, results_retro_cur[:range_nmi], results_retro_cur[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft")
+    plot!(p1_2, results_retro_cur[:range_nmi], results_retro_cur[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft with $(round(Int, des_range_retro[i])) nmi desing range")
 end
 savefig(p1_2, joinpath(save_dir_sub, "mass_pay.png"))
 
