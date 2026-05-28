@@ -317,7 +317,7 @@ plot!(p1_1, results_sized_Eth[:range_nmi], results_sized_Eth[:PFEI_JJ], marker=m
 savefig(p1_1, joinpath(save_dir_sub, "PFEI.png"))
 
 # Plot Fuel Fraction
-p1_2 = plot(xlabel="Design Ranges (nmi)", ylabel="Fuel Tank Used (%)", dpi=800)
+p1_2 = plot(xlabel="Design Ranges (nmi)", ylabel="Fuel Tank Used (%)", dpi=800, legend=bottomright)
 global il = 1
 plot!(p1_2, results_sized_Jet[:range_nmi], results_sized_Jet[:FuelVolumeFraction] .* 100.0, marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized Jet Fuel Aircraft")
 global il += 1
