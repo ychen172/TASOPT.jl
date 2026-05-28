@@ -249,14 +249,14 @@ end
 # Input case names - Retrofit
 model_dir       = "../ModelSaved"
 key_retro       = "jetfuel_to_ethanolJet"
-des_range_retro = [2100,2400,2700] #float.(collect(300:100:3000)) #design range for retrofit aircraft to compare (Has to be convertable to integer) (nmi)
+des_range_retro = [3000] #float.(collect(300:100:3000)) #design range for retrofit aircraft to compare (Has to be convertable to integer) (nmi)
 OD_range_retro  = float.(collect(300:100:8000)) #Search set for off-design ranges (Has to be integer) (nmi) (can be wider than existing)
 # Input case names - Sized
-key_sized       = "acOptimized_BatOptEth"
-des_range_sized = float.(collect(300:100:2900)) #Has to match with existings
+key_sized       = "OptimizedJetToEth3000_" #180Pass_Opt: "acOptimized_BatOptEth", 3000nmiJet2EthRetroCase_but_optimized: "OptimizedJetToEth3000_"
+des_range_sized = float.(collect(300:100:2100)) #Has to match with existings
 # Input case names - Sized with Central Fuel Tank
-key_sized_C       = "CenterFuelTank_BatOptEth"
-des_range_sized_C = float.(collect(300:100:3000)) #Has to match with existings
+key_sized_C       = "OptCenTankJetToEth3000_" #180Pass_Opt: "CenterFuelTank_BatOptEth", 3000nmiJet2EthRetroCase_but_optimizedWithCenTank: "OptCenTankJetToEth3000_"
+des_range_sized_C = float.(collect(300:100:2100)) #Has to match with existings
 # Output directory
 save_dir      = "../ModelProcessed"
 save_name     = "Compare_Retrofit_Sized" #sub_folder will be created
@@ -339,7 +339,8 @@ linecolors = repeat([:blue, :red, :green, :orange, :purple, :brown, :pink, :gray
                      :magenta, :teal, :navy, :maroon, :olive, :gold, :coral, :turquoise, :lime, :indigo], 1000) 
 markers = repeat([:rect, :circle, :diamond, :utriangle, :dtriangle],1000)
 # Plot PFEI
-p1_1 = plot(xlabel="Ranges (nmi)", ylabel="PFEI (J/J)", dpi=800, yscale=:log10)
+p1_1 = plot(xlabel="Ranges (nmi)", ylabel="PFEI (J/J)", dpi=800)
+plot!(p1_1,ylims=(0.6,1.4))
 global il = 1
 plot!(p1_1, results_sized[:range_nmi], results_sized[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft")
 global il += 1
