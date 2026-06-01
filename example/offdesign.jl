@@ -196,32 +196,34 @@ end
 
 """
 off_design_R1R2(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-               epsWpay::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign", flg_save_ac::Bool = true)
+                epsRange::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "R1R2",  flg_save_ac::Bool = true)
 
-This function determine the maximum payload range envelope with a prescribe list of possible flight range
+This function determine the R1 and R2 range of an aircraft
     Assume fixed CL for off-design
     Assume starting from design point engine parameters
-    In terms of flight model to be saved. Beware the following variable will not be same as design point anymore. (idxFuel, rhoFuel, hvap_fuel)
+    In terms of flight model to be saved from here. Beware the following variable will not be same as design point anymore. (idxFuel, rhoFuel, hvap_fuel)
+    The aircraft model provided has to have the mission 1 containing the original design mission and all design parameters unmodified by any off-design operation
 Inputs:
-    ac: TASOPT aircraft model: has to be sized
-    idxFuel: int: the fuel to be use
+    ac: TASOPT aircraft model: (First mission has to be design point with unmodified idxFuel(optional), rhoFuel, and hvap_fuel(optional))
+    idxFuel: int: the fuel to be use for these two R1 R2 offdesign missions
     rhoFuel: float: fuel density (kg/m3)
     hvap_fuel: float: Heat of vaporization of the fuel (J/kg)
-    ranges: vector{float}: A list of potential off-design ranges to test [nmi]
-    epsWpay: float: fractional search range for convergence
-    epsBuff: float: small fractional buffer given to the constraint for roundoff error
+    ranges: vector{float}: A list of four bounding ranges to test [R1_LB, R1_UB, R2_LB, R2_UB] [nmi]
+    epsRange: float: fractional search range for convergence
+    epsBuff: float: small fractional buffer given to the fuel tank and payload weight limits for R1 and R2 find
     save_dir: String: name of the save directory (No need if no saving)
     save_name: String: name for the saved model (save_name*string(round(Int,ran_cur))*".jld2") (No need if no saving)
     flg_save_ac: bool: true then the off-design ac models will be saved
 Outpus:
     output: Dict: ["payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}, "fuel_tank_frac": Vector{Float64}, "payload_frac": Vector{Float64}] #If all ranges not feasible, each element will have length 0
 """
-function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-    epsWpay::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign",  flg_save_ac::Bool = true)
+function off_design_R1R2(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
+                         epsRange::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "R1R2",
+                         flg_save_ac::Bool = true)
 
     #### Check on sizing
     ac.is_sized[1] || error("Aircraft model needs to be sized before runing offdesign.")
-    length(ranges) > 0 || error("Need to provide a list of ranges to test")
+    length(ranges) == 4 || error("Need to provide a list of LB UB ranges for R1 and R2 Bisectioning")
 
     #### Duplicate the design mission to the off-design mission for tuning
     ac = deepcopy(ac)
