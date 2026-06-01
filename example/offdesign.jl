@@ -267,19 +267,14 @@ function off_design_R1R2(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, 
     (R1_LB <= R1_UB) || error("R1_LB: $(R1_LB) is bigger than R1_UB: $(R1_UB)")
     (R2_LB <= R2_UB) || error("R2_LB: $(R2_LB) is bigger than R2_UB: $(R2_UB)")
 
-    #### Initialize plane output group
-    out_dict_group = [] #contain R1 and R2 out_dict
-
     #### Determine R1
-    out_dict = findR1R2_wrapper(:R1, R1_LB, R1_UB, epsRange, epsBuff, flg_save_ac, ac, idxFuel, rhoFuel, hvap_fuel, save_dir, save_name)
-    push!(out_dict_group, deepcopy(out_dict))
+    out_dict_R1 = findR1R2_wrapper(:R1, R1_LB, R1_UB, epsRange, epsBuff, flg_save_ac, ac, idxFuel, rhoFuel, hvap_fuel, save_dir, save_name)
 
     #### Determine R2
-    out_dict = findR1R2_wrapper(:R2, R2_LB, R2_UB, epsRange, epsBuff, flg_save_ac, ac, idxFuel, rhoFuel, hvap_fuel, save_dir, save_name)
-    push!(out_dict_group, deepcopy(out_dict))
+    out_dict_R2 = findR1R2_wrapper(:R2, R2_LB, R2_UB, epsRange, epsBuff, flg_save_ac, ac, idxFuel, rhoFuel, hvap_fuel, save_dir, save_name)
     
     ####Ouput
-    return out_dict_group
+    return out_dict_R1, out_dict_R2
 end
 
 """
