@@ -26,7 +26,7 @@ rho_fuel        = 817.0    #Eth: 789.0 , Jet: 817.0 #kg/m3
 hvap_fuel       = 358694.0 #Eth: 918187.9 , Jet: 358694.0 #J/kg
 
 #### Initialize new folder for saved aircraft model
-save_dir = joinpath(model_dir, input_prefix*"OffDes_"*save_key)
+save_dir = joinpath(model_dir, input_prefix*"_OffDes_"*save_key)
 mkpath(save_dir)
 
 #### Extract data for each case

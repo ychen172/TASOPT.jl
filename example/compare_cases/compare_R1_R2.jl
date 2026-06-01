@@ -1,34 +1,22 @@
 """
-This script compare the off-design performance between cases in terms of PFEI
-and flight range
+This script compare for off-design cases the change of R1 and R2 for two cases.
+Here R1 and R2 are assumed to have been computed by bisection searching instead of linear interpolation.
 """
 
 using TASOPT
 using DataFrames, CSV
 include(__TASOPTindices__)
 using Plots
-include(joinpath(@__DIR__,"../Breguet_range_solve_offdes.jl"))
-using .Breguet: Bre_off_des
+using Glob
 using Statistics
 
-# Other constants
-epsR1R2 = 0.005
+#### For Plotting Style
+linestyles = repeat([:solid, :dash, :dot, :dashdot, :dashdotdot],1000)
+linecolors = repeat([:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :black, :cyan,
+                     :magenta, :teal, :navy, :maroon, :olive, :gold, :coral, :turquoise, :lime, :indigo], 1000) 
+markers = repeat([:rect, :circle, :diamond, :utriangle, :dtriangle],1000)
 
 #### Helpers Functions
-# Design parameters output
-function init_results_3Layers(num_des_ranges, fields, num_offdes_ranges)
-    """This function create a three layer dictionary"""
-    # num_des_ranges: Int: number of design ranges
-    # fields: tuple of symbols
-    # num_offdes_ranges: Int: number of offdesign ranges
-    makevec() = fill!(Vector{Union{Missing,Float64}}(undef, num_offdes_ranges), missing)
-    output = Dict(d => Dict(
-                    f => makevec() for f in fields
-                  ) for d = 1:num_des_ranges
-    )
-    return output
-end
-
 function init_results_2Layers(num_des_ranges, fields)
     """This function create a two layer dictionary"""
     # num_des_ranges: Int: number of design ranges
@@ -147,96 +135,99 @@ function extract_acModel(ac_cur,idx_miss)
     return output
 end
 
-#### Setup IO
-# Input case names - Retrofit
-model_dir       = "../ModelSaved"
-key_design      = "acOptimized_BatOptJet"
-key_offdes      = "acOptimized_BatOptJet_rerun"
-des_ranges      = [500,1000,1500,2900,3000]
-# Output directory
-save_dir      = "../ModelProcessed"
-save_name     = "Compare_Design_Offdesign" #sub_folder will be created
 # Fields to read out
 const fields = (:range_nmi,   :PFEI_JJ, :massTO_Ton, :massFuelTot_Ton, :massPayload_Ton,
                 :massEmpty_Ton, :rhoFuel_kgm3,  :volFuel_m3, :LD_cru, :LHV_cru_Jkg, :TSFC_cru_kgsN,
                 :vel_cru_ms, :eta_total_cru, :ene_fli_J, :frac_rese, :PFEI_cru_JJ, :range_cru_m,
                 :eta_therm_cru, :spe_power_cru_Jkg, :eta_propu_cru, :OPR_cru, :Tt_turbin_cru_K, :fuel_tank_frac)
 
+#### Setup IO
+# Input case names - Retrofit
+model_dir  = "../ModelSaved"
+key1       = "acOptimized_BatOptJet_OffDes_Eth_" #Change of case 1 with respec to case 2
+key2       = "acOptimized_BatOptJet_OffDes_Jet_"
+nam1       = "Retrofit"
+nam2       = "Baseline"
+desRs      = collect(300:100:2900) #Has to be a common range for the comparison
+# Output directory
+save_dir      = "../ModelProcessed"
+save_name     = "R1_R2_comparison" #sub_folder will be created
+
 #### Create save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
 
 #### Initialization
-results_design = init_results_2Layers(length(des_ranges), fields)
-results_offdes = init_results_2Layers(length(des_ranges), fields)
+case1_R1_res = init_results_2Layers(length(desRs), fields)
+case1_R2_res = init_results_2Layers(length(desRs), fields)
+case2_R1_res = init_results_2Layers(length(desRs), fields)
+case2_R2_res = init_results_2Layers(length(desRs), fields)
   
 #### Extract data for the design mission
-for (i, des_range_cur) in enumerate(des_ranges)
+for (i, desR) in enumerate(desRs)
     #### Read in the case
-    ac_dir = joinpath(model_dir,key_design,key_design*"$(round(Int,des_range_cur)).jld2")
-    ac = quickload_aircraft(ac_dir)
-    out_dict = extract_acModel(ac,1)
-    println("File, $(ac_dir), read successfully")
+    case1_name_local = key1*"$(round(Int,desR))_"
+    case2_name_local = key2*"$(round(Int,desR))_"
+    case1_dir = joinpath(model_dir,key1,case1_name_local)
+    case2_dir = joinpath(model_dir,key2,case2_name_local)
+    #Search for R1 and R2 model
+    case1R1_file = glob(case1_name_local*"R1_*.jld2", case1_dir)
+    case1R2_file = glob(case1_name_local*"R2_*.jld2", case1_dir)
+    case2R1_file = glob(case2_name_local*"R1_*.jld2", case2_dir)
+    case2R2_file = glob(case2_name_local*"R2_*.jld2", case2_dir)
+    @assert (length(case1R1_file) == 1) "Need one match for $(joinpath(case1_dir,case1_name_local*"R1_*.jld2"))"
+    @assert (length(case1R2_file) == 1) "Need one match for $(joinpath(case1_dir,case1_name_local*"R2_*.jld2"))"
+    @assert (length(case2R1_file) == 1) "Need one match for $(joinpath(case2_dir,case2_name_local*"R1_*.jld2"))"
+    @assert (length(case2R2_file) == 1) "Need one match for $(joinpath(case2_dir,case2_name_local*"R2_*.jld2"))"
+    
+    #Readin the aircraft model
+    ac_c1r1 = quickload_aircraft(case1R1_file[1])
+    out_c1r1 = extract_acModel(ac_c1r1,2)
+    println("File, $(case1R1_file[1]), read successfully")
+    #
+    ac_c1r2 = quickload_aircraft(case1R2_file[1])
+    out_c1r2 = extract_acModel(ac_c1r2,2)
+    println("File, $(case1R2_file[1]), read successfully")
+    #
+    ac_c2r1 = quickload_aircraft(case2R1_file[1])
+    out_c2r1 = extract_acModel(ac_c2r1,2)
+    println("File, $(case2R1_file[1]), read successfully")
+    #
+    ac_c2r2 = quickload_aircraft(case2R2_file[1])
+    out_c2r2 = extract_acModel(ac_c2r2,2)
+    println("File, $(case2R2_file[1]), read successfully")
+    
     #### Output the data
     for f in fields
-        results_design[f][i] = out_dict[String(f)]
-    end
-    #### Read in the offdesign case
-    ac_dir = joinpath(model_dir,key_offdes,key_offdes*"$(round(Int,des_range_cur))_$(round(Int,des_range_cur)).jld2")
-    ac = quickload_aircraft(ac_dir)
-    out_dict = extract_acModel(ac,2)
-    println("File, $(ac_dir), read successfully")
-    #### Output the data
-    for f in fields
-        results_offdes[f][i] = out_dict[String(f)]
+        case1_R1_res[f][i] = out_c1r1[String(f)]
+        case1_R2_res[f][i] = out_c1r2[String(f)]
+        case2_R1_res[f][i] = out_c2r1[String(f)]
+        case2_R2_res[f][i] = out_c2r2[String(f)]
     end
 end
 
+#### Compute R1 and R2 change
+R1Change = (case1_R1_res[:range_nmi] .- case2_R1_res[:range_nmi]) ./ case2_R1_res[:range_nmi]
+R2Change = (case1_R2_res[:range_nmi] .- case2_R2_res[:range_nmi]) ./ case2_R2_res[:range_nmi]
+
 #### Plotting
-# Create style
-linestyles = repeat([:solid, :dash, :dot, :dashdot, :dashdotdot],1000)
-linecolors = repeat([:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :black, :cyan,
-                     :magenta, :teal, :navy, :maroon, :olive, :gold, :coral, :turquoise, :lime, :indigo], 1000) 
-markers = repeat([:rect, :circle, :diamond, :utriangle, :dtriangle],1000)
-# Plot PFEI
-p1_1 = plot(xlabel="Ranges (nmi)", ylabel="PFEI (J/J)", dpi=800)
+# Plot R1 R2
+p1_1 = plot(xlabel="Design Range (nmi)", ylabel="Off-design Range (nmi)", dpi=800)
 global il = 1
-scatter!(p1_1, results_design[:range_nmi], results_design[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
+plot!(p1_1, desRs, case1_R1_res[:range_nmi], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(nam1) R1")
 global il += 1
-scatter!(p1_1, results_offdes[:range_nmi], results_offdes[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
-savefig(p1_1, joinpath(save_dir_sub, "PFEI.png"))
+plot!(p1_1, desRs, case1_R2_res[:range_nmi], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(nam1) R2")
+global il += 1
+plot!(p1_1, desRs, case2_R1_res[:range_nmi], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(nam2) R1")
+global il += 1
+plot!(p1_1, desRs, case2_R2_res[:range_nmi], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="$(nam2) R2")
+savefig(p1_1, joinpath(save_dir_sub, "R1_R2.png"))
 
-p1_2 = plot(xlabel="Ranges (nmi)", ylabel="Takeoff Weight (Ton)", dpi=800)
+# Plot R1 R2 Change
+mskCha = desRs .>= 1500
+p1_2 = plot(xlabel="Design Range (nmi)", ylabel="Ranges Reduction from Retrofitting (%)", dpi=800)
 global il = 1
-scatter!(p1_2, results_design[:range_nmi], results_design[:massTO_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
+plot!(p1_2, desRs[mskCha], -R1Change[mskCha] .* 100.0, marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="R1")
 global il += 1
-scatter!(p1_2, results_offdes[:range_nmi], results_offdes[:massTO_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
-savefig(p1_2, joinpath(save_dir_sub, "massTO.png"))
-
-p1_3 = plot(xlabel="Ranges (nmi)", ylabel="Fuel Mass (Ton)", dpi=800)
-global il = 1
-scatter!(p1_3, results_design[:range_nmi], results_design[:massFuelTot_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
-global il += 1
-scatter!(p1_3, results_offdes[:range_nmi], results_offdes[:massFuelTot_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
-savefig(p1_3, joinpath(save_dir_sub, "massFuel.png"))
-
-p1_4 = plot(xlabel="Ranges (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
-global il = 1
-scatter!(p1_4, results_design[:range_nmi], results_design[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
-global il += 1
-scatter!(p1_4, results_offdes[:range_nmi], results_offdes[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
-savefig(p1_4, joinpath(save_dir_sub, "massPayload.png"))
-
-p1_5 = plot(xlabel="Ranges (nmi)", ylabel="Empty Mass (Ton)", dpi=800)
-global il = 1
-scatter!(p1_5, results_design[:range_nmi], results_design[:massEmpty_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
-global il += 1
-scatter!(p1_5, results_offdes[:range_nmi], results_offdes[:massEmpty_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
-savefig(p1_5, joinpath(save_dir_sub, "massEmpty.png"))
-
-p1_6 = plot(xlabel="Ranges (nmi)", ylabel="Fractional Fuel Tank Used", dpi=800)
-global il = 1
-scatter!(p1_6, results_design[:range_nmi], results_design[:fuel_tank_frac], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
-global il += 1
-scatter!(p1_6, results_offdes[:range_nmi], results_offdes[:fuel_tank_frac], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
-savefig(p1_6, joinpath(save_dir_sub, "fraction_fuel_tank.png"))
+plot!(p1_2, desRs[mskCha], -R2Change[mskCha] .* 100.0, marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="R2")
+savefig(p1_2, joinpath(save_dir_sub, "R1_R2_Change.png"))
