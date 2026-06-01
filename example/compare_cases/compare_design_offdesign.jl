@@ -54,7 +54,8 @@ function extract_acModel(ac_cur,idx_miss)
     massFuelTot = ac_cur.parm[imWfuel, idx_miss]/gee/1000.0 #Fuel mass (Ton)(Include reserved and burned)
     massPayload = ac_cur.parm[imWpay, idx_miss]/gee/1000.0 #(Ton)
     massEmpty = massTO - massFuelTot - massPayload #(Ton) empty weight
-    
+    fuel_tank_frac = ac_cur.parm[imWfuel, idx_miss]/ac_cur.parg[igWfmax] #fraction of fuel tank used assuming the same fuel type
+
     #### fuel volume data
     rhoFuel = ac_cur.parg[igrhofuel] #kg/m3
     volFuel = massFuelTot * 1000.0 / rhoFuel #m3
@@ -140,7 +141,8 @@ function extract_acModel(ac_cur,idx_miss)
         "spe_power_cru_Jkg" => spePower_cru,
         "eta_propu_cru" => etaPropu_cru,
         "OPR_cru" => OPR_cru,
-        "Tt_turbin_cru_K" => Tt_TurbIn_cru
+        "Tt_turbin_cru_K" => Tt_TurbIn_cru,
+        "fuel_tank_frac" => fuel_tank_frac
     )
     return output
 end
@@ -148,87 +150,45 @@ end
 #### Setup IO
 # Input case names - Retrofit
 model_dir       = "../ModelSaved"
-key_retro       = "jetfuel_to_ethanolJet"
-des_range_retro = [3000] #float.(collect(300:100:3000)) #design range for retrofit aircraft to compare (Has to be convertable to integer) (nmi)
-OD_range_retro  = float.(collect(300:100:8000)) #Search set for off-design ranges (Has to be integer) (nmi) (can be wider than existing)
-# Input case names - Sized
-key_sized       = "OptimizedJetToEth3000_" #180Pass_Opt: "acOptimized_BatOptEth", 3000nmiJet2EthRetroCase_but_optimized: "OptimizedJetToEth3000_"
-des_range_sized = float.(collect(300:100:2100)) #Has to match with existings
-# Input case names - Sized with Central Fuel Tank
-key_sized_C       = "OptCenTankJetToEth3000_" #180Pass_Opt: "CenterFuelTank_BatOptEth", 3000nmiJet2EthRetroCase_but_optimizedWithCenTank: "OptCenTankJetToEth3000_"
-des_range_sized_C = float.(collect(300:100:2100)) #Has to match with existings
+key_design      = "acOptimized_BatOptJet"
+key_offdes      = "acOptimized_BatOptJet_rerun"
+des_ranges      = [500,1000,1500,2900,3000]
 # Output directory
 save_dir      = "../ModelProcessed"
-save_name     = "Compare_Retrofit_Sized" #sub_folder will be created
+save_name     = "Compare_Design_Offdesign" #sub_folder will be created
 # Fields to read out
 const fields = (:range_nmi,   :PFEI_JJ, :massTO_Ton, :massFuelTot_Ton, :massPayload_Ton,
                 :massEmpty_Ton, :rhoFuel_kgm3,  :volFuel_m3, :LD_cru, :LHV_cru_Jkg, :TSFC_cru_kgsN,
                 :vel_cru_ms, :eta_total_cru, :ene_fli_J, :frac_rese, :PFEI_cru_JJ, :range_cru_m,
-                :eta_therm_cru, :spe_power_cru_Jkg, :eta_propu_cru, :OPR_cru, :Tt_turbin_cru_K)
+                :eta_therm_cru, :spe_power_cru_Jkg, :eta_propu_cru, :OPR_cru, :Tt_turbin_cru_K, :fuel_tank_frac)
 
 #### Create save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
 
 #### Initialization
-results_retro = init_results_3Layers(length(des_range_retro), fields, length(OD_range_retro))
-results_sized = init_results_2Layers(length(des_range_sized), fields)
-results_sized_C = init_results_2Layers(length(des_range_sized_C), fields)
-
-#### Extract data for the retrofit missions
-for (i, des_ranges_cur) in enumerate(des_range_retro)
-    j = 0 #valid off-design index
-    results_retro_cur = results_retro[i]
-    for offdes_ranges_cur in OD_range_retro
-        ####Reading out the missions data    
-        ac_dir_retro = joinpath(model_dir,key_retro,key_retro*"$(round(Int,des_ranges_cur))",key_retro*"$(round(Int,des_ranges_cur))_$(round(Int,offdes_ranges_cur)).jld2")
-        if !isfile(ac_dir_retro) #check if the file exist
-            println("File, $(ac_dir_retro), does not exist")
-            continue
-        end
-        ac_retro = quickload_aircraft(ac_dir_retro)
-        println("File, $(ac_dir_retro), read successfully")
-        
-        #### Extract important parameters
-        out_dict = extract_acModel(ac_retro,2)
-
-        #### Output the data
-        j += 1
-        for f in fields
-            results_retro_cur[f][j] = out_dict[String(f)]
-        end
-    end
-
-    #### Trim the trailing missing
-    for f in fields
-        resize!(results_retro_cur[f], j)
-    end
-end
-    
-#### Extract data for the sized missions
-for (i, des_ranges_cur) in enumerate(des_range_sized)
+results_design = init_results_2Layers(length(des_ranges), fields)
+results_offdes = init_results_2Layers(length(des_ranges), fields)
+  
+#### Extract data for the design mission
+for (i, des_range_cur) in enumerate(des_ranges)
     #### Read in the case
-    ac_dir_sized = joinpath(model_dir,key_sized,key_sized*"$(round(Int,des_ranges_cur)).jld2")
-    ac_sized = quickload_aircraft(ac_dir_sized)
-    println("File, $(ac_dir_sized), read successfully")
-    out_dict = extract_acModel(ac_sized,1)
-    
+    ac_dir = joinpath(model_dir,key_design,key_design*"$(round(Int,des_range_cur)).jld2")
+    ac = quickload_aircraft(ac_dir)
+    out_dict = extract_acModel(ac,1)
+    println("File, $(ac_dir), read successfully")
     #### Output the data
     for f in fields
-        results_sized[f][i] = out_dict[String(f)]
+        results_design[f][i] = out_dict[String(f)]
     end
-end
-
-for (i, des_ranges_cur) in enumerate(des_range_sized_C)
-    #### Read in the case
-    ac_dir_sized_C = joinpath(model_dir,key_sized_C,key_sized_C*"$(round(Int,des_ranges_cur)).jld2")
-    ac_sized_C = quickload_aircraft(ac_dir_sized_C)
-    println("File, $(ac_dir_sized_C), read successfully")
-    out_dict_C = extract_acModel(ac_sized_C,1)
-    
+    #### Read in the offdesign case
+    ac_dir = joinpath(model_dir,key_offdes,key_offdes*"$(round(Int,des_range_cur))_$(round(Int,des_range_cur)).jld2")
+    ac = quickload_aircraft(ac_dir)
+    out_dict = extract_acModel(ac,2)
+    println("File, $(ac_dir), read successfully")
     #### Output the data
     for f in fields
-        results_sized_C[f][i] = out_dict_C[String(f)]
+        results_offdes[f][i] = out_dict[String(f)]
     end
 end
 
@@ -240,26 +200,43 @@ linecolors = repeat([:blue, :red, :green, :orange, :purple, :brown, :pink, :gray
 markers = repeat([:rect, :circle, :diamond, :utriangle, :dtriangle],1000)
 # Plot PFEI
 p1_1 = plot(xlabel="Ranges (nmi)", ylabel="PFEI (J/J)", dpi=800)
-plot!(p1_1,ylims=(0.6,1.4))
 global il = 1
-plot!(p1_1, results_sized[:range_nmi], results_sized[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft")
+scatter!(p1_1, results_design[:range_nmi], results_design[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
 global il += 1
-plot!(p1_1, results_sized_C[:range_nmi], results_sized_C[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft with central fuel tank")
-for i in eachindex(des_range_retro)
-    global il += 1
-    results_retro_cur = results_retro[i]
-    plot!(p1_1, results_retro_cur[:range_nmi], results_retro_cur[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft with $(round(Int, des_range_retro[i])) nmi desing range")
-end
+scatter!(p1_1, results_offdes[:range_nmi], results_offdes[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
 savefig(p1_1, joinpath(save_dir_sub, "PFEI.png"))
 
-p1_2 = plot(xlabel="Ranges (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
+p1_2 = plot(xlabel="Ranges (nmi)", ylabel="Takeoff Weight (Ton)", dpi=800)
 global il = 1
-plot!(p1_2, results_sized[:range_nmi], results_sized[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label=label="Optimized aircratft")
+scatter!(p1_2, results_design[:range_nmi], results_design[:massTO_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
 global il += 1
-plot!(p1_2, results_sized_C[:range_nmi], results_sized_C[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft with central fuel tank")
-for i in eachindex(des_range_retro)
-    global il += 1
-    results_retro_cur = results_retro[i]
-    plot!(p1_2, results_retro_cur[:range_nmi], results_retro_cur[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft with $(round(Int, des_range_retro[i])) nmi desing range")
-end
-savefig(p1_2, joinpath(save_dir_sub, "mass_pay.png"))
+scatter!(p1_2, results_offdes[:range_nmi], results_offdes[:massTO_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
+savefig(p1_2, joinpath(save_dir_sub, "massTO.png"))
+
+p1_3 = plot(xlabel="Ranges (nmi)", ylabel="Fuel Mass (Ton)", dpi=800)
+global il = 1
+scatter!(p1_3, results_design[:range_nmi], results_design[:massFuelTot_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
+global il += 1
+scatter!(p1_3, results_offdes[:range_nmi], results_offdes[:massFuelTot_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
+savefig(p1_3, joinpath(save_dir_sub, "massFuel.png"))
+
+p1_4 = plot(xlabel="Ranges (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
+global il = 1
+scatter!(p1_4, results_design[:range_nmi], results_design[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
+global il += 1
+scatter!(p1_4, results_offdes[:range_nmi], results_offdes[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
+savefig(p1_4, joinpath(save_dir_sub, "massPayload.png"))
+
+p1_5 = plot(xlabel="Ranges (nmi)", ylabel="Empty Mass (Ton)", dpi=800)
+global il = 1
+scatter!(p1_5, results_design[:range_nmi], results_design[:massEmpty_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
+global il += 1
+scatter!(p1_5, results_offdes[:range_nmi], results_offdes[:massEmpty_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
+savefig(p1_5, joinpath(save_dir_sub, "massEmpty.png"))
+
+p1_6 = plot(xlabel="Ranges (nmi)", ylabel="Fractional Fuel Tank Used", dpi=800)
+global il = 1
+scatter!(p1_6, results_design[:range_nmi], results_design[:fuel_tank_frac], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Design case")
+global il += 1
+scatter!(p1_6, results_offdes[:range_nmi], results_offdes[:fuel_tank_frac], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Offdesign case")
+savefig(p1_6, joinpath(save_dir_sub, "fraction_fuel_tank.png"))
