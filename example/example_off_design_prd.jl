@@ -6,7 +6,7 @@ using TASOPT
 using DataFrames, CSV
 include(__TASOPTindices__)
 include(joinpath(@__DIR__, "offdesign.jl"))
-using .PRD: off_design_PRD
+using .PRD: off_design_PRD, off_design_R1R2
 
 #### File Name Creation
 function modelFileName(model_prefix::String, curFuel::String, curRange::String)
@@ -15,37 +15,47 @@ function modelFileName(model_prefix::String, curFuel::String, curRange::String)
 end
 
 #### Setup IO
-model_dir    = "ModelSaved"
-model_prefix = "acOptimized_BatOpt" #Frontal key name for the models(FuelRange)
-save_dir_prefix = "ModelSaved" #Outer Directory for saving the offdesign models
-save_prefix  = "off_design" #added with fuel and designed_range to create a sub folder name. Each then contain sub-model for off-design sweep
-mkpath(model_dir)
-Fuels = ["Eth", "Jet"] #["Eth", "Jet"] #These corresponding to the model file name
-Ranges_design = collect(300:100:3000) #collect(300:100:3000) #Prefixex+Fuel+Range.jld2
+model_dir       = "ModelSaved"
+input_prefix    = "acOptimized_BatOptJet" #Output name will be appended from this input name
+save_key        = "Jet_" #addtional keyword for saving (Can be empty)
+Ranges_design   = collect(300:100:3000) #Must match
 #### Offdesign parameter
-Ranges_sweep = Float64.(collect(100:100:18000)) #off design range to sweep [nmi]
-fuel_idx = [32 , 24] #[32 , 24]
-rho_fuel = [789.0 , 817.0] #[789.0 , 817.0] #kg/m3
-hvap_fuel = [918187.9 , 358694.0] #[918187.9 , 358694.0] #J/kg
+Ranges_sweep    = Float64.(collect(300:100:18000)) #off design range to test [nmi]
+fuel_idx        = 24       #Eth: 32 , Jet: 24
+rho_fuel        = 817.0    #Eth: 789.0 , Jet: 817.0 #kg/m3
+hvap_fuel       = 358694.0 #Eth: 918187.9 , Jet: 358694.0 #J/kg
+
+#### Initialize new folder for saved aircraft model
+save_dir = joinpath(model_dir, input_prefix*"OffDes_"*save_key)
+mkpath(save_dir)
 
 #### Extract data for each case
-for (i,curFuel) in enumerate(Fuels)
-    for (j,curRange) in enumerate(Ranges_design)
-        model_name = modelFileName(model_prefix,curFuel,string(round(Int,curRange)))
-        println("Compute off design for: Fuel type: $(curFuel), Range: $(curRange)")
-        try
-            #### Load the aircraft model
-            ac = quickload_aircraft(joinpath(model_dir,"$(model_name).jld2"))
-            #### run off-design
-            # Create a sub-folder as save Directory
-            save_dir_sub = joinpath(save_dir_prefix,"$(save_prefix)$(curFuel)$(string(round(Int,curRange)))")
-            mkpath(save_dir_sub)
-            out_off = off_design_PRD(ac, fuel_idx[i], rho_fuel[i], hvap_fuel[i], Ranges_sweep; 
-                      save_dir = save_dir_sub, save_name = "$(save_prefix)$(curFuel)$(string(round(Int,curRange)))_")
-            println("Get off-design maximum ranges: $(out_off["range_nmi"])")
-        catch err
-            println(err)
-            println("Reading case failed for Fuel type: $(curFuel), Range: $(curRange)")
-        end
-    end
+for (i,curRange) in enumerate(Ranges_design)
+    #### File path setup
+    des_ran_str = string(round(Int,curRange)) #String form of current rounded range
+    design_file_path = joinpath(model_dir, input_prefix, input_prefix*des_ran_str*".jld2")
+    
+    #### Load the aircraft model at design point
+    ac = quickload_aircraft(design_file_path)
+    
+    #### run off-design
+    # Create save folder
+    save_name_cur = input_prefix*"_OffDes_"*save_key*des_ran_str*"_"
+    save_dir_cur = joinpath(save_dir, save_name_cur)
+    mkdir(save_dir_cur)
+    
+    # Compute the Envelop
+    out_off = off_design_PRD(ac, fuel_idx, rho_fuel, hvap_fuel, Ranges_sweep; 
+                             save_dir = save_dir_cur, save_name = save_name_cur,  flg_save_ac = true)
+    println("For design range: $(des_ran_str) find feasible offdesign range from $(out_off["range_nmi"][1]) to $(out_off["range_nmi"][end])")
+
+    #### Compute the R1 R2
+    # determine the bounds for R1 and R2
+    RLB = minimum(out_off["range_nmi"])
+    RUB = maximum(out_off["range_nmi"]) #Lazy initialization 
+    rangeBounds = [RLB,RUB,RLB,RUB]
+    epsRange = 1e-6 #Need stronger convergence critria for lazy initialization
+    out_R1, out_R2 = off_design_R1R2(ac, fuel_idx, rho_fuel, hvap_fuel, rangeBounds; 
+                               epsRange = epsRange, save_dir = save_dir_cur, save_name = save_name_cur,  flg_save_ac = true)
+    println("For design range: $(des_ran_str) find R1 and R2 ranges of $(out_R1["range_nmi"][1]) to $(out_R1["range_nmi"][1])")
 end
