@@ -47,6 +47,10 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
     weight_empty = ac.parm[imWTO,1] - ac.parm[imWfuel,1] - ac.parm[imWpay, 1] #Empty weight (N)
     weight_one_passen = ac.parm[imWperpax, 1] #Weight of one passenger (N)
     weight_payload_max = ac.parg[igWpaymax] #Maximum weight of payload including cargo (N)
+    # Add some buffer to the limit
+    weight_TO_max *= 1.0001
+    vol_fuel_max *= 1.0001
+    weight_payload_max *= 1.0001
 
     #### Parameters to collect
     payloads_feasible = Vector{Float64}() #N
@@ -224,6 +228,10 @@ function off_design_specified(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Floa
     vol_fuel_max = ac.parg[igWfmax] / gee / ac.parg[igrhofuel] #Fuel volume maximum (m3)
     weight_empty = ac.parm[imWTO,1] - ac.parm[imWfuel,1] - ac.parm[imWpay, 1] #Empty weight (N)
     weight_payload_max = ac.parg[igWpaymax] #Maximum weight of payload including cargo (N). A +1 N margin will be given for numerical error.
+    # Add some buffer to the limit
+    weight_TO_max *= 1.0001 
+    vol_fuel_max *= 1.0001
+    weight_payload_max *= 1.0001
 
     #### Parameters to collect
     payloads_feasible = Vector{Float64}() # (N)
@@ -254,10 +262,10 @@ function off_design_specified(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Floa
             fly_mission!(ac, 2; itermax = 100, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
             weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
             vol_fuel = ac.parm[imWfuel,2] / gee / ac.parg[igrhofuel] #m3
-            if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || ac.parm[imWpay,2] > (weight_payload_max+1.0) ||
+            if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || ac.parm[imWpay,2] > weight_payload_max ||
                weight_TO < 0.0 || vol_fuel < 0.0 || ac.parm[imWpay,2] < 0.0
                 println("Off-design failed constraints: Wpay: $(ac.parm[imWpay,2]) N at range $(range_cur) nmi 
-                with WTO/max $(weight_TO/weight_TO_max); Vf/max $(vol_fuel/vol_fuel_max); Wpay/max $(ac.parm[imWpay,2]/(weight_payload_max+1.0))")
+                with WTO/max $(weight_TO/weight_TO_max); Vf/max $(vol_fuel/vol_fuel_max); Wpay/max $(ac.parm[imWpay,2]/weight_payload_max)")
                 continue
             else
                 println("Off-design succeeded: Wpay: $(ac.parm[imWpay,2]) N at range $(range_cur) nmi")
