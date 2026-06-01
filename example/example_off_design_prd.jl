@@ -57,5 +57,5 @@ for (i,curRange) in enumerate(Ranges_design)
     epsRange = 1e-6 #Need stronger convergence critria for lazy initialization
     out_R1, out_R2 = off_design_R1R2(ac, fuel_idx, rho_fuel, hvap_fuel, rangeBounds; 
                                epsRange = epsRange, save_dir = save_dir_cur, save_name = save_name_cur,  flg_save_ac = true)
-    println("For design range: $(des_ran_str) find R1 and R2 ranges of $(out_R1["range_nmi"][1]) to $(out_R1["range_nmi"][1])")
+    println("For design range: $(des_ran_str) find R1 and R2 ranges of $(out_R1["range_nmi"][1]) to $(out_R2["range_nmi"][1])")
 end

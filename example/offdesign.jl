@@ -170,7 +170,7 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
                 push!(ranges_feasible, range_cur) #nmi
                 push!(PFEI_list, ac.parm[imPFEI, 2])
                 push!(fuel_tank_frac, vol_fuel/(vol_fuel_max/(1.0 + epsBuff)))
-                push!(payload_frac, weight_TO/(weight_TO_max/(1.0 + epsBuff)))
+                push!(payload_frac, ac.parm[imWpay,2]/(weight_payload_max/(1.0 + epsBuff)))
                 ## Save the current off-design model
                 if flg_save_ac
                     mkpath(save_dir)
@@ -228,7 +228,7 @@ function findR1R2_wrapper(mode, R_LB, R_UB, epsRange, epsBuff, flg_save_ac, ac, 
     end
     (count_iter < 1000) || println("Warning: time out for range search loop(Unlikely due to bisection nature(something is off))")
     # Rerun the feasible case and store the data
-    out_dict = off_design_PRD(ac, idxFuel, rhoFuel, hvap_fuel, [R_out]; save_dir=save_dir, save_name=save_name*String(mode), flg_save_ac=flg_save_ac)
+    out_dict = off_design_PRD(ac, idxFuel, rhoFuel, hvap_fuel, [R_out]; save_dir=save_dir, save_name=save_name*String(mode)*"_", flg_save_ac=flg_save_ac)
     return out_dict
 end
 
@@ -254,7 +254,7 @@ Inputs:
     save_name: String: name for the saved model (save_name*string(round(Int,ran_cur))*".jld2") (No need if no saving)
     flg_save_ac: bool: true then the off-design ac models will be saved
 Outpus:
-    two output in a list: Dict: ["type": Symbol(:R1 or :R2), "payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}, "fuel_tank_frac": Vector{Float64}, "payload_frac": Vector{Float64}] #If all ranges not feasible, each element will have length 0
+    two output in a list: Dict: ["payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}, "fuel_tank_frac": Vector{Float64}, "payload_frac": Vector{Float64}] #If all ranges not feasible, each element will have length 0
 """
 function off_design_R1R2(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
                          epsRange::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "R1R2",
