@@ -6,11 +6,12 @@ include(__TASOPTindices__)
 
 """
 off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-               epsWpay::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign")
+               epsWpay::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign", flg_save_ac::Bool = true)
 
 This function determine the maximum payload range envelope with a prescribe list of possible flight range
     Assume fixed CL for off-design
     Assume starting from design point engine parameters
+    In terms of flight model to be saved. Beware the following variable will not be same as design point anymore. (idxFuel, rhoFuel, hvap_fuel)
 Inputs:
     ac: TASOPT aircraft model: has to be sized
     idxFuel: int: the fuel to be use
@@ -18,13 +19,15 @@ Inputs:
     hvap_fuel: float: Heat of vaporization of the fuel (J/kg)
     ranges: vector{float}: A list of potential off-design ranges to test [nmi]
     epsWpay: float: fractional search range for convergence
-    save_dir: String: name of the save directory
-    save_name: String: name for the saved model (save_name*string(round(Int,ran_cur))*".jld2")
+    epsBuff: float: small fractional buffer given to the constraint for roundoff error
+    save_dir: String: name of the save directory (No need if no saving)
+    save_name: String: name for the saved model (save_name*string(round(Int,ran_cur))*".jld2") (No need if no saving)
+    flg_save_ac: bool: true then the off-design ac models will be saved
 Outpus:
     output: Dict: ["payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}]
 """
 function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-    epsWpay::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign")
+    epsWpay::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign",  flg_save_ac::Bool = true)
 
     #### Check on sizing
     ac.is_sized[1] || error("Aircraft model needs to be sized before runing offdesign.")
@@ -48,14 +51,16 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
     weight_one_passen = ac.parm[imWperpax, 1] #Weight of one passenger (N)
     weight_payload_max = ac.parg[igWpaymax] #Maximum weight of payload including cargo (N)
     # Add some buffer to the limit
-    weight_TO_max *= 1.0001
-    vol_fuel_max *= 1.0001
-    weight_payload_max *= 1.0001
+    weight_TO_max *= (1.0 + epsBuff)
+    vol_fuel_max *= (1.0 + epsBuff)
+    weight_payload_max *= (1.0 + epsBuff)
 
     #### Parameters to collect
     payloads_feasible = Vector{Float64}() #N
     ranges_feasible = Vector{Float64}() #nmi
     PFEI_list = Vector{Float64}()
+    fuel_tank_frac = Vector{Float64}() #fraction of fuel tank used by volume
+    payload_frac = Vector{Float64}() #fraction of payload capacity taken
     
     #### Initialization
     range_max_found = Inf #above which skip the test
@@ -164,9 +169,13 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
                 push!(payloads_feasible, ac.parm[imWpay,2])
                 push!(ranges_feasible, range_cur) #nmi
                 push!(PFEI_list, ac.parm[imPFEI, 2])
+                push!(fuel_tank_frac, vol_fuel/(vol_fuel_max/(1.0 + epsBuff)))
+                push!(payload_frac, weight_TO/(weight_TO_max/(1.0 + epsBuff)))
                 ## Save the current off-design model
-                mkpath(save_dir)
-                quicksave_aircraft(ac, joinpath(save_dir, "$(save_name*string(round(Int,range_cur))).jld2"))
+                if flg_save_ac
+                    mkpath(save_dir)
+                    quicksave_aircraft(ac, joinpath(save_dir, "$(save_name*string(round(Int,range_cur))).jld2"))
+                end
             end
         catch err
             println(err)
@@ -178,7 +187,9 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
     output = Dict(
         "payload_weight_N" => payloads_feasible,
         "range_nmi" => ranges_feasible,
-        "PFEI_JJ" => PFEI_list
+        "PFEI_JJ" => PFEI_list,
+        "fuel_tank_frac" => fuel_tank_frac,
+        "payload_frac" => payload_frac
     )
     return output
 end
