@@ -229,7 +229,6 @@ function findR1R2_wrapper(mode, R_LB, R_UB, epsRange, epsBuff, flg_save_ac, ac, 
     (count_iter < 1000) || println("Warning: time out for range search loop(Unlikely due to bisection nature(something is off))")
     # Rerun the feasible case and store the data
     out_dict = off_design_PRD(ac, idxFuel, rhoFuel, hvap_fuel, [R_out]; save_dir=save_dir, save_name=save_name*String(mode), flg_save_ac=flg_save_ac)
-    out_dict["type"] = mode
     return out_dict
 end
 
