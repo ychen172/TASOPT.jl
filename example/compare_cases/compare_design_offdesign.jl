@@ -15,50 +15,7 @@ using Statistics
 epsR1R2 = 0.005
 
 #### Helpers Functions
-# Interpolation function for threshold range determination
-function interp_range_at_threshold(range, y, i_peak, eps; side::Symbol)
-    yth = y[i_peak] * (1 - eps)
-
-    if side == :right
-        # first point to the RIGHT of peak below threshold
-        k2 = findnext(v -> v < yth, y, i_peak + 1)
-        isnothing(k2) && return nothing
-        k1 = k2 - 1
-    elseif side == :left
-        # first point to the LEFT of peak below threshold
-        k1 = findprev(v -> v < yth, y, i_peak - 1)
-        isnothing(k1) && return nothing
-        k2 = k1 + 1
-    else
-        error("side must be :right or :left")
-    end
-
-    x1, x2 = range[k1], range[k2]
-    y1, y2 = y[k1], y[k2]
-
-    # linear interpolation: x at y=yth
-    if y2 == y1
-        return x1  # degenerate case
-    end
-    xth = x1 + (yth - y1) * (x2 - x1) / (y2 - y1)
-    return xth
-end
-
 # Design parameters output
-function init_results(case_keywords, des_ranges, offdes_ranges, fields_to_read)
-    # case_keywords, des_ranges, offdes_ranges: Vector
-    # fields_to_read: tuple of symbols
-    noff = length(offdes_ranges)
-    makevec() = fill!(Vector{Union{Missing,Float64}}(undef, noff), missing)
-    Dict(
-        kw => Dict(
-            d => Dict(
-                f => makevec() for f in fields_to_read
-            ) for d in eachindex(des_ranges)
-        ) for kw in eachindex(case_keywords)
-    )
-end
-
 function init_results_3Layers(num_des_ranges, fields, num_offdes_ranges)
     """This function create a three layer dictionary"""
     # num_des_ranges: Int: number of design ranges
@@ -81,38 +38,6 @@ function init_results_2Layers(num_des_ranges, fields)
     return output
 end
 
-function find_frac_change(results,idx_base,idx_targ,numDesRan,xSymb,ySymb)
-    #results: case*desRan*symb*offdes
-    #idx_base,idx_targ: cases
-    #numDesRan: number of design range
-    #xSymb,ySymb: symbols to find difference, Ex. x: range, y: PFEI
-    x_common = []
-    y_change = []
-    for i in 1:numDesRan
-        #### Extract the base and target case
-        results_base = results[idx_base][i]
-        results_targ = results[idx_targ][i]
-        x_base = results_base[xSymb]
-        x_targ = results_targ[xSymb]
-        y_base = results_base[ySymb]
-        y_targ = results_targ[ySymb]
-        #### Filter out the common cases using x
-        minx = max(minimum(x_base),minimum(x_targ))
-        maxx = min(maximum(x_base),maximum(x_targ))
-        msk_base = (x_base .>= minx) .& (x_base .<= maxx)
-        msk_targ = (x_targ .>= minx) .& (x_targ .<= maxx)
-        x_base = x_base[msk_base]
-        x_targ = x_targ[msk_targ]
-        y_base = y_base[msk_base]
-        y_targ = y_targ[msk_targ]
-        @assert (round.(Int, x_base) == round.(Int, x_targ)) "Base$(x_base)/target$(x_targ) x do not match after filtering"
-        #### Calculate the change
-        push!(x_common, x_base)
-        push!(y_change, (y_targ .- y_base) ./ y_base)
-    end
-    return x_common,y_change
-end
-
 function extract_acModel(ac_cur,idx_miss)
     """
     This function extract parameters from a aircraft model given a target mission
@@ -133,8 +58,6 @@ function extract_acModel(ac_cur,idx_miss)
     #### fuel volume data
     rhoFuel = ac_cur.parg[igrhofuel] #kg/m3
     volFuel = massFuelTot * 1000.0 / rhoFuel #m3
-    volFuelMax = ac_cur.parg[igWfmax] / gee / rhoFuel #Only work if design and off-design use the same fuel. Fuel volume maximum m3
-    FuelVolumeFraction = volFuel/volFuelMax
     
     #### flight performance data
     LD_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, idx_miss]/ac_cur.para[iaCD, ipcruise1, idx_miss] + 
@@ -217,33 +140,7 @@ function extract_acModel(ac_cur,idx_miss)
         "spe_power_cru_Jkg" => spePower_cru,
         "eta_propu_cru" => etaPropu_cru,
         "OPR_cru" => OPR_cru,
-        "Tt_turbin_cru_K" => Tt_TurbIn_cru,
-        "FuelVolumeFraction"=> FuelVolumeFraction
-    )
-    return output
-end
-
-function findR1R2(range, massPay, volFuel, epsR1R2)
-    """
-    A function to find R1 and R2 range and their index
-    Inputs:
-        range, massPay, volFuel: Vector{Float64}, Ascending range
-        epsR1R2: Float64: eps lower than
-    """
-    # R1
-    massPay_Max_Val, massPay_Max_Idx = findmax(massPay) #assume your off-design mission reach maximum payload (if not, the first point would be picked)
-    idx_R1_approx = findnext(massPay_ -> massPay_ < massPay_Max_Val*(1.0-epsR1R2), massPay, massPay_Max_Idx) - 1 #approximated R1 index for plot
-    R1_interp = interp_range_at_threshold(range, massPay, massPay_Max_Idx, epsR1R2; side=:right) #inteprolated R1
-    # R2
-    volFuel_Max_Val, volFuel_Max_Idx = findmax(volFuel) #assume your off-design reach maximum fuel volume (threortically always for payload range diagram)
-    idx_R2_approx = findprev(volFuel_ -> volFuel_ < volFuel_Max_Val*(1.0-epsR1R2), volFuel, volFuel_Max_Idx) + 1
-    R2_interp = interp_range_at_threshold(range, volFuel, volFuel_Max_Idx, epsR1R2; side=:left) #inteprolated R2
-    # Output
-    output = Dict(
-        "idx_R1_approx" => idx_R1_approx,
-        "idx_R2_approx" => idx_R2_approx,
-        "R1_interp" => R1_interp, #Same unit as the input range
-        "R2_interp" => R2_interp,
+        "Tt_turbin_cru_K" => Tt_TurbIn_cru
     )
     return output
 end
@@ -251,53 +148,87 @@ end
 #### Setup IO
 # Input case names - Retrofit
 model_dir       = "../ModelSaved"
-# Input case names - Ethanol
-key_sized_Eth       = "acOptimized_BatOptEth" #180Pass_Opt: "acOptimized_BatOptEth", 3000nmiJet2EthRetroCase_but_optimized: "OptimizedJetToEth3000_"
-des_range_sized_Eth = float.(collect(300:100:2900)) #Has to match with existings
-# Input case names - Jet fuel
-key_sized_Jet       = "acOptimized_BatOptJet" #180Pass_Opt: "CenterFuelTank_BatOptEth", 3000nmiJet2EthRetroCase_but_optimizedWithCenTank: "OptCenTankJetToEth3000_"
-des_range_sized_Jet = float.(collect(300:100:3000)) #Has to match with existings
+key_retro       = "jetfuel_to_ethanolJet"
+des_range_retro = [3000] #float.(collect(300:100:3000)) #design range for retrofit aircraft to compare (Has to be convertable to integer) (nmi)
+OD_range_retro  = float.(collect(300:100:8000)) #Search set for off-design ranges (Has to be integer) (nmi) (can be wider than existing)
+# Input case names - Sized
+key_sized       = "OptimizedJetToEth3000_" #180Pass_Opt: "acOptimized_BatOptEth", 3000nmiJet2EthRetroCase_but_optimized: "OptimizedJetToEth3000_"
+des_range_sized = float.(collect(300:100:2100)) #Has to match with existings
+# Input case names - Sized with Central Fuel Tank
+key_sized_C       = "OptCenTankJetToEth3000_" #180Pass_Opt: "CenterFuelTank_BatOptEth", 3000nmiJet2EthRetroCase_but_optimizedWithCenTank: "OptCenTankJetToEth3000_"
+des_range_sized_C = float.(collect(300:100:2100)) #Has to match with existings
 # Output directory
 save_dir      = "../ModelProcessed"
-save_name     = "Compare_at_design" #sub_folder will be created
+save_name     = "Compare_Retrofit_Sized" #sub_folder will be created
 # Fields to read out
 const fields = (:range_nmi,   :PFEI_JJ, :massTO_Ton, :massFuelTot_Ton, :massPayload_Ton,
                 :massEmpty_Ton, :rhoFuel_kgm3,  :volFuel_m3, :LD_cru, :LHV_cru_Jkg, :TSFC_cru_kgsN,
                 :vel_cru_ms, :eta_total_cru, :ene_fli_J, :frac_rese, :PFEI_cru_JJ, :range_cru_m,
-                :eta_therm_cru, :spe_power_cru_Jkg, :eta_propu_cru, :OPR_cru, :Tt_turbin_cru_K, :FuelVolumeFraction)
+                :eta_therm_cru, :spe_power_cru_Jkg, :eta_propu_cru, :OPR_cru, :Tt_turbin_cru_K)
 
 #### Create save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
 
 #### Initialization
-results_sized_Eth = init_results_2Layers(length(des_range_sized_Eth), fields)
-results_sized_Jet = init_results_2Layers(length(des_range_sized_Jet), fields)
+results_retro = init_results_3Layers(length(des_range_retro), fields, length(OD_range_retro))
+results_sized = init_results_2Layers(length(des_range_sized), fields)
+results_sized_C = init_results_2Layers(length(des_range_sized_C), fields)
 
+#### Extract data for the retrofit missions
+for (i, des_ranges_cur) in enumerate(des_range_retro)
+    j = 0 #valid off-design index
+    results_retro_cur = results_retro[i]
+    for offdes_ranges_cur in OD_range_retro
+        ####Reading out the missions data    
+        ac_dir_retro = joinpath(model_dir,key_retro,key_retro*"$(round(Int,des_ranges_cur))",key_retro*"$(round(Int,des_ranges_cur))_$(round(Int,offdes_ranges_cur)).jld2")
+        if !isfile(ac_dir_retro) #check if the file exist
+            println("File, $(ac_dir_retro), does not exist")
+            continue
+        end
+        ac_retro = quickload_aircraft(ac_dir_retro)
+        println("File, $(ac_dir_retro), read successfully")
+        
+        #### Extract important parameters
+        out_dict = extract_acModel(ac_retro,2)
+
+        #### Output the data
+        j += 1
+        for f in fields
+            results_retro_cur[f][j] = out_dict[String(f)]
+        end
+    end
+
+    #### Trim the trailing missing
+    for f in fields
+        resize!(results_retro_cur[f], j)
+    end
+end
+    
 #### Extract data for the sized missions
-for (i, des_ranges_cur) in enumerate(des_range_sized_Eth)
+for (i, des_ranges_cur) in enumerate(des_range_sized)
     #### Read in the case
-    ac_dir_sized = joinpath(model_dir,key_sized_Eth,key_sized_Eth*"$(round(Int,des_ranges_cur)).jld2")
+    ac_dir_sized = joinpath(model_dir,key_sized,key_sized*"$(round(Int,des_ranges_cur)).jld2")
     ac_sized = quickload_aircraft(ac_dir_sized)
     println("File, $(ac_dir_sized), read successfully")
     out_dict = extract_acModel(ac_sized,1)
     
     #### Output the data
     for f in fields
-        results_sized_Eth[f][i] = out_dict[String(f)]
+        results_sized[f][i] = out_dict[String(f)]
     end
 end
 
-for (i, des_ranges_cur) in enumerate(des_range_sized_Jet)
+for (i, des_ranges_cur) in enumerate(des_range_sized_C)
     #### Read in the case
-    ac_dir_sized = joinpath(model_dir,key_sized_Jet,key_sized_Jet*"$(round(Int,des_ranges_cur)).jld2")
-    ac_sized = quickload_aircraft(ac_dir_sized)
-    println("File, $(ac_dir_sized), read successfully")
-    out_dict = extract_acModel(ac_sized,1)
+    ac_dir_sized_C = joinpath(model_dir,key_sized_C,key_sized_C*"$(round(Int,des_ranges_cur)).jld2")
+    ac_sized_C = quickload_aircraft(ac_dir_sized_C)
+    println("File, $(ac_dir_sized_C), read successfully")
+    out_dict_C = extract_acModel(ac_sized_C,1)
     
     #### Output the data
     for f in fields
-        results_sized_Jet[f][i] = out_dict[String(f)]
+        results_sized_C[f][i] = out_dict_C[String(f)]
     end
 end
 
@@ -308,18 +239,27 @@ linecolors = repeat([:blue, :red, :green, :orange, :purple, :brown, :pink, :gray
                      :magenta, :teal, :navy, :maroon, :olive, :gold, :coral, :turquoise, :lime, :indigo], 1000) 
 markers = repeat([:rect, :circle, :diamond, :utriangle, :dtriangle],1000)
 # Plot PFEI
-p1_1 = plot(xlabel="Design Ranges (nmi)", ylabel="PFEI (J/J)", dpi=800)
+p1_1 = plot(xlabel="Ranges (nmi)", ylabel="PFEI (J/J)", dpi=800)
 plot!(p1_1,ylims=(0.6,1.4))
 global il = 1
-plot!(p1_1, results_sized_Jet[:range_nmi], results_sized_Jet[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized Jet Fuel Aircraft")
+plot!(p1_1, results_sized[:range_nmi], results_sized[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft")
 global il += 1
-plot!(p1_1, results_sized_Eth[:range_nmi], results_sized_Eth[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized Ethanol Aircraft")
+plot!(p1_1, results_sized_C[:range_nmi], results_sized_C[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft with central fuel tank")
+for i in eachindex(des_range_retro)
+    global il += 1
+    results_retro_cur = results_retro[i]
+    plot!(p1_1, results_retro_cur[:range_nmi], results_retro_cur[:PFEI_JJ], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft with $(round(Int, des_range_retro[i])) nmi desing range")
+end
 savefig(p1_1, joinpath(save_dir_sub, "PFEI.png"))
 
-# Plot Fuel Fraction
-p1_2 = plot(xlabel="Design Ranges (nmi)", ylabel="Fuel Tank Used (%)", dpi=800, legend=:bottomright)
+p1_2 = plot(xlabel="Ranges (nmi)", ylabel="Payload Mass (Ton)", dpi=800)
 global il = 1
-plot!(p1_2, results_sized_Jet[:range_nmi], results_sized_Jet[:FuelVolumeFraction] .* 100.0, marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized Jet Fuel Aircraft")
+plot!(p1_2, results_sized[:range_nmi], results_sized[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label=label="Optimized aircratft")
 global il += 1
-plot!(p1_2, results_sized_Eth[:range_nmi], results_sized_Eth[:FuelVolumeFraction] .* 100.0, marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized Ethanol Aircraft")
-savefig(p1_2, joinpath(save_dir_sub, "FuelTankUsed.png"))
+plot!(p1_2, results_sized_C[:range_nmi], results_sized_C[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Optimized aircratft with central fuel tank")
+for i in eachindex(des_range_retro)
+    global il += 1
+    results_retro_cur = results_retro[i]
+    plot!(p1_2, results_retro_cur[:range_nmi], results_retro_cur[:massPayload_Ton], marker=markers[il], mc=linecolors[il], msc=linecolors[il], color=linecolors[il], lw=2, linestyle=linestyles[il], label="Retrofit Aircraft with $(round(Int, des_range_retro[i])) nmi desing range")
+end
+savefig(p1_2, joinpath(save_dir_sub, "mass_pay.png"))
