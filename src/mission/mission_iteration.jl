@@ -24,6 +24,9 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
 
       ifirst = true
 
+      # Initialize default driven parameters
+      pare[ierhofuel_driven, :] .= parg[igrhofuel] #(default) for fuel volume calculation
+
       # HACK TODO add the para back
       # iairf
       initializes_engine = true
@@ -801,6 +804,15 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
       parm[imWTO] = WTO
       parm[imWfuel] = Wfuel
       #TODO the above calculation does not account for the effect of venting on the flight profile
+
+      # mission fuel volume (Convert the fuel weight at each phase into fuel volume)
+      fuel_volume_flight = 0.0 #(m3)
+      for ip = ipclimb1:(ipdescentn-1)
+            fuel_volume_flight += ((para[iafracW, ip]-para[iafracW, ip+1])*(1.0 + freserve)*WMTO/gee)/
+            (0.5*(pare[ierhofuel_driven, ip]+pare[ierhofuel_driven, ip+1]))
+            #(m3)Assume the reserved fuel is reserved propotionally for each type
+      end
+      parm[imVfuel] = fuel_volume_flight #(m3) mission fuel volume
 
       # mission PFEI (Integrate through the phases in case fuel type changes during different phases)
       energyFlight = 0.0 #Total flight fuel energy (J)

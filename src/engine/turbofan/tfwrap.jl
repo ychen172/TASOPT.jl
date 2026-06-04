@@ -35,7 +35,9 @@ function tfwrap!(ac, case::String, imission::Int64, ip::Int64, initializes_engin
         pare[iehvap,ip] = parg[ighvap2nd]
         pare[iehvapcombustor,ip] = parg[ighvap2nd]
     end
-    
+    #Record down the current fuel density for fuel volume calculation
+    pare[ierhofuel_driven,ip] = parg[igrhofuel] #(kg/m3)
+
     #Run engine
     if case == "design"
         opt_calc_call = CalcMode.Sizing

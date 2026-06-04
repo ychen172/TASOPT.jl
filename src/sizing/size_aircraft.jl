@@ -265,6 +265,7 @@ function _size_aircraft!(ac; itermax=35,
             parg[igWMTO] = WMTO
             parg[igWeng] = Weng
             parg[igWfuel] = Wfuel
+            parm[imVfuel] = parg[igWfuel]/gee/parg[igrhofuel] #(m3) Initialize guess of the fuel volume
             if printiter
                 println("Wfuel initial = ", (ffuel * WMTO))
             end
@@ -273,6 +274,7 @@ function _size_aircraft!(ac; itermax=35,
             # Call a better update_weights! function
             update_WMTO!(ac, rlx)
 
+            parm[imVfuel] *= parg[igWfuel]/parm[imWfuel] # Update the fuel volume based on the new fuel weight after scaling
             parm[imWTO] = parg[igWMTO]
             parm[imWfuel] = parg[igWfuel]
 
@@ -354,7 +356,7 @@ function _size_aircraft!(ac; itermax=35,
         # Set up parameters for wing_weights function
         Winn, Wout = wing.inboard.weight, wing.outboard.weight
         dyWinn, dyWout = wing.inboard.dyW, wing.outboard.dyW
-        rhofuel = !(options.has_wing_fuel) ? 0.0 : parg[igrhofuel]
+        rhofuel = !(options.has_wing_fuel) ? 0.0 : (parg[igWfuel]/gee/parm[imVfuel]) #(Use mission averaged density for changing fuel in the middle of the flight)parg[igrhofuel]
 
         # Call wing_weights function
         Wwing,Wsinn,Wsout,
@@ -391,6 +393,7 @@ function _size_aircraft!(ac; itermax=35,
         # Update wing properties
         wing.weight = Wwing * rlx + wing.weight * (1.0 - rlx)
         parg[igWfmax] = Wfmax
+        parg[igVfmax] = parg[igWfmax]/gee/rhofuel #maximum fuel volume (m3)
         # wing.dxW = dxWwing
         parg[igdxWfuel] = dxWfmax * (parg[igWfuel]/parg[igWfmax])
 
@@ -667,6 +670,7 @@ function _size_aircraft!(ac; itermax=35,
         ip = ipcruise1
         update_weights!(ac, rlx)
 
+        parm[imVfuel] *= parg[igWfuel]/parm[imWfuel] # Update the fuel volume based on the new fuel weight after scaling
         parm[imWTO] = parg[igWMTO]
         parm[imWfuel] = parg[igWfuel]
 
@@ -683,6 +687,7 @@ function _size_aircraft!(ac; itermax=35,
         ip = ipcruise1
         update_weights!(ac, rlx)
 
+        parm[imVfuel] *= parg[igWfuel]/parm[imWfuel] # Update the fuel volume based on the new fuel weight after scaling
         parm[imWTO] = parg[igWMTO]
         parm[imWfuel] = parg[igWfuel]
         # printstyled("Wfuel = $(parg[igWfuel]) \n", color=:blue)
@@ -695,6 +700,8 @@ function _size_aircraft!(ac; itermax=35,
         # BFL calculations/ Noise? / Engine perf 
 
     end
+    # Save the design point fuel volume into the design parameter
+    parg[igVfuel] = parm[imVfuel]
 
     # normal takeoff and balanced-field takeoff calculations
     # set static thrust for takeoff routine

@@ -35,7 +35,8 @@
       const imfexcdf = 33
       const imDeltaTatm = 34
       const imWfvent = 35
-      const imtotal = 35
+      const imVfuel = 36
+      const imtotal = 36
 
 #---- indices for geometry (airframe) variables and other sizing variables
       const igRange    =   1
@@ -182,7 +183,11 @@
 
       const igrhofuel2nd = 124
       const ighvap2nd = 125
-      const igtotal    = 125
+
+      const igVfmax = 126
+      const igVfuel = 127
+
+      const igtotal = 127
 
 #---- indices for aero variables at each mission point
       const iaalt     =  1
@@ -490,8 +495,9 @@
       const ieConvFail          = 232
 
       const iePhases2ndFuel     = 233
+      const ierhofuel_driven    = 234
 
-      const ietotal = 233
+      const ietotal = 234
 
 #---- max number of blade rows allowed by ieepsc* and ieTmet* indices above
 # integer ncrowx
