@@ -476,11 +476,11 @@ end
 fuse_tank = fuselage_tank() #Initialize struct for fuselage fuel tank params
 
 has_wing_fuel = readfuel("fuel_in_wing")
+has_ACT_fuel = false #Setup additional center fuel tank
+fuel_stor = readfuel("Storage")
+dfuel_stor = dfuel["Storage"]
+readfuel_storage(x::String) = read_input(x, fuel_stor, dfuel_stor)
 if !(has_wing_fuel) #If fuel is stored in fuselage
-    fuel_stor = readfuel("Storage")
-    dfuel_stor = dfuel["Storage"]
-    readfuel_storage(x::String) = read_input(x, fuel_stor, dfuel_stor)
-
     fuse_tank.placement = readfuel_storage("tank_placement")
     fuse_tank.fueltype = fueltype
     fuse_tank.clearance_fuse = Distance(readfuel_storage("fuselage_clearance"))
@@ -545,7 +545,20 @@ if !(has_wing_fuel) #If fuel is stored in fuselage
     fuse_tank.tank_count = nftanks
 else #else all fuel in wings
     nftanks = 0
+    try
+        has_ACT_fuel = readfuel("has_ACT_fuel")
+    catch
+        nothing
+    end
 end #if
+if has_ACT_fuel
+    try
+        fuse_tank.ACT_eta_vol = readfuel_storage("ACT_usable_volume_fraction")
+        fuse_tank.ACT_eta_wei = readfuel_storage("ACT_gravimetry_efficiency")
+    catch
+        nothing
+    end
+end
 
 # ---------------------------------
 # Wing
@@ -1272,6 +1285,7 @@ ac_options = TASOPT.Options(
     ifuel = ifuel,
     ifuel2nd = ifuel,
     has_wing_fuel = has_wing_fuel,
+    has_ACT_fuel = has_ACT_fuel,
     has_centerbox_fuel = has_centerbox_fuel,
     has_fuselage_fuel = (nftanks>0),
 

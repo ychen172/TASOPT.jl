@@ -79,4 +79,12 @@ $TYPEDFIELDS
     qfac::Float64 = 0.0
     """Pressure rise factor"""
     pfac::Float64 = 0.0
+
+    """For addtional fuel tank"""
+    ACT_eta_vol::Float64 = 0.98
+    ACT_eta_wei::Float64 = 0.95
+    ACT_A::Float64 = 0.0
+    ACT_l::Float64 = 0.0
+    ACT_W::Float64 = 0.0
+    ACT_dx::Float64 = 0.0
 end

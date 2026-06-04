@@ -241,7 +241,7 @@ function _size_aircraft!(ac; itermax=35,
             Wftank_single = 0.0
         end
         #Note that fuselage is sized for a maximum payload weight in off-design missions
-        parg[igcabVol] = fusew!(fuse, Nland, Wpaymax, Wengtail, 
+        parg[igcabVol], A_fuse = fusew!(fuse, Nland, Wpaymax, Wengtail, 
              nftanks,
             Waftfuel,  Wftank_single, ltank, xftank_fuse, tank_placement,
              Δp,
@@ -370,6 +370,20 @@ function _size_aircraft!(ac; itermax=35,
         if (options.has_wing_fuel)
             Wfmax = 2.0 * ((options.has_centerbox_fuel ? Wfcen : 0.0) + Wfinn + Wfout)
             dxWfmax = 2.0 * (dxWfinn + dxWfout)
+            if (options.has_ACT_fuel)
+                Wf_ACT = max(parg[igWfuel]-Wfmax,0.0) #(N) addtional fuel weight holded by ACT
+                Vf_ACT = Wf_ACT/gee/rhofuel #(m3) fuel volume inside ACT
+                fuse_tank.ACT_A = A_fuse*0.45 #(m2) cross-sectional area given to ACT
+                fuse_tank.ACT_l = Vf_ACT/fuse_tank.ACT_eta_vol/fuse_tank.ACT_A #(m) length of ACT
+                fuse_tank.ACT_W = Wf_ACT*(1.0/fuse_tank.ACT_eta_wei-1.0) #(N) weight of the ACT tank
+                fuse_tank.ACT_dx = wing.layout.root_chord/2 + fuse_tank.ACT_l/2 #(m) Tank center relative to wing box
+                # Add total fuel capacity and fuel moment
+                Wfmax += Wf_ACT
+                dxWfmax += Wf_ACT*fuse_tank.ACT_dx
+                # Add ACT tank weight contribution
+                wing.dxW += fuse_tank.ACT_W*fuse_tank.ACT_dx
+                Wwing += fuse_tank.ACT_W
+            end
             Wfuelmp = Wpay - Wpaymax + parg[igWfuel]
             rfmax = Wfuelmp / Wfmax
         end
@@ -378,7 +392,7 @@ function _size_aircraft!(ac; itermax=35,
         wing.weight = Wwing * rlx + wing.weight * (1.0 - rlx)
         parg[igWfmax] = Wfmax
         # wing.dxW = dxWwing
-        parg[igdxWfuel] = dxWfmax * rfmax
+        parg[igdxWfuel] = dxWfmax * (parg[igWfuel]/parg[igWfmax])
 
         wing.outboard.webs.weight = wing.inboard.webs.weight
         wing.outboard.caps.weight = wing.inboard.caps.weight

@@ -21,6 +21,8 @@ $TYPEDFIELDS
     has_fuselage_fuel::Bool 
       #TODO: consider making ^ a driving parameter, rather than a reflection of fuse_tank parameters
       #Note: right now fuel can only be stored in the wings or the fuselage, not both
+    """Indicates presense of additional center fuel tank (ACT)(Works with wing fuel but not fuselage fuel)"""
+    has_ACT_fuel::Bool
     
     #engine options
     """Engine location"""
@@ -47,7 +49,7 @@ end
 function Base.summary(opt::Options)
   println("\n-------- Options Summary --------")
   println("Fuel Type: ", string(opt.opt_fuel))
-  println("Fuel stored in: "*(opt.has_wing_fuel ? "wing "*(opt.has_centerbox_fuel ? " wingbox " : "(none in wingbox)") : "")*(opt.has_fuselage_fuel ? "fuselage " : ""))
+  println("Fuel stored in: "*(opt.has_wing_fuel ? "wing "*(opt.has_centerbox_fuel ? " wingbox " : "(none in wingbox)") : "")*(opt.has_fuselage_fuel ? "fuselage " : "")*(opt.has_ACT_fuel ? "addtional center fuel tank " : ""))
   println("Propulsion Architecture: ", string(opt.opt_prop_sys_arch))
   println("Engine Location: ", string(opt.opt_engine_location))
   println("Cabin decks: ", opt.is_doubledecker ? "double" : "single")
@@ -55,6 +57,6 @@ function Base.summary(opt::Options)
 end
 function Base.show(io::IO, opt::Options)
   print(io, "Options(Fuel: $(string(opt.opt_fuel)); Fuel Storage: " * (opt.has_wing_fuel ? "wing " *
-      (opt.has_centerbox_fuel ? "wingbox " : "(none in wingbox) ") : "") * (opt.has_fuselage_fuel ? "fuselage " : "") * 
+      (opt.has_centerbox_fuel ? "wingbox " : "(none in wingbox) ") : "") * (opt.has_fuselage_fuel ? "fuselage " : "") * (opt.has_ACT_fuel ? "addtional center fuel tank " : "") * 
       "; Propulsion Arch.: $(string(opt.opt_prop_sys_arch)); Engine Location: $(string(opt.opt_engine_location)); Cabin decks: $(opt.is_doubledecker ? "double" : "single"))")
 end
