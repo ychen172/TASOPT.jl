@@ -134,6 +134,13 @@ function _size_aircraft!(ac; itermax=35,
         Wstrut = wing.strut.weight
         ffuel = parg[igWfuel] / parg[igWMTO]
 
+        # Initialize ACT parameters for fuselage calculation
+        fuse_tank.ACT_A = 0.0
+        fuse_tank.ACT_l = 0.0
+        fuse_tank.ACT_W = 0.0
+        fuse_tank.ACT_dx = 0.0
+        fuse_tank.ACT_fuse_l_extend = 0.0
+
     else #Second iteration onwards use previously calculated values
 
         # Extract layout parameters
@@ -202,12 +209,27 @@ function _size_aircraft!(ac; itermax=35,
         Δp = parg[igpcabin] - pare[iep0, ipcruise1] * wcd
         parg[igdeltap] = Δp
 
-       # Engine weight mounted on tailcone, if any
+        # Engine weight mounted on tailcone, if any
         if options.opt_engine_location == EngineLocation.Wing # Eng on "wing" or aft "fuselage"
             Wengtail = 0.0
             Waftfuel = 0.0
         elseif options.opt_engine_location == EngineLocation.Fuselage
             Wengtail = parg[igWeng]
+        end
+
+        # Optionally update fuselage size for ACT compensation
+        if options.has_ACT_fuel && options.compensate_ACT
+            # stretch the fuselage
+            update_fuse_for_ACT!(ac, imission) #modify the length of fuselage and wing,tail box locations and engine location
+            # update aerodynamics
+            fuselage_drag!(fuse, parm, para, ipcruise1) #Recalculate fuselage bl properties
+            broadcast_fuselage_drag!(para, ipcruise1)
+            # Update centroids
+            calculate_centroid_offset!(wing, calc_cma=true)
+            calculate_centroid_offset!(htail, htail.layout.span, λhs)
+            calculate_centroid_offset!(vtail, vtail.layout.span, λhs)
+        else
+            fuse_tank.ACT_fuse_l_extend = 0.0 #Prevent correction inside fuseW (!!!Probably need to properly initialize some of these parameters)
         end
 
         # Extract relevant weights and positions
@@ -249,7 +271,7 @@ function _size_aircraft!(ac; itermax=35,
             bv, vtail.outboard.λ, vtail.ntails,
             xhtail, xvtail,
             xwing, wing.layout.box_x, cbox,
-            xeng)
+            xeng; ACT_fuse_l_extend=fuse_tank.ACT_fuse_l_extend)
 
         # Use cabin volume to get actual buoyancy weight
         ρcab = max(parg[igpcabin], pare[iep0, ipcruise1]) / (RSL * TSL)

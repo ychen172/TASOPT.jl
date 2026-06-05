@@ -15,7 +15,7 @@ using NLopt
 import ..TASOPT: __TASOPTindices__, __TASOPTroot__, unpack_ac, unpack_ac_components, TailSizing
 
 export wing_weights!, calculate_centroid_offset!, calculate_centroid_offset, fusew!,
- update_fuse!, update_fuse_for_pax!, place_cabin_seats, find_cabin_width, find_floor_angles, arrange_seats,
+ update_fuse!, update_fuse_for_pax!, update_fuse_for_ACT!, place_cabin_seats, find_cabin_width, find_floor_angles, arrange_seats,
 size_landing_gear!
 
 include(joinpath(__TASOPTroot__,"data_structs/index.inc"))

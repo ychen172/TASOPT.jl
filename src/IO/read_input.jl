@@ -477,6 +477,7 @@ fuse_tank = fuselage_tank() #Initialize struct for fuselage fuel tank params
 
 has_wing_fuel = readfuel("fuel_in_wing")
 has_ACT_fuel = false #Setup additional center fuel tank
+compensate_ACT = false
 fuel_stor = readfuel("Storage")
 dfuel_stor = dfuel["Storage"]
 readfuel_storage(x::String) = read_input(x, fuel_stor, dfuel_stor)
@@ -547,6 +548,7 @@ else #else all fuel in wings
     nftanks = 0
     try
         has_ACT_fuel = readfuel("has_ACT_fuel")
+        compensate_ACT = readfuel("compensate_ACT")
     catch
         nothing
     end
@@ -1286,6 +1288,7 @@ ac_options = TASOPT.Options(
     ifuel2nd = ifuel,
     has_wing_fuel = has_wing_fuel,
     has_ACT_fuel = has_ACT_fuel,
+    compensate_ACT = compensate_ACT,
     has_centerbox_fuel = has_centerbox_fuel,
     has_fuselage_fuel = (nftanks>0),
 

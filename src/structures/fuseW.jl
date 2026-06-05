@@ -5,7 +5,8 @@
       bv, λv,nvtail,
       xhtail,xvtail,
       xwing,xwbox,cbox,
-      xeng)
+      xeng;
+      ACT_fuse_l_extend)
 
 `fusew` sizes the fuselage and calculates the component weights and structural properties.
 It takes inputs related to geometry, fixed weights, material properties, and more to compute the fuselage dimensions, weights, and other parameters.
@@ -43,6 +44,8 @@ It takes inputs related to geometry, fixed weights, material properties, and mor
       - `xwing::Float64`: X location of the wing.
       - `xwbox::Float64`: X location of the wing box.
       - `cbox::Float64`: Wing box width.
+      Additional fuel tank parameters
+      - `ACT_fuse_l_extend`: length of fuselage extension just because of the ACT taking over cargo space
 
       **Outputs:**
       Pressurized cabin volume:
@@ -58,7 +61,7 @@ function fusew!(fuse,Nland,Wpay,Weng, nftanks,
       bv, λv,nvtail,
       xhtail,xvtail,
       xwing,xwbox,cbox,
-      xeng)
+      xeng; ACT_fuse_l_extend::Float64=0.0)
 
       layout = fuse.layout
 
@@ -73,7 +76,7 @@ function fusew!(fuse,Nland,Wpay,Weng, nftanks,
 
       ## Size primary shell
       A_fuse, fuse.insulation =  calculate_shell_geometry!(fuse, deltap)
-      x_cabin, l_cabin = get_cabin_dimensions(layout,tank_placement, nftanks, ltank)
+      x_cabin, l_cabin = get_cabin_dimensions(layout,tank_placement, nftanks, ltank; ACT_fuse_l_extend=ACT_fuse_l_extend)
       fuse.window = size_windows(x_cabin, l_cabin, fuse.window_W_per_length, fuse.n_decks)
 
 #--------------------------------------------------------------------

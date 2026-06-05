@@ -257,7 +257,7 @@ function get_cabin_dimensions(
     layout::FuselageLayout,
     tank_placement::String,
     n_fuel_tanks,
-    l_tank,
+    l_tank; ACT_fuse_l_extend::Float64=0.0
 )
     if n_fuel_tanks == 1
         if tank_placement == "front"
@@ -277,13 +277,14 @@ function get_cabin_dimensions(
         end
     else
         #two symmetric or zero tanks
-        x_cabin = 0.5 * (layout.x_pressure_shell_fwd + layout.x_pressure_shell_aft)
+        x_cabin = 0.5 * (layout.x_pressure_shell_fwd + layout.x_pressure_shell_aft - ACT_fuse_l_extend)
     end
 
     #cabin length is smaller if there are fuel tanks
     l_cabin =
         layout.x_pressure_shell_aft - layout.x_pressure_shell_fwd -
-        n_fuel_tanks * (l_tank + 2.0 * ft_to_m)
+        n_fuel_tanks * (l_tank + 2.0 * ft_to_m) -
+        ACT_fuse_l_extend
 
     return x_cabin, l_cabin
 end  # function get_cabin_centroid

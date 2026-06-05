@@ -87,4 +87,5 @@ $TYPEDFIELDS
     ACT_l::Float64 = 0.0
     ACT_W::Float64 = 0.0
     ACT_dx::Float64 = 0.0
+    ACT_fuse_l_extend::Float64 = 0.0
 end

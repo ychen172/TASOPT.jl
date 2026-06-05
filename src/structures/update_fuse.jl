@@ -1,4 +1,4 @@
-export update_fuse!, update_fuse_for_pax!
+export update_fuse!, update_fuse_for_pax!, update_fuse_for_ACT!
 """
 update_fuse!(ac, imission)
 
@@ -166,6 +166,78 @@ function update_fuse_for_pax!(ac)
     EvaluateCabinProps!(fuse) #Update cabin parameters
 
     return seats_per_row
+end
+
+"""
+    update_fuse_for_ACT!(ac, imission::Int64 = 1)
+
+Function to extend a fuselage length (cylinder length) by the amount that will compensate for the cargo space
+    volume taken by the additional center tank. 
+    Assume shell, cone, end, APU, wing, tails, engine relative locations stay unchanged.
+
+!!! details "🔃 Inputs and Outputs"
+    **Inputs:**
+    - `ac`::aircraft: aircraft object
+      fuse_tank.ACT_A & ACT_l are used to find the taken volume
+    - `imission::Int64`: mission index
+
+    **Outputs:**
+    Parameters in `parg`,`fuse`,`htail`,`vtail` are modified, 
+    while `l_cabin_cylinder` is kept unchanged as its original datum point for repeated update for ACT
+    This variable is being used by cryotank though, so the current function is not working with cryotank case.
+    
+"""
+function update_fuse_for_ACT!(ac, imission::Int64 = 1)
+    #Unpack storage objects
+    parg, parm, para, pare, options, fuse, fuse_tank, wing, htail, vtail, engine = unpack_ac(ac, imission)
+    parm = view(parm, :, imission)
+    para = view(para, :, :, imission)
+
+    #### Get ACT volume and treat it as taking over cargo space
+    ACT_V = fuse_tank.ACT_A * fuse_tank.ACT_l #(m3) current ACT volume. (make sure consistent calculation though)
+    A_fuse = area(fuse.layout.cross_section) #(m2)assume the taken space can by cover by the full fuselage area
+    fuse_tank.ACT_fuse_l_extend = ACT_V/A_fuse #(m) extended cylindrical length
+
+    #### Useful relative distances to conserve    
+    # Cylinder to shell
+    dxcyl2shellaft = fuse.layout.x_pressure_shell_aft - fuse.layout.x_end_cylinder #Distance from blend2 to shell2
+    # Shell to cone end
+    dxshell2conend = fuse.layout.x_cone_end - fuse.layout.x_pressure_shell_aft #Distance from shell2 to conend
+    # Shell to APU
+    dxshell2apu = fuse.APU.x - fuse.layout.x_pressure_shell_aft #Distance from shell2 to APU
+    # APU to end
+    dxapu2end = fuse.layout.x_end - fuse.APU.x #Distance from APU to end
+    # Cone to tail box
+    dxhbox2conend = fuse.layout.x_cone_end - htail.layout.box_x #Distance from conend to xhbox
+    dxvbox2conend = fuse.layout.x_cone_end - vtail.layout.box_x #Distance from conend to xvbox
+    # Cylinder to wing box
+    wbox_cabin_frac =  (wing.layout.box_x- fuse.layout.x_start_cylinder )/(fuse.layout.x_end_cylinder - fuse.layout.x_start_cylinder)
+    # Wing box to engine
+    dxeng2wbox = parg[igdxeng2wbox] #Distance from engine to wingbox
+    
+    #### Get the baseline cylinder length
+    lcyl_base = fuse.layout.l_cabin_cylinder
+
+    #### Update the parameters
+    #Update cylinder length
+    fuse.layout.x_end_cylinder = fuse.layout.x_start_cylinder + lcyl_base + fuse_tank.ACT_fuse_l_extend #(m)
+    # Cylinder to shell
+    fuse.layout.x_pressure_shell_aft = fuse.layout.x_end_cylinder + dxcyl2shellaft
+    # Shell to cone end
+    fuse.layout.x_cone_end = fuse.layout.x_pressure_shell_aft + dxshell2conend
+    # Shell to APU
+    fuse.APU.r = [fuse.layout.x_pressure_shell_aft + dxshell2apu, 0.0,0.0]
+    # APU to end
+    fuse.layout.x_end = fuse.APU.x + dxapu2end
+    # Cone to tail box
+    htail.layout.box_x = fuse.layout.x_cone_end - dxhbox2conend
+    vtail.layout.box_x = fuse.layout.x_cone_end - dxvbox2conend
+    # Cylinder to wing box
+    wing.layout.box_x = fuse.layout.x_start_cylinder + wbox_cabin_frac * (fuse.layout.x_end_cylinder - fuse.layout.x_start_cylinder)
+    # Wing box to engine
+    parg[igxeng] =  wing.layout.box_x - dxeng2wbox #Move engine
+    # Cone to HPE
+    fuse.HPE_sys.r = [fuse.layout.x_cone_end * 0.52484, 0.0, 0.0] #TODO: address this
 end
 
 """

@@ -23,6 +23,8 @@ $TYPEDFIELDS
       #Note: right now fuel can only be stored in the wings or the fuselage, not both
     """Indicates presense of additional center fuel tank (ACT)(Works with wing fuel but not fuselage fuel)"""
     has_ACT_fuel::Bool
+    """Indicates the need to lengthen the airframe to compensate for any cargo space taken over by any ACT presence"""
+    compensate_ACT::Bool
     
     #engine options
     """Engine location"""
