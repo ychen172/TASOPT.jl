@@ -224,10 +224,12 @@ function _size_aircraft!(ac; itermax=35,
             # update aerodynamics
             fuselage_drag!(fuse, parm, para, ipcruise1) #Recalculate fuselage bl properties
             broadcast_fuselage_drag!(para, ipcruise1)
-            # Update centroids
-            calculate_centroid_offset!(wing, calc_cma=true)
-            calculate_centroid_offset!(htail, htail.layout.span, λhs)
-            calculate_centroid_offset!(vtail, vtail.layout.span, λhs)
+            if iterw>1
+                # Update centroids
+                calculate_centroid_offset!(wing, calc_cma=true)
+                calculate_centroid_offset!(htail, htail.layout.span, λhs)
+                calculate_centroid_offset!(vtail, vtail.layout.span, λhs)
+            end
         else
             fuse_tank.ACT_fuse_l_extend = 0.0 #Prevent correction inside fuseW (!!!Probably need to properly initialize some of these parameters)
         end

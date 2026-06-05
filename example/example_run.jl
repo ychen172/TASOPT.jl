@@ -15,8 +15,6 @@ example_ac = load_default_model() # simply a synonym to read_aircraft_model()
 # example_ac = read_aircraft_model("../src/IO/input.toml") # MODIFY <path> appropriately
 
 # 3) Size aircraft
-example_ac.options.has_ACT_fuel = true
-example_ac.options.compensate_ACT = true
 time_size_aircraft = @elapsed size_aircraft!(example_ac)
 println("Time to size aircraft = $time_size_aircraft s")
 
