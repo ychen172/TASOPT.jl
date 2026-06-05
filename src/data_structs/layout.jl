@@ -143,7 +143,8 @@ function Base.getproperty(layout::FuselageLayout, sym::Symbol)
                getfield(layout, :x_pressure_shell_fwd)
     elseif sym === :l_floor
         return getproperty(layout, :l_shell) + 2.0 * getproperty(layout, :radius)
-
+    elseif sym === (:A_cross_section)
+        return area(cross_section)
     elseif sym ∈ (:radius, :n_webs, :bubble_lower_downward_shift, :bubble_center_y_offset)
         return getproperty(cross_section, sym)
     else

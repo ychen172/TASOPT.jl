@@ -231,7 +231,7 @@ function _size_aircraft!(ac; itermax=35,
                 calculate_centroid_offset!(vtail, vtail.layout.span, λhs)
             end
         else
-            fuse_tank.ACT_fuse_l_extend = 0.0 #Prevent correction inside fuseW (!!!Probably need to properly initialize some of these parameters)
+            fuse_tank.ACT_fuse_l_extend = 0.0 #Prevent correction inside fuseW
         end
 
         # Extract relevant weights and positions
@@ -265,7 +265,7 @@ function _size_aircraft!(ac; itermax=35,
             Wftank_single = 0.0
         end
         #Note that fuselage is sized for a maximum payload weight in off-design missions
-        parg[igcabVol], A_fuse = fusew!(fuse, Nland, Wpaymax, Wengtail, 
+        parg[igcabVol] = fusew!(fuse, Nland, Wpaymax, Wengtail, 
              nftanks,
             Waftfuel,  Wftank_single, ltank, xftank_fuse, tank_placement,
              Δp,
@@ -399,7 +399,7 @@ function _size_aircraft!(ac; itermax=35,
             if (options.has_ACT_fuel)
                 Wf_ACT = max(parg[igWfuel]-Wfmax,0.0) #(N) addtional fuel weight holded by ACT
                 Vf_ACT = Wf_ACT/gee/rhofuel #(m3) fuel volume inside ACT
-                fuse_tank.ACT_A = A_fuse*0.45 #(m2) cross-sectional area given to ACT
+                fuse_tank.ACT_A = fuse.layout.A_cross_section*0.45 #(m2) cross-sectional area given to ACT
                 fuse_tank.ACT_l = Vf_ACT/fuse_tank.ACT_eta_vol/fuse_tank.ACT_A #(m) length of ACT
                 fuse_tank.ACT_W = Wf_ACT*(1.0/fuse_tank.ACT_eta_wei-1.0) #(N) weight of the ACT tank
                 fuse_tank.ACT_dx = wing.layout.root_chord/2 + fuse_tank.ACT_l/2 #(m) Tank center relative to wing box

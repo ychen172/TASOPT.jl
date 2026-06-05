@@ -50,8 +50,6 @@ It takes inputs related to geometry, fixed weights, material properties, and mor
       **Outputs:**
       Pressurized cabin volume:
       - `cabVol::Float64`: Pressurized cabin volume.
-      Fuselage cross-section:
-      - `A_fuse::Float64`: Used to size the additional fuel tank if applicable
 
 See [here](@ref fuselage) or Section 2.2 of the [TASOPT Technical Description](@ref dreladocs).
 """
@@ -235,7 +233,7 @@ function fusew!(fuse,Nland,Wpay,Weng, nftanks,
             cabVol = A_fuse*(l_cabin + 0.67*layout.l_nose + 0.67*layout.radius)
       end
 
-return  cabVol, A_fuse
+return  cabVol
 end # fusew
 
 
