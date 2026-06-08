@@ -282,7 +282,7 @@ function stickfig(ac::aircraft; plot_obj = nothing, label_fs = 16,
 
     if !(options.is_doubledecker) #Only show seats in single deck arrangements
         h_seat = fuselage.cabin.seat_height
-        pax = parg[igWpay]/parm[imWperpax]
+        pax = parg[igWpaymax]/parm[imWperpax]
         Rfuse = fuselage.layout.radius
         dRfuse = fuselage.layout.bubble_lower_downward_shift
         wfb = fuselage.layout.bubble_center_y_offset
