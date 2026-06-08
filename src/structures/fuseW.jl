@@ -82,7 +82,7 @@ function fusew!(fuse,Nland,Wpay,Weng, nftanks,
       xWfix  = y_moment(fuse.fixed)
       xWapu  = y_moment(fuse.APU)
       xWseat = fuse.seat.W * x_cabin
-      xWpadd = fuse.added_payload.W * x_cabin
+      xWpadd = fuse.added_payload.W * x_cabin #Assume the seat and payload positions are not disturbed by the shifted cargo location
 
 #--------------------------------------------------------------------
 #--- floor structural sizing
@@ -230,7 +230,7 @@ function fusew!(fuse,Nland,Wpay,Weng, nftanks,
       if nftanks == 0
             cabVol = A_fuse*(layout.l_shell + 0.67*layout.l_nose + 0.67*layout.radius)
       else #If there is a fuel tank in the fuselage, the pressure vessel has a smaller air volume
-            cabVol = A_fuse*(l_cabin + 0.67*layout.l_nose + 0.67*layout.radius)
+            cabVol = A_fuse*(l_cabin + ACT_fuse_l_extend + 0.67*layout.l_nose + 0.67*layout.radius) #Here assume the cargo and ACT regions are pressurized
       end
 
 return  cabVol
