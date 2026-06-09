@@ -261,9 +261,20 @@ function update_model!(ac::aircraft_tmp)
 end
 
 #
-loadpath = joinpath(@__DIR__,"../ModelSaved/acOptimized_BatOptEth/acOptimized_BatOptEth300.jld2")
-savepath = joinpath(@__DIR__,"../ModelSaved/testSave.jld2")
-@load loadpath ac
-ac = aircraft_tmp(ac)
-update_model!(ac)
-@save savepath ac
+keyNameRead = "CenterFuelTank_BatOptEth"
+keyNameSave = "CenFT_BatEth_CT"
+ranges = collect(300:100:3000)
+loadpath = joinpath(@__DIR__,"../ModelSaved/$(keyNameRead)/$(keyNameRead)")
+savepath = joinpath(@__DIR__,"../ModelSaved/$(keyNameSave)/$(keyNameSave)")
+for range = ranges
+    println("Range: $(range)")
+    loadpath_cur = loadpath*"$(round(Int,range)).jld2"
+    savepath_cur = savepath*"$(round(Int,range)).jld2"
+    println("load: $(loadpath_cur)")
+    println("save: $(savepath_cur)")
+    @load loadpath_cur ac
+    ac = aircraft_tmp(ac)
+    update_model!(ac)
+    mkpath(dirname(savepath_cur))
+    @save savepath_cur ac
+end
