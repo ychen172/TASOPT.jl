@@ -221,10 +221,13 @@ end
 end
 
 function aircraft_tmp(ac::aircraft)
-    return aircraft_tmp(
+    opts = Options_new(ac.options)
+    ws = TASOPT.aerodynamics.WakeSystem(opts.trefftz_config)
+
+    return aircraft_tmp{typeof(ws)}(
         ac.name,
         ac.description,
-        Options_new(ac.options),
+        opts,
         ac.parg,
         ac.parm,
         ac.para,
@@ -237,7 +240,7 @@ function aircraft_tmp(ac::aircraft)
         ac.vtail,
         ac.engine,
         ac.landing_gear,
-        ac.wake_system
+        ws
     )
 end
 
