@@ -93,6 +93,49 @@ include(__TASOPTindices__)
     ACT_fuse_l_extend::Float64 = 0.0
 end
 
+@kwdef mutable struct Options_new
+    #fuel options
+    """Fuel type"""
+    opt_fuel::TASOPT.FuelType.T
+    """Fuel option index (non-driving; determined and used by gas calcs)"""
+    ifuel::Int
+    """Secondary fuel option index (Use only at certain phases of flight) """
+    ifuel2nd::Int
+    """Indicates presence of centerbox fuel tank, can only be true if has_wing_fuel is true"""
+    has_centerbox_fuel::Bool
+    """Indicates presence of wing fuel tanks """
+    has_wing_fuel::Bool
+    """Indicates presence of fuselage fuel tanks (non-driving; set by `fuse_tank` inputs)"""
+    has_fuselage_fuel::Bool 
+      #TODO: consider making ^ a driving parameter, rather than a reflection of fuse_tank parameters
+      #Note: right now fuel can only be stored in the wings or the fuselage, not both
+    """Indicates presense of additional center fuel tank (ACT)(Works with wing fuel but not fuselage fuel)"""
+    has_ACT_fuel::Bool
+    """Indicates the need to lengthen the airframe to compensate for any cargo space taken over by any ACT presence"""
+    compensate_ACT::Bool
+    
+    #engine options
+    """Engine location"""
+    opt_engine_location::TASOPT.EngineLocation.T
+    """Propulsion system architecture, performance and weight models set in ac.Engine"""
+    opt_prop_sys_arch::TASOPT.PropSysArch.T
+    """Calculate takeoff length and engine performance"""
+    calculate_takeoff::Bool
+    
+    #fuselage/cabin options
+
+    """Indicates if the aircraft has a double-decker fuselage configuration"""
+    is_doubledecker::Bool
+
+    #wing/stability options
+    """Wing position strategy for longitudinal stability analysis: `Fixed` = static wing position, `FixedCLh` = move wing to achieve `CLh = CLhspec` in cruise, `MinStaticMargin` = move wing to achieve minimum static margin = `SMmin`"""
+    opt_move_wing::TASOPT.WingMove.T
+
+    #Trefftz plane options
+    """Trefftz plane induced drag analysis configuration (discretization, k_tip, bunch, root_contraction)"""
+    trefftz_config::TASOPT.aerodynamics.TrefftzPlaneConfig
+end
+
 function fuselage_tank_new(fuse_tank::fuselage_tank)
     return fuselage_tank_new(;
         fueltype = fuse_tank.fueltype,
@@ -133,10 +176,30 @@ function fuselage_tank_new(fuse_tank::fuselage_tank)
     )
 end
 
+getf(x, s::Symbol, default) = hasproperty(x, s) ? getproperty(x, s) : default
+function Options_new(options)
+    return Options_new(;
+        opt_fuel = options.opt_fuel,
+        ifuel = options.ifuel,
+        ifuel2nd = options.ifuel2nd,
+        has_centerbox_fuel = options.has_centerbox_fuel,
+        has_wing_fuel = options.has_wing_fuel,
+        has_fuselage_fuel = options.has_fuselage_fuel,
+        has_ACT_fuel = false,
+        compensate_ACT = false,
+        opt_engine_location = options.opt_engine_location,
+        opt_prop_sys_arch = options.opt_prop_sys_arch,
+        calculate_takeoff = options.calculate_takeoff,
+        is_doubledecker = options.is_doubledecker,
+        opt_move_wing = options.opt_move_wing,
+        trefftz_config = options.trefftz_config
+    )
+end
+
 @kwdef mutable struct aircraft_tmp{WS}
     name::String
     description::String
-    options::TASOPT.Options
+    options::Union{TASOPT.Options,Options_new}
 
     parg::Vector{Float64}
     parm::Array{Float64,2}
@@ -161,7 +224,7 @@ function aircraft_tmp(ac::aircraft)
     return aircraft_tmp(
         ac.name,
         ac.description,
-        ac.options,
+        Options_new(ac.options),
         ac.parg,
         ac.parm,
         ac.para,
