@@ -74,7 +74,7 @@ function balance_aircraft!(ac, imission, ip, rfuel, rpay, ξpay, opt_trim_var; L
       Wlgnose = landing_gear.nose_gear.weight.W
       Wlgmain = landing_gear.main_gear.weight.W
 
-      xcabin,lcabin = cabin_centroid(nftanks,fuse,parg[igxftankaft],lftank)
+      xcabin,lcabin = cabin_centroid(nftanks,fuse,parg[igxftankaft],lftank;ACT_fuse_l_extend=fuse_tank.ACT_fuse_l_extend)
       
       xpay = xcabin + (ξpay - 0.5) * lcabin * (1.0 - rpay)
 
@@ -406,7 +406,7 @@ function size_htail(ac, paraF, paraB, paraC; Ldebug::Bool = false)
       xftank = parg[igxftank]
 
       # Calculate x location of cabin centroid and length of cabin
-      xcabin,lcabin = cabin_centroid(nftanks,fuse,parg[igxftankaft],lftank)
+      xcabin,lcabin = cabin_centroid(nftanks,fuse,parg[igxftankaft],lftank; ACT_fuse_l_extend=fuse_tank.ACT_fuse_l_extend)
 
       #---- payload CG locations for forward and aft CG locations
       xpayF = xcabin + (0.0 - 0.5) * lcabin * (1.0 - rpayF)
@@ -747,7 +747,7 @@ function CG_limits(ac; Ldebug::Bool = false)
       Wlgnose = landing_gear.nose_gear.weight.W
       Wlgmain = landing_gear.main_gear.weight.W
 
-      xcabin,lcabin = cabin_centroid(nftanks,fuse,parg[igxftankaft],lftank)
+      xcabin,lcabin = cabin_centroid(nftanks,fuse,parg[igxftankaft],lftank;ACT_fuse_l_extend=fuse_tank.ACT_fuse_l_extend)
       delxw = wing.layout.x - wing.layout.box_x
 
       #---- zero fuel is assumed to be worst case forward and full fuel worst case aft
@@ -880,7 +880,7 @@ which varies depending on fuel tank placement.
     - `xcabin` : `x`-coordinate of the cabin centroid.
     - `lcabin` : Length of the passenger cabin.
 """
-function cabin_centroid(nftanks,fuse,xftankaft,lftank)
+function cabin_centroid(nftanks,fuse,xftankaft,lftank; ACT_fuse_l_extend::Float64=0.0)
       # Calculate x location of cabin centroid  and length of cabin
       if nftanks == 1
             if xftankaft == 0.0 #If tank is at the front
@@ -894,8 +894,8 @@ function cabin_centroid(nftanks,fuse,xftankaft,lftank)
             xcabin = 0.5 * (fuse.layout.x_pressure_shell_fwd + fuse.layout.x_pressure_shell_aft) #TODO noticed convergence issues if the average of the blends is used instead
             lcabin = fuse.layout.l_cabin_cylinder
       elseif nftanks == 0
-            xcabin = 0.5 * (fuse.layout.x_pressure_shell_fwd + fuse.layout.x_pressure_shell_aft)
-            lcabin = fuse.layout.x_pressure_shell_aft - fuse.layout.x_pressure_shell_fwd
+            xcabin = 0.5 * (fuse.layout.x_pressure_shell_fwd + fuse.layout.x_pressure_shell_aft - ACT_fuse_l_extend)
+            lcabin = fuse.layout.x_pressure_shell_aft - fuse.layout.x_pressure_shell_fwd - ACT_fuse_l_extend
       end
       return xcabin,lcabin
 end
