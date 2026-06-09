@@ -19,8 +19,19 @@ function update_model!(ac)
     return ac
 end
 
-loadpath = joinpath(@__DIR__,"../ModelSaved/testSave.jld2")
-savepath = joinpath(@__DIR__,"../ModelSaved/testSave2.jld2")
-@load loadpath ac
-ac = update_model!(ac)
-@save savepath ac
+keyNameRead = "acOpt_BatJet_CT"
+keyNameSave = "acOptim_BatJet_CT"
+ranges = collect(300:100:3000)
+loadpath = joinpath(@__DIR__,"../ModelSaved/$(keyNameRead)/$(keyNameRead)")
+savepath = joinpath(@__DIR__,"../ModelSaved/$(keyNameSave)/$(keyNameSave)")
+for range = ranges
+    println("Range: $(range)")
+    loadpath_cur = loadpath*"$(round(Int,range)).jld2"
+    savepath_cur = savepath*"$(round(Int,range)).jld2"
+    println("load: $(loadpath_cur)")
+    println("save: $(savepath_cur)")
+    @load loadpath_cur ac
+    ac = update_model!(ac)
+    mkpath(dirname(savepath_cur))
+    @save savepath_cur ac
+end
