@@ -100,7 +100,7 @@ function sensitivityTest(modelPath,caseName,eps,saveDir,sizedRange)
         muted_green,  # Wing aspect ratio
         muted_green,  # Cruise CL
         muted_green,  # Wing sweep
-        muted_gray,  # Cruise altitude
+        muted_purple,  # Cruise altitude
         muted_gray,  # Inboard taper ratio
         muted_gray,  # Outboard taper ratio
         muted_purple,  # Inboard t/c
@@ -160,9 +160,9 @@ end
 
 ####IO parameter
 modelPath = joinpath(@__DIR__,"../ModelSaved/acOptim_BatJet_CT/acOptim_BatJet_CT")
-modelRangeOri = [500,1500,3000] #Range by original model at optimum
+modelRangeOri = [500,1000,1500,2000,2500,2900] #Range by original model at optimum
 caseName = "Jet" #for figure saving
-sensitivityRange = [400,1400,2900] #Range intentially off-optimum of sensivitiy 
+sensitivityRange = Int.(modelRangeOri .- 200) #Range intentially off-optimum of sensivitiy 
 eps = 1e-5 #Use for sensitivity perturbation
 saveDir = joinpath(@__DIR__,"../ModelProcessed/Sensitivity")
 for (idx,range_cur) in enumerate(modelRangeOri)
