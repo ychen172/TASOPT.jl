@@ -1,4 +1,10 @@
-"""This script test the sensitivity for a group of parameters around optimized solution"""
+"""
+This script for a given optimal mission find the relative sensitivity of PFEI
+to individiual design parameters, and plot them in descending order.
+As the sensitivity to design parameters might be weak near the optimal point but
+still want to evaluate the sensentivity around optimum, the design mission range is 
+set to be shorter than the actual sizing range for the optimized mission.    
+"""
 
 using TASOPT
 include(TASOPT.__TASOPTindices__)
