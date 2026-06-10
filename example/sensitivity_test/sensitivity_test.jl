@@ -134,7 +134,7 @@ function sensitivityTest(modelPath,caseName,eps,saveDir,sizedRange)
     ]
 
     #### Compute sensitivities
-    impactVector = get_sensitivity(input_params; model_state=ac, eps=1e-5, optimizer=false, f_out_fn=nothing, diff_scheme=:central, metric=:impact)
+    impactVector = get_sensitivity(input_params; model_state=ac, eps=eps, optimizer=false, f_out_fn=nothing, diff_scheme=:central, metric=:impact)
 
     #### Plot out sensitivity
     #Inpact plot

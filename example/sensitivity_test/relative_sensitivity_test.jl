@@ -12,16 +12,7 @@ include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
 using Plots
 using LaTeXStrings
 
-function sensitivityTest(modelPath,caseName,eps,saveDir,sizedRange)
-    ####Load the default aircraft and setup some sizign option
-    println("Reading: $(modelPath)")
-    mkpath(saveDir)
-    ac = quickload_aircraft(modelPath)
-    ac.parm[imRange,:] .= sizedRange*1852.0 #(m)
-    ac.htail.opt_sizing = TailSizing.CLmaxFwdCG #Use lift base horizontal tail sizing
-    ac.htail.CL_max_fwd_CG = -0.7
-    ac.vtail.opt_sizing = TailSizing.OEI #Use engine out vertical tail sizing
-    ac.parg[igCLveout] = 0.5
+function RelativeSensitivityTest(model_1_Path,model_2_Path,caseName,eps,saveDir,sizedRange)
     #### Input parameters to be size(need to be precise)
     input_params = [
         :(ac.wing.layout.ηs),                                     # Panel break eta location
@@ -133,27 +124,48 @@ function sensitivityTest(modelPath,caseName,eps,saveDir,sizedRange)
         muted_gray   # Vertical tail sweep
     ]
 
-    #### Compute sensitivities
-    impactVector = get_sensitivity(input_params; model_state=ac, eps=1e-5, optimizer=false, f_out_fn=nothing, diff_scheme=:central, metric=:impact)
-
-    #### Plot out sensitivity
-    #Inpact plot
-    sens = Float64.(impactVector) #From any[]
+    mkpath(saveDir)
+    ####Load the default aircraft and setup some sizign option
+    println("Reading: $(model_1_Path)")
+    ac = quickload_aircraft(model_1_Path)
+    ac.parm[imRange,:] .= sizedRange*1852.0 #(m)
+    ac.htail.opt_sizing = TailSizing.CLmaxFwdCG #Use lift base horizontal tail sizing
+    ac.htail.CL_max_fwd_CG = -0.7
+    ac.vtail.opt_sizing = TailSizing.OEI #Use engine out vertical tail sizing
+    ac.parg[igCLveout] = 0.5
+    # Compute sensitivities
+    impactVector_1 = get_sensitivity(input_params; model_state=ac, eps=eps, optimizer=false, f_out_fn=nothing, diff_scheme=:forward, metric=:impact, flag_abs=false) #Signed maximum impact between left and right (central)
+    impactVector_1 = Float64.(impactVector_1) #From any[]
+    # Load the second one
+    println("Reading: $(model_2_Path)")
+    ac = quickload_aircraft(model_2_Path)
+    ac.parm[imRange,:] .= sizedRange*1852.0 #(m)
+    ac.htail.opt_sizing = TailSizing.CLmaxFwdCG #Use lift base horizontal tail sizing
+    ac.htail.CL_max_fwd_CG = -0.7
+    ac.vtail.opt_sizing = TailSizing.OEI #Use engine out vertical tail sizing
+    ac.parg[igCLveout] = 0.5
+    # Compute sensitivities
+    impactVector_2 = get_sensitivity(input_params; model_state=ac, eps=eps, optimizer=false, f_out_fn=nothing, diff_scheme=:forward, metric=:impact, flag_abs=false)
+    impactVector_2 = Float64.(impactVector_2) #From any[]
+    
+    #### Calculate relative sensitivity
+    delta_impact = abs.(impactVector_1 .- impactVector_2) #Absolute difference between the two sensitivities
     # Sort from largest to smallest
-    idx = sortperm(sens, rev=true)
-    sens_sorted = sens[idx]
-    names_sorted = names_params[idx]
-    colors_sorted = colors[idx]
-    # Bar plot
+    idx = sortperm(delta_impact, rev=true)
+    delta_impact = delta_impact[idx]
+    names_params = names_params[idx]
+    colors = colors[idx]
+
+    ##### Bar plot
     bar(
-        1:length(sens_sorted), sens_sorted*100;
-        xticks = (1:length(names_sorted), names_sorted),
-        color = colors_sorted,
+        1:length(delta_impact), delta_impact*100;
+        xticks = (1:length(names_params), names_params),
+        color = colors,
         tick_direction = :none,
         xrotation = 90,              # vertical labels
         xtickfontsize = 11,
         yguidefontsize = 8,
-        ylabel = "ΔPFEI/PFEI₀ (%) \n from $(eps*100)% ΔParameters", # xlabel = "Parameters",
+        ylabel = "|(ΔPFEI/PFEI₀)_Case₁ - (ΔPFEI/PFEI₀)_Case₂| (%) \n from $(eps*100)% ΔParameters", # xlabel = "Parameters",
         legend = false, #title = "Parameter Sensitivity (sorted, high → low)",
         dpi = 600,
         size = (1200, 400),
@@ -165,13 +177,17 @@ function sensitivityTest(modelPath,caseName,eps,saveDir,sizedRange)
 end
 
 ####IO parameter
-modelPath = joinpath(@__DIR__,"../ModelSaved/acOptim_BatJet_CT/acOptim_BatJet_CT")
+model_1_Path = joinpath(@__DIR__,"../ModelSaved/acOptim_BatJet_CT/acOptim_BatJet_CT")
+model_2_Path = joinpath(@__DIR__,"../ModelSaved/acOptim_BatEth_CT/acOptim_BatEth_CT")
 modelRangeOri = [500,1000,1500,2000,2500,2900] #Range by original model at optimum
-caseName = "Jet" #for figure saving
+caseName = "Eth_vs_Jet" #for figure saving
 sensitivityRange = Int.(modelRangeOri .- 200) #Range intentially off-optimum of sensivitiy 
 eps = 1e-5 #Use for sensitivity perturbation
 saveDir = joinpath(@__DIR__,"../ModelProcessed/Sensitivity")
 for (idx,range_cur) in enumerate(modelRangeOri)
     println("Run $(idx)")
-    sensitivityTest(modelPath*"$(round(Int,range_cur)).jld2", caseName*"_$(round(Int,range_cur))_Run_$(round(Int,sensitivityRange[idx]))", eps, saveDir, sensitivityRange[idx])
+    RelativeSensitivityTest(model_1_Path*"$(round(Int,range_cur)).jld2",
+                            model_2_Path*"$(round(Int,range_cur)).jld2",
+                            caseName*"_$(round(Int,range_cur))_Run_$(round(Int,sensitivityRange[idx]))",
+                            eps,saveDir,sensitivityRange[idx])
 end
