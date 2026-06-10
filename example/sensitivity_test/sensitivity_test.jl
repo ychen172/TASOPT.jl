@@ -4,6 +4,7 @@ using TASOPT
 include(TASOPT.__TASOPTindices__)
 include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
 using Plots
+using LaTeXStrings
 
 ####IO parameter
 modelPath = joinpath(@__DIR__,"../ModelSaved/acOptim_BatJet_CT/acOptim_BatJet_CT3000.jld2")
@@ -56,38 +57,73 @@ input_params = [
 ]
 #### Input parameter names for print out only
 names_params = [
-    "ηs",
-    "xEng",
-    "yEng",
-    "AR",
-    "CL_cruise",
-    "sweep",
-    "alt_cruise",
-    "λ_inboard",
-    "λ_outboard",
-    "t/c_inboard",
-    "t/c_outboard",
-    "Cl_break_root",
-    "Cl_tip_root",
-    "Tt4_cruise",
-    "pi_hc",
-    "pi_f",
-    "pi_lc",
-    "BPR",
-    "CL_h",
-    "CL_v",
-    "CD_DE",
-    "Mach_Cruise",
-    "Angle_TOD",
-    "R_fuse",
-    "FD_fuse",
-    "AR_h",
-    "λ_h",
-    "sweep_h",
-    "AR_v",
-    "λ_v",
-    "sweep_v"
+    L"\eta_{wing\:span\:break}",
+    L"x_{engine}",
+    L"y_{engine}",
+    L"AR_{wing}",
+    L"CL_{cruise}",
+    L"Sweep_{wing}",
+    L"Alt_{cruise}",
+    L"Taper_{inner\:wing}",
+    L"Taper_{outer\:wing}",
+    L"Thick/C_{inner\:wing}",
+    L"Thick/C_{outer\:wing}",
+    L"cl_{break}/cl_{root}",
+    L"cl_{tip}/cl_{root}",
+    L"Tt4_{cruise}",
+    L"PR_{HPC}",
+    L"PR_{fan}",
+    L"PR_{LPC}",
+    L"BPR_{fan}",
+    L"CL_{htail\:max\:fwd\:CG}",
+    L"CL_{vtail\:engine\:out}",
+    L"CD_{dead\:engine}",
+    L"Mach_{cruise}",
+    L"\gamma_{top\:of\:descent}",
+    L"R_{fuselage}",
+    L"Dep_{floor\:fuselage}",
+    L"AR_{htail}",
+    L"Taper_{htail}",
+    L"Sweep_{htail}",
+    L"AR_{vtail}",
+    L"Taper_{vtail}",
+    L"Sweep_{vtail}"
 ]
+
+colors = [
+    :gray,  # Panel break eta location :red :blue :green :orange :purple
+    :gray,  # Engine axial location
+    :gray,  # Engine vertical location
+    :gray,  # Wing aspect ratio
+    :gray,  # Cruise CL
+    :gray,  # Wing sweep
+    :gray,  # Cruise altitude
+    :gray,  # Inboard taper ratio
+    :gray,  # Outboard taper ratio
+    :gray,  # Inboard t/c
+    :gray,  # Outboard t/c
+    :gray,  # Break/root Cl ratio
+    :gray,  # Tip/root Cl ratio
+    :gray,  # Tt4 at cruise
+    :gray,  # HPC pressure ratio
+    :gray,  # Fan pressure ratio
+    :gray,  # LPC pressure ratio
+    :gray,  # Bypass ratio
+    :gray,  # CL max horizontal tail (probably skip)
+    :gray,  # CL max vertical tail (Skip due to duplicated effect with yEng and also bounded by physical limit)
+    :gray,  # Dead engine CD
+    :gray,  # Cruise mach number
+    :gray,  # descent_angle_top-of-descent
+    :gray,  # fuselage cross-sectional radius
+    :gray,  # fuselage floor depth
+    :gray,  # Horizontal tail AR
+    :gray,  # Horizontal tail taper
+    :gray,  # Horizontal tail sweep
+    :gray,  # Vertical tail AR
+    :gray,  # Vertical tail taper
+    :gray   # Vertical tail sweep
+]
+
 #### Compute sensitivities
 impactVector = get_sensitivity(input_params; model_state=ac, eps=1e-5, optimizer=false, f_out_fn=nothing, diff_scheme=:central, metric=:impact)
 
@@ -98,17 +134,22 @@ sens = Float64.(impactVector) #From any[]
 idx = sortperm(sens, rev=true)
 sens_sorted = sens[idx]
 names_sorted = names_params[idx]
+colors_sorted = colors[idx]
 # Bar plot
 bar(
     1:length(sens_sorted), sens_sorted*100;
     xticks = (1:length(names_sorted), names_sorted),
+    color = colors_sorted,
+    tick_direction = :none,
     xrotation = 90,              # vertical labels
+    xtickfontsize = 11,
     yguidefontsize = 8,
     ylabel = "ΔPFEI/PFEI₀ (%) \n from $(eps*100)% ΔParameters", # xlabel = "Parameters",
     legend = false, #title = "Parameter Sensitivity (sorted, high → low)",
     dpi = 600,
-    yscale = :identity, #:log10 or :identity  # size = (800, 400), #
-    margin = 8Plots.mm #(Adjust this margin if label got clipped)
+    size = (1200, 400),
+    yscale = :identity, #:log10 or :identity  # , #
+    margin = 20Plots.mm #(Adjust this margin if label got clipped)
 )
 # Optional save
 savefig(joinpath(saveDir,caseName*"_Impact.png"))
