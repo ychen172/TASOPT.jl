@@ -246,24 +246,36 @@ end
     - `eps`: Epsilon, the relative difference to change x 
     - `par`: The specific parameter to be modified.
     - `model_state`: The model state to be taken as "default" over which the FD is calculated.
-
+    - `diff_scheme`: :central or :forward or :backward
+    - `metric`: :derivative or :impact
     **Outputs:**
     - The function returns the finite difference
 """
-function central_diff_run(eps, par, model_state; optimizer=false, f_out_fn=nothing)
+function central_diff_run(eps, par, model_state; optimizer=false, f_out_fn=nothing,
+                          diff_scheme::Symbol=:central, metric::Symbol=:derivative)
     field_path, index = par
     # Get property from default model
     x = getNestedProp(model_state, field_path, index)
-    x_both = [x*(1+eps), x*(1-eps)]
-    
+
+    # NEW: choose perturbation scheme
+    if diff_scheme == :central
+        x_both = [x*(1+eps), x*(1-eps)]
+    elseif diff_scheme == :forward
+        x_both = [x*(1+eps), x]          # right-sided
+    elseif diff_scheme == :backward
+        x_both = [x, x*(1-eps)]          # left-sided
+    else
+        error("diff_scheme must be :central, :forward, or :backward")
+    end
+
     # Initialize results array for each perturbation
     f_results = []
-    
+
     for x_i in x_both
         # Reset model
         ac = deepcopy(model_state)
         setNestedProp!(ac, field_path, x_i, index)
-        
+
         # Initialize outputs for this perturbation
         if isnothing(f_out_fn)
             f_out = Inf
@@ -299,41 +311,121 @@ function central_diff_run(eps, par, model_state; optimizer=false, f_out_fn=nothi
             push!(f_results, f_out)
         end
     end
-    
-    # Calculate finite differences
+
+    # NEW: baseline output for impact metric
+    f_base = nothing
+    if metric == :impact
+        if diff_scheme == :central
+            ac0 = deepcopy(model_state)
+            try
+                TASOPT.size_aircraft!(ac0, printiter=false)
+                if isnothing(f_out_fn)
+                    f_base = ac0.parm[imPFEI]
+                elseif isa(f_out_fn, Array)
+                    f_base = [fn(ac0) for fn in f_out_fn]
+                else
+                    f_base = [f_out_fn(ac0)]
+                end
+            catch
+                println("size_aircraft! FAILED at baseline")
+                if isnothing(f_out_fn)
+                    f_base = Inf
+                elseif isa(f_out_fn, Array)
+                    f_base = fill(Inf, length(f_out_fn))
+                else
+                    f_base = [Inf]
+                end
+            end
+        elseif diff_scheme == :forward
+            f_base = f_results[2]
+        else # :backward
+            f_base = f_results[1]
+        end
+    elseif metric != :derivative
+        error("metric must be :derivative or :impact")
+    end
+
+    # Calculate finite differences or impact metric
     if typeof(x_both[1]) == Vector{Float64} || typeof(x_both[2]) == Vector{Float64}
         vecSens = []
         for (idx, each_x) in enumerate(x_both[1])
-            if isa(f_results[1], Array)
-                # Multiple output functions
-                fd_i = [(f1 - f2) / (x_both[1][idx] - x_both[2][idx]) 
-                       for (f1, f2) in zip(f_results[1], f_results[2])]
-            else
-                # Single output
-                fd_i = (f_results[1] - f_results[2]) / (x_both[1][idx] - x_both[2][idx])
+            if metric == :derivative
+                if isa(f_results[1], Array)
+                    fd_i = [(f1 - f2) / (x_both[1][idx] - x_both[2][idx])
+                            for (f1, f2) in zip(f_results[1], f_results[2])]
+                else
+                    fd_i = (f_results[1] - f_results[2]) / (x_both[1][idx] - x_both[2][idx])
+                end
+            else # metric == :impact (absolute relative change)
+                if diff_scheme == :central
+                    if isa(f_results[1], Array)
+                        imp_p = [(f1 - fb)/fb for (f1, fb) in zip(f_results[1], f_base)]
+                        imp_m = [(f2 - fb)/fb for (f2, fb) in zip(f_results[2], f_base)]
+                        fd_i = [max(abs(ip), abs(im)) for (ip, im) in zip(imp_p, imp_m)]
+                    else
+                        imp_p = (f_results[1] - f_base)/f_base
+                        imp_m = (f_results[2] - f_base)/f_base
+                        fd_i = max(abs(imp_p), abs(imp_m))
+                    end
+                elseif diff_scheme == :forward
+                    if isa(f_results[1], Array)
+                        fd_i = [abs((fp - fb)/fb) for (fp, fb) in zip(f_results[1], f_base)]
+                    else
+                        fd_i = abs((f_results[1] - f_base)/f_base)
+                    end
+                else # :backward
+                    if isa(f_results[2], Array)
+                        fd_i = [abs((fm - fb)/fb) for (fm, fb) in zip(f_results[2], f_base)]
+                    else
+                        fd_i = abs((f_results[2] - f_base)/f_base)
+                    end
+                end
             end
             push!(vecSens, fd_i)
         end
-        
+
         if optimizer
             if isa(f_results[1], Array)
-                # Return average sensitivity for each output function
                 return [sum(getindex.(vecSens, i))/length(vecSens) for i in 1:length(f_results[1])]
             else
                 return sum(vecSens)/length(vecSens)
             end
         else
-            @warn "Specific range of values given ... returning vector of sensitivities"
+            @warn "Specific range of values given ... returning vector"
             return vecSens
         end
     else
-        if isa(f_results[1], Array)
-            # Multiple output functions
-            return [(f1 - f2) / (x_both[1] - x_both[2]) 
-                   for (f1, f2) in zip(f_results[1], f_results[2])]
-        else
-            # Single output
-            return (f_results[1] - f_results[2]) / (x_both[1] - x_both[2])
+        if metric == :derivative
+            if isa(f_results[1], Array)
+                return [(f1 - f2) / (x_both[1] - x_both[2])
+                        for (f1, f2) in zip(f_results[1], f_results[2])]
+            else
+                return (f_results[1] - f_results[2]) / (x_both[1] - x_both[2])
+            end
+        else # metric == :impact (absolute relative change)
+            if diff_scheme == :central
+                if isa(f_results[1], Array)
+                    imp_p = [(f1 - fb)/fb for (f1, fb) in zip(f_results[1], f_base)]
+                    imp_m = [(f2 - fb)/fb for (f2, fb) in zip(f_results[2], f_base)]
+                    return [max(abs(ip), abs(im)) for (ip, im) in zip(imp_p, imp_m)]
+                else
+                    imp_p = (f_results[1] - f_base)/f_base
+                    imp_m = (f_results[2] - f_base)/f_base
+                    return max(abs(imp_p), abs(imp_m))
+                end
+            elseif diff_scheme == :forward
+                if isa(f_results[1], Array)
+                    return [abs((fp - fb)/fb) for (fp, fb) in zip(f_results[1], f_base)]
+                else
+                    return abs((f_results[1] - f_base)/f_base)
+                end
+            else # :backward
+                if isa(f_results[2], Array)
+                    return [abs((fm - fb)/fb) for (fm, fb) in zip(f_results[2], f_base)]
+                else
+                    return abs((f_results[2] - f_base)/f_base)
+                end
+            end
         end
     end
 end
@@ -400,12 +492,13 @@ end
     - `input_params`: List of Input Params as symbols.
     - `model_state`: The model state to be taken as "default" over which the FD is calculated.
     - `eps`: Epsilon, the relative difference to change x 
-    
+    - `diff_scheme`: :central or :forward or :backward
+    - `metric`: :derivative or :impact
     
     **Outputs:**
     - The function returns the finite difference of each input param in a vector.  
 """
-function get_sensitivity(input_params; model_state=nothing, eps=1e-5, optimizer=false, f_out_fn=nothing)
+function get_sensitivity(input_params; model_state=nothing, eps=1e-5, optimizer=false, f_out_fn=nothing, diff_scheme::Symbol=:central, metric::Symbol=:derivative)
     if isnothing(model_state)
         @info "Aircraft model not provided. Using Default sized model"
         model_state = load_default_model()
@@ -423,7 +516,8 @@ function get_sensitivity(input_params; model_state=nothing, eps=1e-5, optimizer=
     
     for param in params
         finite_diff = central_diff_run(eps, param, model_state; 
-                                     optimizer=optimizer, f_out_fn=f_out_fn)
+                                       optimizer=optimizer, f_out_fn=f_out_fn,
+                                       diff_scheme=diff_scheme, metric=metric)
         push!(fd_array, finite_diff)
     end
     
