@@ -41,7 +41,18 @@ input_params = [
     :(ac.pare[iepilc, ipcruise1, 1]),                         # LPC pressure ratio
     :(ac.pare[ieBPR, ipcruise1, 1]),                          # Bypass ratio
     :(ac.htail.CL_max_fwd_CG),                                # CL max horizontal tail (probably skip)
-    :(ac.parg[igCLveout])                                     # CL max vertical tail (Skip due to duplicated effect with yEng and also bounded by physical limit)
+    :(ac.parg[igCLveout]),                                    # CL max vertical tail (Skip due to duplicated effect with yEng and also bounded by physical limit)
+    :(ac.parg[igcdefan]),                                     # Dead engine CD
+    :(ac.para[iaMach, ipcruise1, 1]),                         # Cruise mach number
+    :(ac.parm[imgamVDE1, 1]),                                 # descent_angle_top-of-descent
+    :(ac.fuselage.layout.cross_section.radius),               # fuselage cross-sectional radius
+    :(ac.fuselage.layout.floor_depth),                        # fuselage floor depth
+    :(ac.htail.layout.AR),                                    # Horizontal tail AR
+    :(ac.htail.outboard.λ),                                   # Horizontal tail taper
+    :(ac.htail.layout.sweep),                                 # Horizontal tail sweep
+    :(ac.vtail.layout.AR),                                    # Vertical tail AR
+    :(ac.vtail.outboard.λ),                                   # Vertical tail taper
+    :(ac.vtail.layout.sweep)                                  # Vertical tail sweep
 ]
 #### Input parameter names for print out only
 names_params = [
@@ -64,7 +75,18 @@ names_params = [
     "pi_lc",
     "BPR",
     "CL_h",
-    "CL_v"
+    "CL_v",
+    "CD_DE",
+    "Mach_Cruise",
+    "Angle_TOD",
+    "R_fuse",
+    "FD_fuse",
+    "AR_h",
+    "λ_h",
+    "sweep_h",
+    "AR_v",
+    "λ_v",
+    "sweep_v"
 ]
 #### Compute sensitivities
 impactVector = get_sensitivity(input_params; model_state=ac, eps=1e-5, optimizer=false, f_out_fn=nothing, diff_scheme=:central, metric=:impact)
