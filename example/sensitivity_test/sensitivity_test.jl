@@ -91,32 +91,33 @@ function sensitivityTest(modelPath,caseName,eps,saveDir,sizedRange)
     muted_orange = RGB(0.90, 0.65, 0.35)
     muted_purple = RGB(0.60, 0.50, 0.75)
     muted_gray   = RGB(0.50, 0.50, 0.50)
+    muted_yellow = RGB(0.90, 0.80, 0.35)
 
     colors = [
         muted_gray,  # Panel break eta location :red :blue :green :orange :purple
         muted_gray,  # Engine axial location
-        muted_gray,  # Engine vertical location
-        muted_gray,  # Wing aspect ratio
-        muted_gray,  # Cruise CL
-        muted_gray,  # Wing sweep
+        muted_green,  # Engine spanwise location
+        muted_green,  # Wing aspect ratio
+        muted_green,  # Cruise CL
+        muted_green,  # Wing sweep
         muted_gray,  # Cruise altitude
         muted_gray,  # Inboard taper ratio
         muted_gray,  # Outboard taper ratio
-        muted_gray,  # Inboard t/c
-        muted_gray,  # Outboard t/c
+        muted_purple,  # Inboard t/c
+        muted_purple,  # Outboard t/c
         muted_gray,  # Break/root Cl ratio
         muted_gray,  # Tip/root Cl ratio
-        muted_gray,  # Tt4 at cruise
+        muted_green,  # Tt4 at cruise
         muted_gray,  # HPC pressure ratio
         muted_gray,  # Fan pressure ratio
         muted_gray,  # LPC pressure ratio
         muted_gray,  # Bypass ratio
         muted_gray,  # CL max horizontal tail (probably skip)
-        muted_gray,  # CL max vertical tail (Skip due to duplicated effect with yEng and also bounded by physical limit)
+        muted_yellow,  # CL max vertical tail (Skip due to duplicated effect with yEng and also bounded by physical limit)
         muted_gray,  # Dead engine CD
-        muted_gray,  # Cruise mach number
+        muted_yellow,  # Cruise mach number
         muted_gray,  # descent_angle_top-of-descent
-        muted_gray,  # fuselage cross-sectional radius
+        muted_yellow,  # fuselage cross-sectional radius
         muted_gray,  # fuselage floor depth
         muted_gray,  # Horizontal tail AR
         muted_gray,  # Horizontal tail taper
@@ -158,9 +159,13 @@ function sensitivityTest(modelPath,caseName,eps,saveDir,sizedRange)
 end
 
 ####IO parameter
-modelPath = joinpath(@__DIR__,"../ModelSaved/acOptim_BatJet_CT/acOptim_BatJet_CT3000.jld2")
-caseName = "Jet_3000nmi" #for figure saving
-sizedRange = 2900
+modelPath = joinpath(@__DIR__,"../ModelSaved/acOptim_BatJet_CT/acOptim_BatJet_CT")
+modelRangeOri = [500,1500,3000] #Range by original model at optimum
+caseName = "Jet" #for figure saving
+sensitivityRange = [400,1400,2900] #Range intentially off-optimum of sensivitiy 
 eps = 1e-5 #Use for sensitivity perturbation
 saveDir = joinpath(@__DIR__,"../ModelProcessed/Sensitivity")
-sensitivityTest(modelPath,caseName,eps,saveDir,sizedRange)
+for (idx,range_cur) in enumerate(modelRangeOri)
+    println("Run $(idx)")
+    sensitivityTest(modelPath*"$(round(Int,range_cur)).jld2", caseName*"_$(round(Int,range_cur))_Run_$(round(Int,sensitivityRange[idx]))", eps, saveDir, sensitivityRange[idx])
+end
