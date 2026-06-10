@@ -31,8 +31,8 @@ input_params = [
     :(ac.pare[iepif, ipcruise1, 1]),                          # Fan pressure ratio
     :(ac.pare[iepilc, ipcruise1, 1]),                         # LPC pressure ratio
     :(ac.pare[ieBPR, ipcruise1, 1]),                          # Bypass ratio
-    :(ac.htail.CL_max_fwd_CG),                                # CL max horizontal tail
-    :(ac.parg[igCLveout])                                     # CL max vertical tail
+    :(ac.htail.CL_max_fwd_CG),                                # CL max horizontal tail (probably skip)
+    :(ac.parg[igCLveout])                                     # CL max vertical tail (Skip due to duplicated effect with yEng and also bounded by physical limit)
 ]
 
 names_params = [
