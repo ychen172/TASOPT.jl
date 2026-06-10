@@ -252,10 +252,19 @@ end
     - The function returns the finite difference
 """
 function central_diff_run(eps, par, model_state; optimizer=false, f_out_fn=nothing,
-                          diff_scheme::Symbol=:central, metric::Symbol=:derivative)
+                          diff_scheme::Symbol=:central, metric::Symbol=:derivative, flag_abs::Bool=true)
     field_path, index = par
     # Get property from default model
     x = getNestedProp(model_state, field_path, index)
+
+    # Define adaptive absolute function
+    if flag_abs
+        abs_ada = abs
+        max_ada = max
+    else
+        abs_ada = identity
+        max_ada = (x,y) -> abs(x)>abs(y) ? x : y
+    end
 
     # NEW: choose perturbation scheme
     if diff_scheme == :central
@@ -360,24 +369,24 @@ function central_diff_run(eps, par, model_state; optimizer=false, f_out_fn=nothi
                 if diff_scheme == :central
                     if isa(f_results[1], Array)
                         imp_p = [(f1 - fb)/fb for (f1, fb) in zip(f_results[1], f_base)]
-                        imp_m = [(f2 - fb)/fb for (f2, fb) in zip(f_results[2], f_base)]
-                        fd_i = [max(abs(ip), abs(im)) for (ip, im) in zip(imp_p, imp_m)]
+                        imp_m = [(fb - f2)/fb for (f2, fb) in zip(f_results[2], f_base)]
+                        fd_i = [max_ada(abs_ada(ip), abs_ada(im)) for (ip, im) in zip(imp_p, imp_m)]
                     else
                         imp_p = (f_results[1] - f_base)/f_base
-                        imp_m = (f_results[2] - f_base)/f_base
-                        fd_i = max(abs(imp_p), abs(imp_m))
+                        imp_m = (f_base - f_results[2])/f_base
+                        fd_i = max_ada(abs_ada(imp_p), abs_ada(imp_m))
                     end
                 elseif diff_scheme == :forward
                     if isa(f_results[1], Array)
-                        fd_i = [abs((fp - fb)/fb) for (fp, fb) in zip(f_results[1], f_base)]
+                        fd_i = [abs_ada((fp - fb)/fb) for (fp, fb) in zip(f_results[1], f_base)]
                     else
-                        fd_i = abs((f_results[1] - f_base)/f_base)
+                        fd_i = abs_ada((f_results[1] - f_base)/f_base)
                     end
                 else # :backward
                     if isa(f_results[2], Array)
-                        fd_i = [abs((fm - fb)/fb) for (fm, fb) in zip(f_results[2], f_base)]
+                        fd_i = [abs_ada((fb - fm)/fb) for (fm, fb) in zip(f_results[2], f_base)]
                     else
-                        fd_i = abs((f_results[2] - f_base)/f_base)
+                        fd_i = abs_ada((f_base - f_results[2])/f_base)
                     end
                 end
             end
@@ -406,24 +415,24 @@ function central_diff_run(eps, par, model_state; optimizer=false, f_out_fn=nothi
             if diff_scheme == :central
                 if isa(f_results[1], Array)
                     imp_p = [(f1 - fb)/fb for (f1, fb) in zip(f_results[1], f_base)]
-                    imp_m = [(f2 - fb)/fb for (f2, fb) in zip(f_results[2], f_base)]
-                    return [max(abs(ip), abs(im)) for (ip, im) in zip(imp_p, imp_m)]
+                    imp_m = [(fb - f2)/fb for (f2, fb) in zip(f_results[2], f_base)]
+                    return [max_ada(abs_ada(ip), abs_ada(im)) for (ip, im) in zip(imp_p, imp_m)]
                 else
                     imp_p = (f_results[1] - f_base)/f_base
-                    imp_m = (f_results[2] - f_base)/f_base
-                    return max(abs(imp_p), abs(imp_m))
+                    imp_m = (f_base - f_results[2])/f_base
+                    return max_ada(abs_ada(imp_p), abs_ada(imp_m))
                 end
             elseif diff_scheme == :forward
                 if isa(f_results[1], Array)
-                    return [abs((fp - fb)/fb) for (fp, fb) in zip(f_results[1], f_base)]
+                    return [abs_ada((fp - fb)/fb) for (fp, fb) in zip(f_results[1], f_base)]
                 else
-                    return abs((f_results[1] - f_base)/f_base)
+                    return abs_ada((f_results[1] - f_base)/f_base)
                 end
             else # :backward
                 if isa(f_results[2], Array)
-                    return [abs((fm - fb)/fb) for (fm, fb) in zip(f_results[2], f_base)]
+                    return [abs_ada((fb - fm)/fb) for (fm, fb) in zip(f_results[2], f_base)]
                 else
-                    return abs((f_results[2] - f_base)/f_base)
+                    return abs_ada((f_base - f_results[2])/f_base)
                 end
             end
         end
@@ -494,11 +503,12 @@ end
     - `eps`: Epsilon, the relative difference to change x 
     - `diff_scheme`: :central or :forward or :backward
     - `metric`: :derivative or :impact
+    - `flag_abs`: If true then compute the absolute impact, if false then compute the signed impact
     
     **Outputs:**
     - The function returns the finite difference of each input param in a vector.  
 """
-function get_sensitivity(input_params; model_state=nothing, eps=1e-5, optimizer=false, f_out_fn=nothing, diff_scheme::Symbol=:central, metric::Symbol=:derivative)
+function get_sensitivity(input_params; model_state=nothing, eps=1e-5, optimizer=false, f_out_fn=nothing, diff_scheme::Symbol=:central, metric::Symbol=:derivative, flag_abs::Bool=true)
     if isnothing(model_state)
         @info "Aircraft model not provided. Using Default sized model"
         model_state = load_default_model()
@@ -517,7 +527,7 @@ function get_sensitivity(input_params; model_state=nothing, eps=1e-5, optimizer=
     for param in params
         finite_diff = central_diff_run(eps, param, model_state; 
                                        optimizer=optimizer, f_out_fn=f_out_fn,
-                                       diff_scheme=diff_scheme, metric=metric)
+                                       diff_scheme=diff_scheme, metric=metric, flag_abs=flag_abs)
         push!(fd_array, finite_diff)
     end
     

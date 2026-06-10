@@ -1,9 +1,9 @@
 """
-This script for a given optimal mission find the relative sensitivity of PFEI
-to individiual design parameters, and plot them in descending order.
-As the sensitivity to design parameters might be weak near the optimal point but
-still want to evaluate the sensentivity around optimum, the design mission range is 
-set to be shorter than the actual sizing range for the optimized mission.    
+This script for the same mission requirements evaluates the realtive
+sensitivity of jet fuel versus alcohol aircraft at near optimal but 
+sub-optimal condition. This intends to filter out parameters that are
+important to jet fuel aircraft but not important to ethanol or vice
+versa.    
 """
 
 using TASOPT
