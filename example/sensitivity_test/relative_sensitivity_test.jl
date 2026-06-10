@@ -91,24 +91,24 @@ function RelativeSensitivityTest(model_1_Path,model_2_Path,caseName,eps,saveDir,
     muted_yellow = RGB(0.90, 0.80, 0.35)
 
     colors = [
-        muted_gray,  # Panel break eta location :red :blue :green :orange :purple
+        muted_red,  # Panel break eta location :red :blue :green :orange :purple
         muted_gray,  # Engine axial location
         muted_green,  # Engine spanwise location
         muted_green,  # Wing aspect ratio
         muted_green,  # Cruise CL
         muted_green,  # Wing sweep
         muted_purple,  # Cruise altitude
-        muted_gray,  # Inboard taper ratio
-        muted_gray,  # Outboard taper ratio
+        muted_red,  # Inboard taper ratio
+        muted_red,  # Outboard taper ratio
         muted_purple,  # Inboard t/c
         muted_purple,  # Outboard t/c
         muted_gray,  # Break/root Cl ratio
-        muted_gray,  # Tip/root Cl ratio
+        muted_red,  # Tip/root Cl ratio
         muted_green,  # Tt4 at cruise
-        muted_gray,  # HPC pressure ratio
-        muted_gray,  # Fan pressure ratio
-        muted_gray,  # LPC pressure ratio
-        muted_gray,  # Bypass ratio
+        muted_red,  # HPC pressure ratio
+        muted_red,  # Fan pressure ratio
+        muted_yellow,  # LPC pressure ratio
+        muted_red,  # Bypass ratio
         muted_gray,  # CL max horizontal tail (probably skip)
         muted_yellow,  # CL max vertical tail (Skip due to duplicated effect with yEng and also bounded by physical limit)
         muted_gray,  # Dead engine CD
@@ -119,7 +119,7 @@ function RelativeSensitivityTest(model_1_Path,model_2_Path,caseName,eps,saveDir,
         muted_gray,  # Horizontal tail AR
         muted_gray,  # Horizontal tail taper
         muted_gray,  # Horizontal tail sweep
-        muted_gray,  # Vertical tail AR
+        muted_red,  # Vertical tail AR
         muted_gray,  # Vertical tail taper
         muted_gray   # Vertical tail sweep
     ]
