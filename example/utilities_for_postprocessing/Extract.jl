@@ -52,6 +52,9 @@ function extract_acModel(ac_cur,idx_miss)
     FuelVolumeFraction = volFuelTot/volFuelMax #fractional fuel volume used by that mission
     rhoFuelAve = massFuelTot*1000.0/volFuelTot #(kg/m3) averaged fuel density for that mission
     
+    #### fuselage geometry
+    lenFuseCyl = ac_cur.fuselage.layout.x_end_cylinder - ac_cur.fuselage.layout.x_start_cylinder #(m) might be different from direct reading due to ACT
+
     #### flight performance data
     LD_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, idx_miss]/ac_cur.para[iaCD, ipcruise1, idx_miss] + 
                         ac_cur.para[iaCL, ipcruise2, idx_miss]/ac_cur.para[iaCD, ipcruise2, idx_miss]) #Averaged cruise lift-to-drag ratio
@@ -136,7 +139,8 @@ function extract_acModel(ac_cur,idx_miss)
         eta_propu_cru = etaPropu_cru,
         OPR_cru = OPR_cru,
         Tt_turbin_cru_K = Tt_TurbIn_cru,
-        FuelVolumeFraction = FuelVolumeFraction
+        FuelVolumeFraction = FuelVolumeFraction,
+        lenFuseCyl_m = lenFuseCyl
     )
     return output
 end

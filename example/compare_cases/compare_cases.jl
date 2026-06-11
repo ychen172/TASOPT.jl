@@ -19,7 +19,7 @@ ranges     = collect(300:100:2900)
 save_dir      = "../ModelProcessed"
 save_name     = "Compare_at_design" #sub_folder will be created
 # Fields to read out
-const fields = (:range_nmi,:PFEI_JJ,)
+const fields = (:range_nmi,:PFEI_JJ,:lenFuseCyl_m)
 
 #### Create save directory
 save_dir_sub  = joinpath(save_dir,save_name)
@@ -44,3 +44,4 @@ end
 
 #### Plotting
 plot_cases("Design Range","PFEI (J/J)",results,:range_nmi,:PFEI_JJ,caseNames,joinpath(save_dir_sub, "PFEI.png"))
+plot_cases("Design Range","Fuselage Cylinder Length (m)",results,:range_nmi,:lenFuseCyl_m,caseNames,joinpath(save_dir_sub, "LCylinder.png"))
