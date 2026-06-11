@@ -54,6 +54,9 @@ function extract_acModel(ac_cur,idx_miss)
     
     #### fuselage geometry
     lenFuseCyl = ac_cur.fuselage.layout.x_end_cylinder - ac_cur.fuselage.layout.x_start_cylinder #(m) might be different from direct reading due to ACT
+    volACTFuelMax = ac_cur.fuse_tank.ACT_A*ac_cur.fuse_tank.ACT_l*ac_cur.fuse_tank.ACT_eta_vol
+    volWingFuelMax = volFuelMax-volACTFuelMax
+    FuelVolumeFractionACT = max(volFuelTot-volWingFuelMax,0)/volFuelTot #Fraction of fuel inside the ACT tank
 
     #### flight performance data
     LD_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, idx_miss]/ac_cur.para[iaCD, ipcruise1, idx_miss] + 
@@ -140,7 +143,11 @@ function extract_acModel(ac_cur,idx_miss)
         OPR_cru = OPR_cru,
         Tt_turbin_cru_K = Tt_TurbIn_cru,
         FuelVolumeFraction = FuelVolumeFraction,
-        lenFuseCyl_m = lenFuseCyl
+        lenFuseCyl_m = lenFuseCyl,
+        volACTFuelMax_m3 = volACTFuelMax,
+        volWingFuelMax_m3 = volWingFuelMax,
+        FuelVolumeFractionACT = FuelVolumeFractionACT,
+        lenACT_m = ac_cur.fuse_tank.ACT_l,
     )
     return output
 end
