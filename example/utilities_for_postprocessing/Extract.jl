@@ -1,17 +1,31 @@
 module Extract
-export init_results_2Layers,extract_acModel
+export init_results_2Layers,extract_acModel,fill_results!,plot_cases
+using Plots
 
 using TASOPT
 include(__TASOPTindices__)
 using Statistics
 
-function init_results_2Layers(num_des_ranges, fields)
-    """This function create a two layer dictionary"""
-    # num_des_ranges: Int: number of design ranges
-    # fields: tuple of symbols
-    makevec() = fill!(Vector{Union{Missing,Float64}}(undef, num_des_ranges), missing)
-    output = Dict(f => makevec() for f in fields)
-    return output
+function init_results_2Layers(num_cases::Int, fields::Tuple{Vararg{Symbol}})
+    """
+    This function create a two layer dictionary
+    # num_cases: Int: number of cases for the current field
+    # fields: tuple of symbols    
+    """
+    makevec() = fill!(Vector{Union{Missing,Float64}}(undef, num_cases), missing)
+    return Dict{Symbol,Vector{Union{Missing,Float64}}}(f => makevec() for f in fields)
+end
+
+function fill_results!(results::Dict{Symbol,Vector{Union{Missing,Float64}}},
+                       out::NamedTuple,
+                       i::Int)
+    for f in keys(results)
+        if hasproperty(out, f)   # works for Dict; for NamedTuple, use `f in propertynames(out)` if needed
+            results[f][i] = out[f]
+        else
+            @warn "Missing field $(f)"
+        end
+    end
 end
 
 function extract_acModel(ac_cur,idx_miss)
@@ -97,34 +111,49 @@ function extract_acModel(ac_cur,idx_miss)
     Tt_TurbIn_cru = mean(Tt_TurbIn_cru) #K
 
     #### Return
-    output = Dict(
-        "range_nmi" => range_cur,
-        "PFEI_JJ" => PFEI_cur,
-        "massTO_Ton" => massTO,
-        "massFuelTot_Ton" => massFuelTot,
-        "massFuelMax_Ton" => massFuelMax,
-        "massPayload_Ton" => massPayload,
-        "massEmpty_Ton" => massEmpty,
-        "rhoFuelAve_kgm3" => rhoFuelAve,
-        "volFuelTot_m3" => volFuelTot,
-        "volFuelMax_m3" => volFuelMax,
-        "LD_cru" => LD_cruise,
-        "LHV_cru_Jkg" => LHV_cruise,
-        "TSFC_cru_kgsN" => TSFC_cruise,
-        "vel_cru_ms" => vel_cruise,
-        "eta_total_cru" => eta_total_cruise,
-        "ene_fli_J" => energy_flight,
-        "frac_rese" => frac_rese,
-        "PFEI_cru_JJ" => PFEI_cru,
-        "range_cru_m" => range_cru,
-        "eta_therm_cru" => etaTherm_cru,
-        "spe_power_cru_Jkg" => spePower_cru,
-        "eta_propu_cru" => etaPropu_cru,
-        "OPR_cru" => OPR_cru,
-        "Tt_turbin_cru_K" => Tt_TurbIn_cru,
-        "FuelVolumeFraction"=> FuelVolumeFraction
+    output = (
+        range_nmi = range_cur,
+        PFEI_JJ = PFEI_cur,
+        massTO_Ton = massTO,
+        massFuelTot_Ton = massFuelTot,
+        massFuelMax_Ton = massFuelMax,
+        massPayload_Ton = massPayload,
+        massEmpty_Ton = massEmpty,
+        rhoFuelAve_kgm3 = rhoFuelAve,
+        volFuelTot_m3 = volFuelTot,
+        volFuelMax_m3 = volFuelMax,
+        LD_cru = LD_cruise,
+        LHV_cru_Jkg = LHV_cruise,
+        TSFC_cru_kgsN = TSFC_cruise,
+        vel_cru_ms = vel_cruise,
+        eta_total_cru = eta_total_cruise,
+        ene_fli_J = energy_flight,
+        frac_rese = frac_rese,
+        PFEI_cru_JJ = PFEI_cru,
+        range_cru_m = range_cru,
+        eta_therm_cru = etaTherm_cru,
+        spe_power_cru_Jkg = spePower_cru,
+        eta_propu_cru = etaPropu_cru,
+        OPR_cru = OPR_cru,
+        Tt_turbin_cru_K = Tt_TurbIn_cru,
+        FuelVolumeFraction = FuelVolumeFraction
     )
     return output
+end
+
+const LINESTYLES = [:solid, :dash, :dot, :dashdot, :dashdotdot]
+const LINECOLORS = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :black, :cyan,
+                     :magenta, :teal, :navy, :maroon, :olive, :gold, :coral, :turquoise, :lime, :indigo]
+const MARKERS = [:rect, :circle, :diamond, :utriangle, :dtriangle]
+function plot_cases(xlab::String,ylab::String,cases::AbstractVector{<:AbstractDict},xSym::Symbol,ySym::Symbol,datalab::AbstractVector{<:AbstractString},save_name::String,;dpi=800,lw=2)
+    @assert length(cases) == length(datalab) "cases and datalab length mismatch"
+    p = plot(xlabel=xlab, ylabel=ylab, dpi=dpi, legend=:bottomright)
+    for (i,case) in enumerate(cases)
+        c = LINECOLORS[mod1(i, length(LINECOLORS))]
+        plot!(p, case[xSym], case[ySym], marker=MARKERS[mod1(i, length(MARKERS))], mc=c, msc=c, color=c, lw=lw, linestyle=LINESTYLES[mod1(i, length(LINESTYLES))], label=datalab[i])
+    end
+    savefig(p,save_name)
+    return p
 end
 
 end #module
