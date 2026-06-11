@@ -145,9 +145,9 @@ const LINESTYLES = [:solid, :dash, :dot, :dashdot, :dashdotdot]
 const LINECOLORS = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :black, :cyan,
                      :magenta, :teal, :navy, :maroon, :olive, :gold, :coral, :turquoise, :lime, :indigo]
 const MARKERS = [:rect, :circle, :diamond, :utriangle, :dtriangle]
-function plot_cases(xlab::String,ylab::String,cases::AbstractVector{<:AbstractDict},xSym::Symbol,ySym::Symbol,datalab::AbstractVector{<:AbstractString},save_name::String,;dpi=800,lw=2)
+function plot_cases(xlab::String,ylab::String,cases::AbstractVector{<:AbstractDict},xSym::Symbol,ySym::Symbol,datalab::AbstractVector{<:AbstractString},save_name::String,;dpi=800,lw=2,legend::Symbol=:best)
     @assert length(cases) == length(datalab) "cases and datalab length mismatch"
-    p = plot(xlabel=xlab, ylabel=ylab, dpi=dpi, legend=:bottomright)
+    p = plot(xlabel=xlab, ylabel=ylab, dpi=dpi, legend=legend)
     for (i,case) in enumerate(cases)
         c = LINECOLORS[mod1(i, length(LINECOLORS))]
         plot!(p, case[xSym], case[ySym], marker=MARKERS[mod1(i, length(MARKERS))], mc=c, msc=c, color=c, lw=lw, linestyle=LINESTYLES[mod1(i, length(LINESTYLES))], label=datalab[i])
