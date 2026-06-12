@@ -226,9 +226,9 @@ function _size_aircraft!(ac; itermax=35,
             broadcast_fuselage_drag!(para, ipcruise1)
             if iterw>1
                 # Update centroids
-                calculate_centroid_offset!(wing, calc_cma=true)
+                calculate_centroid_offset!(wing, calc_cma=true) #These centroid calculation use the updated tail box location
                 calculate_centroid_offset!(htail, htail.layout.span, λhs)
-                calculate_centroid_offset!(vtail, vtail.layout.span, λhs)
+                calculate_centroid_offset!(vtail, vtail.layout.span*2.0, λhs) #The 2 times likely stem from the only x centroid calculation and the shared function between HTail and VTail
             end
         else
             fuse_tank.ACT_fuse_l_extend = 0.0 #Prevent correction inside fuseW

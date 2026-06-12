@@ -214,6 +214,8 @@ function update_fuse_for_ACT!(ac, imission::Int64 = 1)
     wbox_cabin_frac =  (wing.layout.box_x- fuse.layout.x_start_cylinder )/(fuse.layout.x_end_cylinder - fuse.layout.x_start_cylinder)
     # Wing box to engine
     dxeng2wbox = parg[igdxeng2wbox] #Distance from engine to wingbox
+    # Cone to hydrolic
+    HPE_cone_frac = (fuse.HPE_sys.x-fuse.layout.x_nose)/(fuse.layout.x_cone_end-fuse.layout.x_nose)
     
     #### Get the baseline cylinder length
     lcyl_base = fuse.layout.l_cabin_cylinder
@@ -237,7 +239,7 @@ function update_fuse_for_ACT!(ac, imission::Int64 = 1)
     # Wing box to engine
     parg[igxeng] =  wing.layout.box_x - dxeng2wbox #Move engine
     # Cone to HPE
-    fuse.HPE_sys.r = [fuse.layout.x_cone_end * 0.52484, 0.0, 0.0] #TODO: address this
+    fuse.HPE_sys.r = [fuse.layout.x_nose + (fuse.layout.x_cone_end-fuse.layout.x_nose) * HPE_cone_frac, 0.0, 0.0] #TODO: address this
 end
 
 """
