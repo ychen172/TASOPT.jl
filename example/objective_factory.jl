@@ -127,10 +127,10 @@ function best_feasible(hist_all::OptHistory)
     i = idx[argmin(hist_all.penalty[idx])]
     return (index=i, test_param=hist_all.test_param[i], penalty=hist_all.penalty[i], PFEI=hist_all.PFEI[i])
 end
-
+                              #Try to start with all 1 here actually
 #penal_scale::Vector{Float64}=[25.0, 1.0, 1.0, 5.0, 5.0, 1.0, 10.0, 10.0]
 #                       buffer[0     0    0      0   0.  0.  1e-4   1e-4]
-#ac.wing.span
+#ac.wing.layout.span (Double check what goes in here)
 #ac.parm[imlBF,1]
 #ac.para[iagamV, ipclimbn, 1]
 #maximum(ac.pare[ieTt3, :, 1])

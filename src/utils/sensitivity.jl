@@ -202,23 +202,16 @@ Type check helper function for get and set Nested property functions
 function checkparm(parm_sym,field_path,index)
     has_parm = !isnothing(parm_sym)
     has_path = !isnothing(field_path)
-    has_idx  = !isnothing(index)
     ##### Case 1: both modes provided
-    if has_parm && (has_path || has_idx)
+    if has_parm && has_path
         throw(ArgumentError(
             "Provide either `parm_sym` OR (`field_path` and `index`), not both."
         ))
     end
     ##### Case 2: neither mode provided
-    if !has_parm && !has_path && !has_idx
+    if !has_parm && !has_path
         throw(ArgumentError(
             "Missing target. Provide `parm_sym=...` OR both `field_path=...` and `index=...`."
-        ))
-    end
-    ##### Case 3: incomplete direct mode
-    if !has_parm && (has_path ⊻ has_idx)
-        throw(ArgumentError(
-            "Incomplete direct input: when `parm_sym` is omitted, both `field_path` and `index` must be provided."
         ))
     end
     return has_parm
