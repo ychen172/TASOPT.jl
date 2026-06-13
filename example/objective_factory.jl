@@ -196,7 +196,7 @@ function make_obj(ac, parameters::AbstractVector{<:Parameter}, constraints::Abst
     #### Construct the objective function
     function obj!(x, grad)
         #### Sanity check
-        isempty(grad) || throw(ArgumentError("Gradient requested, but obj! has no gradient implementation.
+        (grad === nothing || isempty(grad)) || throw(ArgumentError("Gradient requested, but obj! has no gradient implementation.
                                               Use derivative-free NLopt algorithms (NM/DIRECT)."))
         (length(x) == length(parameters)) || throw(DimensionMismatch("#Param in by optimizer $(length(x)) not equal to the #Param expected $(length(parameters))"))
 
