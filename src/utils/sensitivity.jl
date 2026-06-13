@@ -131,14 +131,11 @@ function format_params(param_str)
                 push!(processed_indices, Colon())
             elseif contains(idx, ':')  # Range
                 range_parts = split(idx, ':')
-                idx_1 = eval(Symbol(strip(range_parts[1])))
-                idx_2 = eval(Symbol(strip(range_parts[2])))
-                push!(processed_indices, UnitRange{Int}(idx_1,idx_2))
-            elseif tryparse(Float64, idx) !== nothing
-                idx_1 = parse(Int64, idx)
-                push!(processed_indices, idx_1)
+                idx_1 = strip(range_parts[1])
+                idx_2 = strip(range_parts[2])
+                push!(processed_indices, UnitRange{Int}(_parse_idx_token(idx_1),_parse_idx_token(idx_2)))
             else
-                push!(processed_indices, eval(Symbol(strip(idx))))
+                push!(processed_indices, _parse_idx_token(strip(idx)))
             end
         end
         
@@ -148,6 +145,18 @@ function format_params(param_str)
         end
         
         return (field_path, processed_indices)
+    end
+end
+function _parse_idx_token(s::AbstractString)
+    t = strip(s)
+    if (v = tryparse(Int, t)) !== nothing
+        return v
+    else
+        sym = Symbol(t)  # for ieTt3, ipcruise1, etc.
+        isdefined(TASOPT, sym) || throw(ArgumentError("Index symbol $sym not defined in $TASOPT"))
+        val = getfield(TASOPT, sym)
+        val isa Integer || throw(ArgumentError("Index symbol $sym is not an integer")) 
+        return Int(val)
     end
 end
 
@@ -185,6 +194,139 @@ function getNestedProp(ac, field_path::Vector, index=nothing)
     else
         return val[index[1],index[2],index[3]]
     end
+end
+
+"""
+Type check helper function for get and set Nested property functions
+"""
+function checkparm(parm_sym,field_path,index)
+    has_parm = !isnothing(parm_sym)
+    has_path = !isnothing(field_path)
+    has_idx  = !isnothing(index)
+    ##### Case 1: both modes provided
+    if has_parm && (has_path || has_idx)
+        throw(ArgumentError(
+            "Provide either `parm_sym` OR (`field_path` and `index`), not both."
+        ))
+    end
+    ##### Case 2: neither mode provided
+    if !has_parm && !has_path && !has_idx
+        throw(ArgumentError(
+            "Missing target. Provide `parm_sym=...` OR both `field_path=...` and `index=...`."
+        ))
+    end
+    ##### Case 3: incomplete direct mode
+    if !has_parm && (has_path ⊻ has_idx)
+        throw(ArgumentError(
+            "Incomplete direct input: when `parm_sym` is omitted, both `field_path` and `index` must be provided."
+        ))
+    end
+    return has_parm
+end
+
+"""
+    getNestedProp_fromExpr(ac; parm_sym::Union{Expr,Nothing}=nothing, field_path::Union{Vector,Nothing}=nothing, index=nothing)
+
+`getNestedProp_fromExpr` read parameter using an expression out of the aircrft model
+
+!!! details "🔃 Inputs and Outputs"
+    **Inputs:**
+        - `ac`: The tasopt aircraft model.
+        Pick one of the two below
+        (1) `parm_sym::Expr`: A symbol for the parameter to read out 
+            (Ex. :(parg[igVfuel]), :(parm[imVfuel, :]), :(pare[ierhofuel_driven,:,:]), :(fuselage.layout.cross_section.radius))
+            The slicing accepts only, `:`, Ex.`3:5`, Ex.`ipcruise1:ipcruise2` ,`:`. Not support `3:` or `3:2:10`.... 
+        (2) `field_path,index`: generated from format_params(expr_to_string(parm_sym)) to save cost from repeated parsing
+    
+    **Outputs:**
+        - The value of the specified nested property, or a specific element/slice if indices are provided.
+
+!!! note "Behavior"
+        - This version incorporate in the format parameter part and also allow output the vector data
+        - Missing a few dimensions (2D for pare) or accidentally adding a few indices (1D for parg) migth work but not recommended (No check been done)
+"""
+function getNestedProp_fromExpr(ac; parm_sym::Union{Expr,Nothing}=nothing, field_path::Union{Vector,Nothing}=nothing, index=nothing)
+    #### Process the parameter
+    has_parm = checkparm(parm_sym,field_path,index)
+    if has_parm
+        field_path,index = format_params(expr_to_string(parm_sym))
+    end
+    isempty(field_path) && throw(ArgumentError("`field_path` cannot be empty."))
+
+    #### Read out the parameter
+    obj = ac
+    for field in field_path
+        obj = getfield(obj, field)
+    end
+    # Return the value
+    if isnothing(index)
+        return obj 
+    else
+        return obj[index...]
+    end
+end
+
+"""
+    setNestedProp_fromExpr!(ac, val_to_set; parm_sym::Union{Expr,Nothing}=nothing, field_path::Union{Vector,Nothing}=nothing, index=nothing)
+
+`setNestedProp_fromExpr!` set a value or array into a parameter of the aircraft model
+
+!!! details "🔃 Inputs and Outputs"
+    **Inputs:**
+        - `ac`: The tasopt aircraft model (Modified inplace)
+        - `val_to_set`: float, int, array: value to be set to the parameter, accept broadcasting or elementwise
+        Pick one of the two below
+        (1) `parm_sym::Expr`: A symbol for the parameter to set value
+            (Ex. :(parg[igVfuel]), :(parm[imVfuel, :]), :(pare[ierhofuel_driven,:,:]), :(fuselage.layout.cross_section.radius))
+            The slicing accepts only, `:`, Ex.`3:5`, Ex.`ipcruise1:ipcruise2` ,`:`. Not support `3:` or `3:2:10`.... 
+        (2) `field_path,index`: generated from format_params(expr_to_string(parm_sym)) to save cost from repeated parsing
+        
+    
+    **Outputs:**
+        - `ac`: The same reference
+
+!!! note "Behavior"
+        - This version incorporate in the format parameter part
+        - Aircraft model modified in place
+        - Missing a few dimensions (2D for pare) or accidentally adding a few indices (1D for parg) migth work but not recommended (No check been done)
+"""
+function setNestedProp_fromExpr!(ac, val_to_set; parm_sym::Union{Expr,Nothing}=nothing, field_path::Union{Vector,Nothing}=nothing, index=nothing)
+    #### Process the parameter
+    has_parm = checkparm(parm_sym,field_path,index)
+    if has_parm
+        field_path,index = format_params(expr_to_string(parm_sym))
+    end
+    isempty(field_path) && throw(ArgumentError("`field_path` cannot be empty."))
+
+    #### Read parent of the final field
+    obj = ac
+    for field in field_path[1:end-1]
+        obj = getfield(obj, field)
+    end
+    leaf = field_path[end] #Separate out the last field to actually be set
+    # Set the value
+    obj_sub = getfield(obj, leaf)
+    if isnothing(index)
+        if obj_sub isa AbstractArray
+            obj_sub .= val_to_set
+        else
+            type_obj = fieldtype(typeof(obj), leaf)
+            setfield!(obj, leaf, convert(type_obj,val_to_set))
+        end
+    else
+        indexT = Tuple(index) #Update the type of index
+        if all(i -> i isa Integer, indexT)
+            obj_sub_sub = obj_sub[indexT...]
+            if obj_sub_sub isa AbstractArray
+                obj_sub_sub .= val_to_set #The element itself is an array
+            else
+                obj_sub[indexT...] = val_to_set #The element is just a number
+            end
+        else
+            @views obj_sub[indexT...] .= val_to_set #A slice is being set
+        end
+    end
+    return ac
 end
 
 """
