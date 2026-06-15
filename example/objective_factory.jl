@@ -357,6 +357,10 @@ function InFlightPrintOut(hist::OptHistory, print_every::Int)
     end
 end
 
+"""These are the statuses for NLOpt optimization results"""
+const success_statuses = (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
+const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
+
 """
     optimize_singlePt_PFEI!(ac,
                             optimize_par::AbstractVector{<:Parameter};
@@ -472,12 +476,12 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
         catch e
             @error "Failed to restore initial state or size aircraft with initial state but new mission requirements $(typeof(e)): $(e)"
         end
-        if status in (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
+        if status in success_statuses #Global variable
             status = :NO_FEASIBLE_SOLUTION
         end
     else
         println("Identified and setup the current best solution.")
-        if status in (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
+        if status in failure_statuses #Global variable
             @warn "Using feasible solution from history despite optimizer termination status = $(status)"
             status = :RECOVERED_FEASIBLE_FROM_HISTORY
         end
@@ -506,17 +510,21 @@ end
         - optimize_par: Have current best sol in :val, and local bounds :bon_up, :bon_lo may or may not be updated in place
         - global_bounds_par: only need to provide the hard global bounds :bon_up and :bon_lo to clip the updated local bound
         - frac_edge_trigger(def): fractional local span as a threshold distance if solution is too close to either bounds, bound expansion process will be trigger
-        - frac_edge_expanded(def): fractional local span to expand from the current solution to the limiting bound side. Need to be larger than trigger to avoid repeated boundary expansion.
+        - frac_edge_expanded(def): fractional local span to expand from the current solution to the limiting bound side. Need to be larger than that for trigger to avoid repeated boundary expansion.
         - eps(def): a small fraction to detect if global bounds are touched
     
     **Outputs:**
-        - flg_bod_cha::Bool: flag true if the local bounds changes. (Anti-drift counts as no change)
+        - flg_bod_cha::Bool: flag true if the local bounds changes.
     
     **Behavior:**
+        - Solution must be within or on the edge of the global bounds at least.
+        - Solution can be outside of the local bound
+        - Local bounds can be outside of global bound
         - Span of the local bound will be kept unchanged by this updating process
-        - Does NOT accept placeholder fixed parameter (Ex. those with upper bound ~= lower bound and initial dx == 0.0)
+        - Span of the local bound has to be smaller than global span
         - Initial step size will remain unchanged because the span is unchanged
-        - Local span has to be smaller than global span
+        - Does NOT accept placeholder type of fixed parameter (Ex. those with upper bound ~= lower bound and initial dx == 0.0)
+        - flg_bod_cha is directly obained from comparing old versus new bounds
 """
 function adjust_bounds!(optimize_par::AbstractVector{<:Parameter},
                         global_bounds_par::AbstractVector{<:Parameter};
@@ -524,54 +532,64 @@ function adjust_bounds!(optimize_par::AbstractVector{<:Parameter},
                         frac_edge_expanded::AbstractFloat=0.3,
                         eps::AbstractFloat=1e-10)
     
-    #### Extract the current state of parameters
+    #### Size check
+    0 <= frac_edge_trigger || throw(ArgumentError("Boundary expansion triggering margin $(frac_edge_trigger) smaller than zero"))
     frac_edge_trigger < frac_edge_expanded || throw(ArgumentError("Boundary expansion triggering margin $(frac_edge_trigger) needs to be tighter than expansion margin $(frac_edge_expanded)"))
     frac_edge_expanded <= 0.5 || throw(ArgumentError("Boundary expansion fraction $(frac_edge_expanded) should not be more than 50% to the limiting side"))
     eps >= 0 || throw(ArgumentError("eps $(eps) smaller than zero"))
     length(optimize_par) == length(global_bounds_par) || throw(ArgumentError("Dimension of global bounds $(length(global_bounds_par)) not matching with dimension of local bounds $(length(optimize_par))"))
-    local_low = getfield.(optimize_par, :bon_lo)
-    local_upp = getfield.(optimize_par, :bon_up)
-    global_low = getfield.(global_bounds_par, :bon_lo)
-    global_upp = getfield.(global_bounds_par, :bon_up)
-    current_sol = getfield.(optimize_par, :val)
-    
+        
     #### Loop through each field to adjust bounds
     flg_bod_cha = false
-    for (idx,sol_cur) in enumerate(current_sol)
+    for idx in eachindex(optimize_par)
         # Extract span and check for validity
-        local_low_cur = local_low[idx]
-        local_upp_cur = local_upp[idx]
-        (sol_cur >= local_low_cur && sol_cur <= local_upp_cur) || throw(ErrorException("Current solution $(sol_cur) is out of local bounds $(local_low_cur) to $(local_upp_cur)"))
+        sol_cur = optimize_par[idx].val
+        local_low_cur = optimize_par[idx].bon_lo
+        local_upp_cur = optimize_par[idx].bon_up
         local_span_cur = local_upp_cur-local_low_cur
         local_span_cur > 0 || throw(ErrorException("Zero width local bounds span detected $(local_span_cur)"))
-        global_low_cur = global_low[idx]
-        global_upp_cur = global_upp[idx]
+        global_low_cur = global_bounds_par[idx].bon_lo
+        global_upp_cur = global_bounds_par[idx].bon_up
         global_span_cur = global_upp_cur-global_low_cur
         local_span_cur < global_span_cur || throw(ErrorException("Local span $(local_span_cur) equal or larger than global span $(global_span_cur)"))
-        
-        # Update the bounds
-        frac_lower_margin_cur = (sol_cur-local_low_cur)/local_span_cur
         eps_close = global_span_cur*eps
+        (sol_cur >= local_low_cur  - eps_close && sol_cur <= local_upp_cur  + eps_close) || @warn "Current solution $(sol_cur) is out of local bounds $(local_low_cur) to $(local_upp_cur). This is only expected if initially setup a placeholder local bound just to provide a fixed local span"
+        (sol_cur >= global_low_cur - eps_close && sol_cur <= global_upp_cur + eps_close) || throw(DomainError(sol_cur,"Current solution $(sol_cur) is out of global bounds $(global_low_cur) to $(global_upp_cur)."))
+
+        # Update the bounds
+        frac_lower_margin_cur = (sol_cur-local_low_cur)/local_span_cur #Could be negative or bigger than unity if local bounds are not catching the solution
         if frac_lower_margin_cur <= frac_edge_trigger
             if local_low_cur <= global_low_cur + eps_close
-                local_low_cur = global_low_cur #Anti-drift, no bounds change
+                local_low_cur = global_low_cur
             else
-                local_low_cur = sol_cur - frac_edge_expanded*local_span_cur
-                local_low_cur = max(local_low_cur, global_low_cur)
-                flg_bod_cha = true
+                local_low_cur = sol_cur - frac_edge_expanded*local_span_cur #so long as local span smaller than global
+                local_low_cur = clamp(local_low_cur, global_low_cur, global_upp_cur-local_span_cur) #this ensure local bounded by global
             end
             local_upp_cur = local_low_cur + local_span_cur
-            optimize_par[idx].bon_lo = local_low_cur
-            optimize_par[idx].bon_up = local_upp_cur
         elseif frac_lower_margin_cur >= (1.0-frac_edge_trigger)
             if local_upp_cur >= global_upp_cur - eps_close
                 local_upp_cur = global_upp_cur
             else
                 local_upp_cur = sol_cur + frac_edge_expanded*local_span_cur
-                local_upp_cur = min(local_upp_cur, global_upp_cur)
-                flg_bod_cha = true
+                local_upp_cur = clamp(local_upp_cur, global_low_cur+local_span_cur, global_upp_cur)
             end
             local_low_cur = local_upp_cur - local_span_cur
+        else
+            if local_low_cur <= global_low_cur + eps_close
+                local_low_cur = global_low_cur
+                local_upp_cur = local_low_cur + local_span_cur
+            elseif local_upp_cur >= global_upp_cur - eps_close
+                local_upp_cur = global_upp_cur
+                local_low_cur = local_upp_cur - local_span_cur
+            end #Local search may trigger these repeatedly but that should not trigger the boundary change flag
+                #Unless somehow NLOpt drift the bounds definition which is unlikely
+        end
+
+        # Check if any of the bound is changed
+        if (!isapprox(local_low_cur, optimize_par[idx].bon_lo; atol=eps_close, rtol=eps) ||
+            !isapprox(local_upp_cur, optimize_par[idx].bon_up; atol=eps_close, rtol=eps))
+            flg_bod_cha = true
+            # Assign the new bounds
             optimize_par[idx].bon_lo = local_low_cur
             optimize_par[idx].bon_up = local_upp_cur
         end
