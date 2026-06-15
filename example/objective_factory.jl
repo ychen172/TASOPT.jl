@@ -493,4 +493,91 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
     return status, hist
 end
 
+"""
+    adjust_bounds!(optimize_par::AbstractVector{<:Parameter},
+                   global_bounds_par::AbstractVector{<:Parameter};
+                   frac_edge_trigger::AbstractFloat=0.15,
+                   frac_edge_expanded::AbstractFloat=0.3,
+                   eps::AbstractFloat=1e-10)
+
+`adjust_bounds!` adjusts the local bounds to the current best solution for next iteration
+
+    **Inputs:**
+        - optimize_par: Have current best sol in :val, and local bounds :bon_up, :bon_lo may or may not be updated in place
+        - global_bounds_par: only need to provide the hard global bounds :bon_up and :bon_lo to clip the updated local bound
+        - frac_edge_trigger(def): fractional local span as a threshold distance if solution is too close to either bounds, bound expansion process will be trigger
+        - frac_edge_expanded(def): fractional local span to expand from the current solution to the limiting bound side. Need to be larger than trigger to avoid repeated boundary expansion.
+        - eps(def): a small fraction to detect if global bounds are touched
+    
+    **Outputs:**
+        - flg_bod_cha::Bool: flag true if the local bounds changes. (Anti-drift counts as no change)
+    
+    **Behavior:**
+        - Span of the local bound will be kept unchanged by this updating process
+        - Does NOT accept placeholder fixed parameter (Ex. those with upper bound ~= lower bound and initial dx == 0.0)
+        - Initial step size will remain unchanged because the span is unchanged
+        - Local span has to be smaller than global span
+"""
+function adjust_bounds!(optimize_par::AbstractVector{<:Parameter},
+                        global_bounds_par::AbstractVector{<:Parameter};
+                        frac_edge_trigger::AbstractFloat=0.15,
+                        frac_edge_expanded::AbstractFloat=0.3,
+                        eps::AbstractFloat=1e-10)
+    
+    #### Extract the current state of parameters
+    frac_edge_trigger < frac_edge_expanded || throw(ArgumentError("Boundary expansion triggering margin $(frac_edge_trigger) needs to be tighter than expansion margin $(frac_edge_expanded)"))
+    frac_edge_expanded <= 0.5 || throw(ArgumentError("Boundary expansion fraction $(frac_edge_expanded) should not be more than 50% to the limiting side"))
+    eps >= 0 || throw(ArgumentError("eps $(eps) smaller than zero"))
+    length(optimize_par) == length(global_bounds_par) || throw(ArgumentError("Dimension of global bounds $(length(global_bounds_par)) not matching with dimension of local bounds $(length(optimize_par))"))
+    local_low = getfield.(optimize_par, :bon_lo)
+    local_upp = getfield.(optimize_par, :bon_up)
+    global_low = getfield.(global_bounds_par, :bon_lo)
+    global_upp = getfield.(global_bounds_par, :bon_up)
+    current_sol = getfield.(optimize_par, :val)
+    
+    #### Loop through each field to adjust bounds
+    flg_bod_cha = false
+    for (idx,sol_cur) in enumerate(current_sol)
+        # Extract span and check for validity
+        local_low_cur = local_low[idx]
+        local_upp_cur = local_upp[idx]
+        (sol_cur >= local_low_cur && sol_cur <= local_upp_cur) || throw(ErrorException("Current solution $(sol_cur) is out of local bounds $(local_low_cur) to $(local_upp_cur)"))
+        local_span_cur = local_upp_cur-local_low_cur
+        local_span_cur > 0 || throw(ErrorException("Zero width local bounds span detected $(local_span_cur)"))
+        global_low_cur = global_low[idx]
+        global_upp_cur = global_upp[idx]
+        global_span_cur = global_upp_cur-global_low_cur
+        local_span_cur < global_span_cur || throw(ErrorException("Local span $(local_span_cur) equal or larger than global span $(global_span_cur)"))
+        
+        # Update the bounds
+        frac_lower_margin_cur = (sol_cur-local_low_cur)/local_span_cur
+        eps_close = global_span_cur*eps
+        if frac_lower_margin_cur <= frac_edge_trigger
+            if local_low_cur <= global_low_cur + eps_close
+                local_low_cur = global_low_cur #Anti-drift, no bounds change
+            else
+                local_low_cur = sol_cur - frac_edge_expanded*local_span_cur
+                local_low_cur = max(local_low_cur, global_low_cur)
+                flg_bod_cha = true
+            end
+            local_upp_cur = local_low_cur + local_span_cur
+            optimize_par[idx].bon_lo = local_low_cur
+            optimize_par[idx].bon_up = local_upp_cur
+        elseif frac_lower_margin_cur >= (1.0-frac_edge_trigger)
+            if local_upp_cur >= global_upp_cur - eps_close
+                local_upp_cur = global_upp_cur
+            else
+                local_upp_cur = sol_cur + frac_edge_expanded*local_span_cur
+                local_upp_cur = min(local_upp_cur, global_upp_cur)
+                flg_bod_cha = true
+            end
+            local_low_cur = local_upp_cur - local_span_cur
+            optimize_par[idx].bon_lo = local_low_cur
+            optimize_par[idx].bon_up = local_upp_cur
+        end
+    end
+
+    return flg_bod_cha
+end
+
 end # module ObjectiveFactory
