@@ -2,6 +2,9 @@ module ObjectiveFactory
 export OptHistory, make_obj, best_feasible
 using TASOPT
 using Printf
+using CSV
+using DataFrames
+using BenchmarkTools
 include(__TASOPTindices__)
 include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
 
@@ -842,6 +845,154 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
     end
     @assert isnothing(status) || (status in success_statuses) #sanity check
     return (; ac, optimize_par, status, hist)
+end
+
+"""Type conversion"""
+_expr_to_str(ex::Expr) = sprint(Base.show_unquoted, ex)
+_str_to_expr(s::AbstractString) = Meta.parse(s)
+_toT(x, ::Type{T}) where {T<:AbstractFloat} = x isa AbstractString ? parse(T, x) : convert(T, x) #Convert from string form number to number type
+
+"""Convert to savable string"""
+function _encode_union(x)
+    if x === nothing
+        return ("nothing", "")
+    elseif x isa Expr
+        return ("expr", _expr_to_str(x))
+    elseif x isa Real
+        return ("num", string(x))
+    else
+        throw(ArgumentError("Unsupported union value type: $(typeof(x))"))
+    end
+end
+
+function _numeric_target_type(ft::Type)
+    members = ft isa Union ? Base.uniontypes(ft) : (ft,)
+    for m in members
+        m <: AbstractFloat && return m
+    end
+    for m in members
+        m <: Integer && return m
+    end
+    for m in members
+        m <: Real && return Float64
+    end
+    return nothing
+end
+
+function _decode_typed(kind_raw, val_raw, ft::Type)
+    kind = lowercase(strip(String(kind_raw)))
+
+    if kind == "nothing"
+        nothing isa ft || throw(ArgumentError("Field type $ft does not allow `nothing`"))
+        return nothing
+
+    elseif kind == "expr"
+        s = val_raw isa AbstractString ? String(val_raw) : string(val_raw)
+        ex = Meta.parse(s)
+        (ex isa ft || ft == Any) || throw(ArgumentError("Field type $ft does not allow Expr"))
+        return ex
+
+    elseif kind == "num"
+        nt = _numeric_target_type(ft)
+        nt === nothing && throw(ArgumentError("Field type $ft does not allow numeric values"))
+
+        if val_raw isa AbstractString
+            return parse(nt, String(val_raw))
+        else
+            return convert(nt, val_raw)
+        end
+
+    else
+        throw(ArgumentError("Unknown kind '$kind' (expected num|expr|nothing)"))
+    end
+end
+
+function _default_ignored_value(ft::Type, fname::Symbol, defaults::Dict{Symbol,Any})
+    if haskey(defaults, fname)
+        v = defaults[fname]
+        (v isa ft || ft == Any) || throw(ArgumentError("Default for $fname has wrong type: $(typeof(v)) vs $ft"))
+        return v
+    end
+    if nothing isa ft
+        return nothing
+    end
+    throw(ArgumentError("Ignored field $fname is required by type $ft; provide it in `defaults`"))
+end
+
+"""
+save_constraints_csv(path::AbstractString, data::AbstractVector,fieldIgnore::AbstractVector{<:AbstractString})
+Use: save_constraints_csv("constraints.csv", constraints_vec, ["field_path", "index"])
+"""
+function save_constraints_csv(path::AbstractString, data::AbstractVector,fieldIgnore::AbstractVector{<:AbstractString})
+    isempty(data) && throw(ArgumentError("data is empty"))
+    T0 = typeof(first(data))
+    all(typeof(x) == T0 for x in data) || throw(ArgumentError("all elements in data must have the same concrete type"))
+    ignore = Set(Symbol.(fieldIgnore))
+    keep_fields = [f for f in fieldnames(T0) if !(f in ignore)]
+    rows = Vector{NamedTuple}(undef, length(data))
+    for (idx, sub_data) in enumerate(data)
+        pairs_row = Pair{Symbol,Any}[]
+        push!(pairs_row, :schema_version => 1)
+        for f in keep_fields
+            v = getfield(sub_data, f)
+            try
+                val_kind, val = _encode_union(v)  # your existing encoder
+                push!(pairs_row, Symbol(f, "_kind") => val_kind)
+                push!(pairs_row, Symbol(f, "_val")  => val)
+            catch err
+                throw(ArgumentError("Data conversion for field $(String(f)) failed: $err"))
+            end
+        end
+        rows[idx] = (; pairs_row...)
+    end
+    CSV.write(path, DataFrame(rows))
+    return path
+end
+
+"""
+load_constraints_csv(path::AbstractString, ::Type{S}; fieldIgnore::AbstractVector{<:AbstractString} = String[],defaults::Dict{Symbol,Any} = Dict{Symbol,Any}(),)
+Use: cons = load_constraints_csv("constraints.csv", Constraint{Float64}; fieldIgnore = ["field_path", "index"], defaults = Dict{Symbol,Any}(:field_path => nothing, :index => nothing),)
+"""
+function load_constraints_csv(path::AbstractString, ::Type{S}; fieldIgnore::AbstractVector{<:AbstractString} = String[],defaults::Dict{Symbol,Any} = Dict{Symbol,Any}(),) where {S}
+    isconcretetype(S) || throw(ArgumentError("Use a concrete type, e.g. Constraint{Float64}"))
+    df = CSV.read(path, DataFrame)
+    ignore = Set(Symbol.(fieldIgnore))
+
+    fns = fieldnames(S)
+    fts = fieldtypes(S)
+
+    # quick column existence check for non-ignored fields
+    cols = Set(Symbol.(names(df)))
+    for f in fns
+        if !(f in ignore)
+            kcol = Symbol(f, "_kind")
+            vcol = Symbol(f, "_val")
+            (kcol in cols && vcol in cols) || throw(ArgumentError("Missing columns $kcol/$vcol in CSV"))
+        end
+    end
+
+    out = Vector{S}(undef, nrow(df))
+
+    for (i, row) in enumerate(eachrow(df))
+        vals = Vector{Any}(undef, length(fns))
+
+        for j in eachindex(fns)
+            f  = fns[j]
+            ft = fts[j]
+
+            if f in ignore
+                vals[j] = _default_ignored_value(ft, f, defaults)
+            else
+                kind = row[Symbol(f, "_kind")]
+                val  = row[Symbol(f, "_val")]
+                vals[j] = _decode_typed(kind, val, ft)
+            end
+        end
+
+        out[i] = S(vals...)
+    end
+
+    return out
 end
 
 end # module ObjectiveFactory
