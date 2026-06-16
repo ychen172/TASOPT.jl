@@ -806,7 +806,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
                         mission_req=mission_req, constraints=constraints,
                         ftol_rel=ftol_rel, max_iter_sizing=max_iter_sizing, print_every=print_every, pen_failed_sizing=pen_failed_sizing,
                         frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded,
-                        flag_has_reattempt_local=true, flag_has_reattempt_global=false,
+                        flag_has_reattempt_local=true, flag_has_reattempt_global=flag_has_reattempt_global,
                         optimizer_local=optimizer_local, max_iter_optim_local=max_iter_optim_local, max_iter_outer_loop_local=max_iter_outer_loop_local, ini_iter_optim_local=ini_iter_optim_local, ini_iter_outer_loop_local=ini_iter_outer_loop_local,
                         optimizer_global=optimizer_global, max_iter_optim_global=max_iter_optim_global, frac_local_bound_span=frac_local_bound_span, flag_skip_global=true
                         )
@@ -820,7 +820,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
                         mission_req=mission_req, constraints=constraints,
                         ftol_rel=ftol_rel, max_iter_sizing=max_iter_sizing, print_every=print_every, pen_failed_sizing=pen_failed_sizing,
                         frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded,
-                        flag_has_reattempt_local=true, flag_has_reattempt_global=true,
+                        flag_has_reattempt_local=flag_has_reattempt_local, flag_has_reattempt_global=true,
                         optimizer_local=optimizer_local, max_iter_optim_local=max_iter_optim_local, max_iter_outer_loop_local=max_iter_outer_loop_local, ini_iter_optim_local=ini_iter_optim_local, ini_iter_outer_loop_local=ini_iter_outer_loop_local,
                         optimizer_global=optimizer_global, max_iter_optim_global=max_iter_optim_global, frac_local_bound_span=frac_local_bound_span, flag_skip_global=false
                         )
