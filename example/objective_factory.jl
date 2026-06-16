@@ -713,75 +713,77 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
             countRerun += 1
         end
 
-        # Attempt
-        try
-            # Check the validity of the input
-            for (idx_par,opt_par_cur) in enumerate(optimize_par)
-                if !flag_skip_global && countWhile==1
-                    opt_par_cur.bon_up = global_bounds_par[idx_par].bon_up #For global search, always use the total global bound
-                    opt_par_cur.bon_lo = global_bounds_par[idx_par].bon_lo
-                else
-                    opt_par_cur.bon_up <= global_bounds_par[idx_par].bon_up || throw(DomainError(opt_par_cur.bon_up, "Upper local bound $(opt_par_cur.bon_up) is larger than the global one $(global_bounds_par[idx_par].bon_up)"))
-                    opt_par_cur.bon_lo >= global_bounds_par[idx_par].bon_lo || throw(DomainError(opt_par_cur.bon_lo, "Lower local bound $(opt_par_cur.bon_lo) is smaller than the global one $(global_bounds_par[idx_par].bon_lo)"))
-                end
-                ((opt_par_cur.val <= opt_par_cur.bon_up) && (opt_par_cur.val >= opt_par_cur.bon_lo)) || throw(DomainError(opt_par_cur.val, "Initial guess $(opt_par_cur.val) out of the local bounds from $(opt_par_cur.bon_lo) to $(opt_par_cur.bon_up)"))
-            end
-
-            # Setup optimization method
-            method = (!flag_skip_global && countWhile==1) ? optimizer_global : optimizer_local
-            if (!flag_skip_global && countWhile==1)
-                max_iter = max_iter_optim_global
-            elseif rerun_fine
-                max_iter = max_iter_optim_local
+        # Check the validity of the input
+        for (idx_par,opt_par_cur) in enumerate(optimize_par)
+            if !flag_skip_global && countWhile==1
+                opt_par_cur.bon_up = global_bounds_par[idx_par].bon_up #For global search, always use the total global bound
+                opt_par_cur.bon_lo = global_bounds_par[idx_par].bon_lo
             else
-                max_iter = ini_iter_optim_local
+                opt_par_cur.bon_up <= global_bounds_par[idx_par].bon_up || throw(DomainError(opt_par_cur.bon_up, "Upper local bound $(opt_par_cur.bon_up) is larger than the global one $(global_bounds_par[idx_par].bon_up)"))
+                opt_par_cur.bon_lo >= global_bounds_par[idx_par].bon_lo || throw(DomainError(opt_par_cur.bon_lo, "Lower local bound $(opt_par_cur.bon_lo) is smaller than the global one $(global_bounds_par[idx_par].bon_lo)"))
             end
+            ((opt_par_cur.val <= opt_par_cur.bon_up) && (opt_par_cur.val >= opt_par_cur.bon_lo)) || throw(DomainError(opt_par_cur.val, "Initial guess $(opt_par_cur.val) out of the local bounds from $(opt_par_cur.bon_lo) to $(opt_par_cur.bon_up)"))
+        end
 
+        # Setup optimization method
+        method = (!flag_skip_global && countWhile==1) ? optimizer_global : optimizer_local
+        if (!flag_skip_global && countWhile==1)
+            max_iter = max_iter_optim_global
+        elseif rerun_fine
+            max_iter = max_iter_optim_local
+        else
+            max_iter = ini_iter_optim_local
+        end
+
+        # Attempt
+        status = nothing #Clear up previous iteration status
+        try
             # Run optimization
             println("Optimization Run #$(countWhile), method: $(method), maxIter: $(max_iter)")
             status,hist=optimize_singlePt_PFEI!(ac, optimize_par; mission_req=mission_req, constraints=constraints,
                                                 ftol_rel=ftol_rel, max_iter_optim=max_iter, max_iter_sizing=max_iter_sizing,
                                                 print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=method)
-            
-            # Post-processing
-            if status in success_statuses
-                # Backup the good attempt
-                optimize_par_backup = deepcopy(optimize_par)
-                status_backup = status
-                hist_backup = deepcopy(hist)
-                ac_backup = deepcopy(ac)
-
-                println("=== Benchmark: deepcopy history for the last feasible case===")
-                @btime deepcopy($hist) #Probably very expensive need to check
-                println("=== Benchmark: deepcopy aircraft model for the last feasible case===")
-                @btime deepcopy($ac)
-
-                # Create a new local bound
-                println("Optimization succeed. Update local bound")
-                if (!flag_skip_global && countWhile==1)
-                    for opt_par_cur in optimize_par
-                        opt_par_cur.bon_up = opt_par_cur.bon_lo + frac_local_bound_span*(opt_par_cur.bon_up-opt_par_cur.bon_lo)
-                    end
-                end
-                flag_bound_change = adjust_bounds!(optimize_par, global_bounds_par; frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded)
-                flag_bound_change = (!flag_skip_global && countWhile==1) ? true : flag_bound_change
-                # Setup running
-                if (!rerun_fine) #If rerun has not been activated
-                    rerun_fine = !flag_bound_change #Activate rerun only if bound stop changing
-                else #If rerun has been activated
-                    rerun_fine = flag_bound_change #Keep on activate only if bound still not converge
-                end
-            else 
-                # Optimization process returns a failed result
-                println("Optimization Failed Status: $(status)")
-                flag_case_failed = true
-                break
-            end
         catch e # Fail to run the optimization function
             if e isa InterruptException
                 rethrow(e)
             end
             println("Optimization Errored Status: $(e)")
+            flag_case_failed = true
+            break
+        end
+
+        # Post-processing
+        if status in success_statuses
+            # Backup the good attempt
+            optimize_par_backup = deepcopy(optimize_par)
+            status_backup = status
+            hist_backup = deepcopy(hist)
+            ac_backup = deepcopy(ac)
+
+            println("=== Benchmark: deepcopy history for the last feasible case===")
+            @btime deepcopy($hist) #Probably very expensive need to check
+            println("=== Benchmark: deepcopy aircraft model for the last feasible case===")
+            @btime deepcopy($ac)
+
+            # Create a new local bound
+            println("Optimization succeed. Update local bound")
+            if (!flag_skip_global && countWhile==1)
+                for opt_par_cur in optimize_par
+                    opt_par_cur.bon_up = opt_par_cur.bon_lo + frac_local_bound_span*(opt_par_cur.bon_up-opt_par_cur.bon_lo)
+                end
+            end
+            flag_bound_change = adjust_bounds!(optimize_par, global_bounds_par; frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded)
+            flag_bound_change = (!flag_skip_global && countWhile==1) ? true : flag_bound_change
+            
+            # Setup fine rerunning
+            if (!rerun_fine) #If rerun has not been activated
+                rerun_fine = !flag_bound_change #Activate rerun only if bound stop changing
+            else #If rerun has been activated
+                rerun_fine = flag_bound_change #Keep on activate only if bound still not converge
+            end
+        else
+            # Optimization process returns a failed result
+            println("Optimization Failed Status: $(status)")
             flag_case_failed = true
             break
         end
