@@ -1,8 +1,10 @@
 module ObjectiveFactory
-export OptHistory, make_obj, best_feasible
+export Constraint, Parameter, OptHistory, Requirement, optimize_singlePt_PFEI!, optimizer_wrapper_global_local,
+       save_vec_struct_csv, load_vec_struct_csv, save_jld2, load_jld2
 using TASOPT
 using Printf
 using CSV
+using JLD2
 using DataFrames
 using BenchmarkTools
 include(__TASOPTindices__)
@@ -907,7 +909,7 @@ function _decode_typed(kind_raw, val_raw, ft::Type)
     end
 end
 
-function _default_ignored_value(ft::Type, fname::Symbol, defaults::Dict{Symbol,Any})
+function _default_ignored_value(ft::Type, fname::Symbol, defaults::AbstractDict{Symbol,<:Any})
     if haskey(defaults, fname)
         v = defaults[fname]
         (v isa ft || ft == Any) || throw(ArgumentError("Default for $fname has wrong type: $(typeof(v)) vs $ft"))
@@ -920,10 +922,10 @@ function _default_ignored_value(ft::Type, fname::Symbol, defaults::Dict{Symbol,A
 end
 
 """
-save_constraints_csv(path::AbstractString, data::AbstractVector,fieldIgnore::AbstractVector{<:AbstractString})
-Use: save_constraints_csv("constraints.csv", constraints_vec, ["field_path", "index"])
+save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIgnore::AbstractVector{<:AbstractString}=["field_path", "index"])
+Use: save_vec_struct_csv("req.csv", req_lst)
 """
-function save_constraints_csv(path::AbstractString, data::AbstractVector,fieldIgnore::AbstractVector{<:AbstractString})
+function save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIgnore::AbstractVector{<:AbstractString}=["field_path", "index"])
     isempty(data) && throw(ArgumentError("data is empty"))
     T0 = typeof(first(data))
     all(typeof(x) == T0 for x in data) || throw(ArgumentError("all elements in data must have the same concrete type"))
@@ -950,10 +952,10 @@ function save_constraints_csv(path::AbstractString, data::AbstractVector,fieldIg
 end
 
 """
-load_constraints_csv(path::AbstractString, ::Type{S}; fieldIgnore::AbstractVector{<:AbstractString} = String[],defaults::Dict{Symbol,Any} = Dict{Symbol,Any}(),)
-Use: cons = load_constraints_csv("constraints.csv", Constraint{Float64}; fieldIgnore = ["field_path", "index"], defaults = Dict{Symbol,Any}(:field_path => nothing, :index => nothing),)
+load_vec_struct_csv(path::AbstractString, ::Type{S}; fieldIgnore::AbstractVector{<:AbstractString} = ["field_path", "index"], defaults::AbstractDict{Symbol,<:Any} = Dict(:field_path => nothing, :index => nothing))
+load_constraints_csv("YesHere.csv",Constraint{Float64};fieldIgnore = ["field_path", "index"],defaults = Dict(:field_path => nothing, :index => nothing))
 """
-function load_constraints_csv(path::AbstractString, ::Type{S}; fieldIgnore::AbstractVector{<:AbstractString} = String[],defaults::Dict{Symbol,Any} = Dict{Symbol,Any}(),) where {S}
+function load_vec_struct_csv(path::AbstractString, ::Type{S}; fieldIgnore::AbstractVector{<:AbstractString} = ["field_path", "index"], defaults::AbstractDict{Symbol,<:Any} = Dict(:field_path => nothing, :index => nothing)) where {S}
     isconcretetype(S) || throw(ArgumentError("Use a concrete type, e.g. Constraint{Float64}"))
     df = CSV.read(path, DataFrame)
     ignore = Set(Symbol.(fieldIgnore))
@@ -993,6 +995,25 @@ function load_constraints_csv(path::AbstractString, ::Type{S}; fieldIgnore::Abst
     end
 
     return out
+end
+
+"""
+save_jld2("history.jld2", hist)
+"""
+function save_jld2(path::AbstractString, h)
+    jldopen(path, "w") do f
+        f["data"] = h
+    end
+    return path
+end
+
+"""
+hist2 = load_jld2("history.jld2", OptHistory{Float64})
+"""
+function load_jld2(path::AbstractString, ::Type{H}) where {H}
+    x = load(path, "data")
+    x isa H || throw(ArgumentError("Expected $H, got $(typeof(x))"))
+    return x
 end
 
 end # module ObjectiveFactory
