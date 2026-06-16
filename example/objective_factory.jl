@@ -706,7 +706,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
     rerun_fine = false #Use after the bound convergence, run a final fine search till FTol convergence (Only activate at the end)
     flag_case_failed = false #Flag for failed case
     ini_iter_outer_loop_local_mod = flag_skip_global ? ini_iter_outer_loop_local : ini_iter_outer_loop_local+1 #Optionally add a global search at the beginning
-    while (flag_bound_change && countWhile<ini_iter_outer_loop_local_mod) || (rerun_fine && countRerun<max_iter_outer_loop_local)
+    while (!rerun_fine && flag_bound_change && countWhile<ini_iter_outer_loop_local_mod) || (rerun_fine && countRerun<max_iter_outer_loop_local)
         # Update counter
         countWhile += 1
         if rerun_fine
