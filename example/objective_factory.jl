@@ -678,11 +678,8 @@ end
 function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Parameter}, global_bounds_par::AbstractVector{<:Parameter};
                                         mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(), constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
                                         ftol_rel::Float64=1e-6, max_iter_sizing::Int=150, print_every::Int=10, pen_failed_sizing::Float64=100.0,
-                                        
                                         frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
-
                                         flag_has_reattempt_local::Bool=false, flag_has_reattempt_global::Bool=false,
-
                                         optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_optim_local::Int=10000, max_iter_outer_loop_local::Int=10, ini_iter_optim_local::Int=500, ini_iter_outer_loop_local::Int=100,
                                         optimizer_global::Symbol=:GN_DIRECT, max_iter_optim_global::Int=5000, frac_local_bound_span::AbstractFloat=0.25, flag_skip_global::Bool=false
                                         )
@@ -758,7 +755,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
                 @btime deepcopy($hist) #Probably very expensive need to check
                 println("=== Benchmark: deepcopy aircraft model for the last feasible case===")
                 @btime deepcopy($ac)
-                
+
                 # Create a new local bound
                 println("Optimization succeed. Update local bound")
                 if (!flag_skip_global && countWhile==1)
