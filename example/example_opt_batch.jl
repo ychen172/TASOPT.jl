@@ -27,29 +27,27 @@ rear_seat_offset = front_seat_offset/2.0
 # Load and setup the aircraft (There are some overwriting cannot be fully automated by the solver)
 ac = quickload_aircraft(read_dir_ini)
 @assert ac.is_sized[1]
+# Change the mode to size tails
 ac.vtail.opt_sizing = TailSizing.OEI
 ac.htail.opt_sizing = TailSizing.CLmaxFwdCG
-
+# Calculate optimal fuselage layout
 radius_fuselage = find_minimum_radius_for_seats_per_row(num_pass_per_row, ac) #Compute the set the current best cross-section
 ac.fuselage.layout.cross_section.radius = radius_fuselage
 ac.fuselage.cabin.front_seat_offset = front_seat_offset
 ac.fuselage.cabin.rear_seat_offset = rear_seat_offset
 update_fuse_for_pax!(ac) #Activate carbin sizing
-x_wing_box_ini = ac.wing.layout.box_x #Find initial wing box location for search bound setup for engine position below
-println(radius_fuselage)
-println(ac.fuselage.layout.cross_section.radius)
 
 # Additional parameter can go with the mission parameter
 mis_opt = Requirement[]
+push!(mis_opt, Requirement(:(parm[imRange,1]), 300*1852.0)) #[m] Being updated in loop later on collect(300:100:3000)
 push!(mis_opt, Requirement(:(options.ifuel), Int(32))) #Fuel Index: Jet Fuel(24), Ethanol(32)
 push!(mis_opt, Requirement(:(parg[igrhofuel]), 789.0)) #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
 push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 918187.9)) #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
 push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 918187.9))
-push!(mis_opt, Requirement(:(parm[imRange,1]), 300*1852.0)) #[m] Being updated in loop later on collect(300:100:3000)
 push!(mis_opt, Requirement(:(pare[iepilc, ipclimb2:ipdescent4, 1]), 3.0))
 push!(mis_opt, Requirement(:(para[iaMach, ipclimbn:ipdescent1, 1]), 0.8))
 push!(mis_opt, Requirement(:(para[iarcls, ipclimb2:ipdescent4, 1]), 1.08))
-push!(mis_opt, Requirement(:(parg[igxeng]), x_wing_box_ini - radius_fuselage))
+push!(mis_opt, Requirement(:(parg[igxeng]), ac.wing.layout.box_x - radius_fuselage))
 push!(mis_opt, Requirement(:(parg[igCLveout]), 0.5))
 push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7))
 
