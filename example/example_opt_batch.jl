@@ -4,6 +4,8 @@ include(joinpath(__TASOPTroot__, "../example/","utilities_for_optimization/","ob
 using .ObjectiveFactory: Constraint, Parameter, OptHistory, Requirement, 
                          optimize_singlePt_PFEI!, optimizer_wrapper_global_local, 
                          save_vec_struct_csv, load_vec_struct_csv, save_jld2, load_jld2
+const find_minimum_radius_for_seats_per_row = TASOPT.structures.find_minimum_radius_for_seats_per_row
+const update_fuse_for_pax! = TASOPT.structures.update_fuse_for_pax!
 
 #### Setup IO
 # Initial data path
@@ -18,17 +20,43 @@ iters_local_coarse = 500
 iters_local_fine = 20000
 
 #### Setup mission requirement
-mis_req = Requirement[]
-push!(mis_req, Requirement(:(options.ifuel), Int(32))) #Fuel Index: Jet Fuel(24), Ethanol(32)
-push!(mis_req, Requirement(:(parg[igrhofuel]), 789.0)) #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
-push!(mis_req, Requirement(:(pare[iehvap, :, :]), 918187.9)) #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
-push!(mis_req, Requirement(:(pare[iehvapcombustor, :, :]), 918187.9))
-push!(mis_req, Requirement(:(parm[imRange,:]), 300*1852.0)) #[m] Being updated in loop later on collect(300:100:3000)
+# Some special parameters to fix
+num_pass_per_row = Int(6)
+front_seat_offset = 3.048
+rear_seat_offset = front_seat_offset/2.0
+# Load and setup the aircraft (There are some overwriting cannot be fully automated by the solver)
+ac = quickload_aircraft(read_dir_ini)
+@assert ac.is_sized[1]
+ac.vtail.opt_sizing = TailSizing.OEI
+ac.htail.opt_sizing = TailSizing.CLmaxFwdCG
+
+radius_fuselage = find_minimum_radius_for_seats_per_row(num_pass_per_row, ac) #Compute the set the current best cross-section
+ac.fuselage.layout.cross_section.radius = radius_fuselage
+ac.fuselage.cabin.front_seat_offset = front_seat_offset
+ac.fuselage.cabin.rear_seat_offset = rear_seat_offset
+update_fuse_for_pax!(ac) #Activate carbin sizing
+x_wing_box_ini = ac.wing.layout.box_x #Find initial wing box location for search bound setup for engine position below
+println(radius_fuselage)
+println(ac.fuselage.layout.cross_section.radius)
+
+# Additional parameter can go with the mission parameter
+mis_opt = Requirement[]
+push!(mis_opt, Requirement(:(options.ifuel), Int(32))) #Fuel Index: Jet Fuel(24), Ethanol(32)
+push!(mis_opt, Requirement(:(parg[igrhofuel]), 789.0)) #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
+push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 918187.9)) #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
+push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 918187.9))
+push!(mis_opt, Requirement(:(parm[imRange,1]), 300*1852.0)) #[m] Being updated in loop later on collect(300:100:3000)
+push!(mis_opt, Requirement(:(pare[iepilc, ipclimb2:ipdescent4, 1]), 3.0))
+push!(mis_opt, Requirement(:(para[iaMach, ipclimbn:ipdescent1, 1]), 0.8))
+push!(mis_opt, Requirement(:(para[iarcls, ipclimb2:ipdescent4, 1]), 1.08))
+push!(mis_opt, Requirement(:(parg[igxeng]), x_wing_box_ini - radius_fuselage))
+push!(mis_opt, Requirement(:(parg[igCLveout]), 0.5))
+push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7))
 
 #### Setup constraints
 con_opt = Constraint[]
 push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1.0, lim_up=35.814))
-push!(con_opt, Constraint(:(parm[imlBF,1]); pen_sca=1.0, lim_up=2400.0))
+push!(con_opt, Constraint(:(parm[imlBF, 1]); pen_sca=1.0, lim_up=2400.0))
 push!(con_opt, Constraint(:(para[iagamV, ipclimbn, 1]); pen_sca=1.0, lim_lo=0.015))
 push!(con_opt, Constraint(:(pare[ieTt3, :, 1]); pen_sca=1.0, lim_up=900.0))
 push!(con_opt, Constraint(:(pare[ieTmet1, :, 1]); pen_sca=1.0, lim_up=1333.33))
@@ -36,7 +64,26 @@ push!(con_opt, Constraint(:(parg[igdfan]); pen_sca=1.0, lim_up=2.0))
 push!(con_opt, Constraint(:(parm[imWTO, 1]); pen_sca=1.0, lim_up=:(parg[igWMTO]), eps_buff=1e-4))
 push!(con_opt, Constraint(:(parm[imVfuel, 1]); pen_sca=1.0, lim_up=:(parg[igVfmax]), eps_buff=1e-4))
 
-# #### Setup optimization parameters
+#### Setup optimization parameters
+par_opt = Parameter[]
+push!(par_opt, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 5.0))
+push!(par_opt, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 3.0))
+push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.3, 0.6, 0.04, 0.1))
+push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.3, 0.6, 0.04, 0.1))
+push!(par_opt, Parameter(:(wing.inboard.λ), 0.2, 1.0, 0.1, 0.2))
+push!(par_opt, Parameter(:(wing.outboard.λ), 0.2, 1.0, 0.1, 0.2))
+push!(par_opt, Parameter(:(parg[igyeng]), radius_fuselage*3.0, radius_fuselage*4.0, radius_fuselage*2.0, radius_fuselage*0.3))
+push!(par_opt, Parameter(:(wing.layout.ηs), radius_fuselage*3.0, radius_fuselage*4.0, radius_fuselage*2.0, radius_fuselage*0.3))
+push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.3))
+
+push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.5, 1.00, 0.3, 0.14))
+push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 2000.0))
+push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 1.5, 4.0, 1.25, 0.2))
+push!(par_opt, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 5.0))
+push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 10.0, 30.0, 1.0, 3.0))
+push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 200.0))
+
+push!(par_opt, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.5))
 
 
 
