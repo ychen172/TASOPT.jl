@@ -40,10 +40,10 @@ update_fuse_for_pax!(ac) #Activate carbin sizing
 # Additional parameter can go with the mission parameter
 mis_opt = Requirement[]
 push!(mis_opt, Requirement(:(parm[imRange,1]), 300*1852.0)) #[m] Being updated in loop later on collect(300:100:3000)
-push!(mis_opt, Requirement(:(options.ifuel), Int(32))) #Fuel Index: Jet Fuel(24), Ethanol(32)
-push!(mis_opt, Requirement(:(parg[igrhofuel]), 789.0)) #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
-push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 918187.9)) #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
-push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 918187.9))
+push!(mis_opt, Requirement(:(options.ifuel), Int(24))) #Fuel Index: Jet Fuel(24), Ethanol(32)
+push!(mis_opt, Requirement(:(parg[igrhofuel]), 817.0)) #Fuel Density: Jet Fuel(817.0) (kg/m3), Ethanol(789.0) (kg/m3)
+push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 358694.0)) #Heat of Vaporization: Jet Fuel(358694.0) (J/kg), Ethanol(918187.9) (J/kg)
+push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 358694.0))
 push!(mis_opt, Requirement(:(pare[iepilc, ipclimb2:ipdescent4, 1]), 3.0))
 push!(mis_opt, Requirement(:(para[iaMach, ipclimbn:ipdescent1, 1]), 0.8))
 push!(mis_opt, Requirement(:(para[iarcls, ipclimb2:ipdescent4, 1]), 1.08))
@@ -65,25 +65,27 @@ push!(con_opt, Constraint(:(parm[imVfuel, 1]); pen_sca=1.0, lim_up=:(parg[igVfma
 #### Setup optimization parameters
 par_opt = Parameter[]
 push!(par_opt, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 5.0))
-push!(par_opt, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 3.0))
-push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.3, 0.6, 0.04, 0.1))
-push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.3, 0.6, 0.04, 0.1))
-push!(par_opt, Parameter(:(wing.inboard.λ), 0.2, 1.0, 0.1, 0.2))
-push!(par_opt, Parameter(:(wing.outboard.λ), 0.2, 1.0, 0.1, 0.2))
-push!(par_opt, Parameter(:(parg[igyeng]), radius_fuselage*3.0, radius_fuselage*4.0, radius_fuselage*2.0, radius_fuselage*0.3))
-push!(par_opt, Parameter(:(wing.layout.ηs), radius_fuselage*3.0, radius_fuselage*4.0, radius_fuselage*2.0, radius_fuselage*0.3))
-push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.3))
+push!(par_opt, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 1.5))
+push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
+push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
+push!(par_opt, Parameter(:(wing.inboard.λ), 0.7, 1.0, 0.1, 0.1))
+push!(par_opt, Parameter(:(wing.outboard.λ), 0.3, 1.0, 0.1, 0.1))
+push!(par_opt, Parameter(:(parg[igyeng]), radius_fuselage*3.0, radius_fuselage*4.0, radius_fuselage*2.0, radius_fuselage*0.2))
+push!(par_opt, Parameter(:(wing.layout.ηs), 0.3, 0.4, 0.2, 0.02))
+push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15))
 
-push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.5, 1.00, 0.3, 0.14))
-push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 2000.0))
-push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 1.5, 4.0, 1.25, 0.2))
-push!(par_opt, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 5.0))
-push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 10.0, 30.0, 1.0, 3.0))
-push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 200.0))
+push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07))
+push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0))
+push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2))
+push!(par_opt, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 30.0, 1.25, 1.0))
+push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2))
+push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0))
 
-push!(par_opt, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.5))
+push!(par_opt, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.2))
 
-
+#### Test single point optimization
+mis_opt[1].val = 300*1852.0 #[m]
+optimize_singlePt_PFEI!(ac, par_opt; mission_req=mis_opt, constraints=con_opt, max_iter_optim=50000, pen_failed_sizing=100.0, optimizer_type=:GN_DIRECT)
 
 # #### Setup constraints
 # constraints_opt = ConstraintsOpt()

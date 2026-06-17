@@ -2,6 +2,7 @@ module ObjectiveFactory
 export Constraint, Parameter, OptHistory, Requirement, optimize_singlePt_PFEI!, optimizer_wrapper_global_local,
        save_vec_struct_csv, load_vec_struct_csv, save_jld2, load_jld2
 using TASOPT
+using NLopt
 using Printf
 using CSV
 using JLD2
@@ -220,12 +221,12 @@ end
         - `pen_failed_sizing::Float64=default`: penalty value for failed sizing process (to the scale of PFEI)
     
     **Outputs:**
-        - `obj!`::a function: Objective function for optimizer. Size the aircraft and return the penalty. Also append the optimization history.
-        - `hist`::OptHistory: Optimization history of test_param, penalty, PFEI, violations. All vector of history. returned by reference
+        - `obj!`::a function: Objective function for optimizer. Only return a penalty value and modify the optimization history. Aircraft model is reset back to initial state after every call for deterministic behavior.
+        - `hist`::OptHistory: Optimization history of test_param, penalty, PFEI, violations. All vector of history. returned by reference and will be modified by objective function call.
 
 !!! note "Behavior"
         - PFEI from mission one is assumed to be the main penalty variable for the returned `obj!` function
-        - `obj!` returned will modify the input `ac` inplace and also will modify the returned `hist`
+        - Call to `obj!` will modify the returned `hist` by reference. However, the input `ac` will NOT be modified by call to obj.
         - In the outer loop, if parameters length got changed, then the number of parameters expected by obj! here is also altered correspondingly. Beware.
         - All inputs are in SI unit except for sweep angle that use degree
         - For the constraints, maximum of value will be check against upper bound and minimum value against lower bound. No support for mean, or other statisics feature of data
@@ -240,58 +241,77 @@ function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::Abs
     #### Construct an optimization history to be returned by reference for successive update
     hist = OptHistory() #History with emtpy entries
 
+    #### make a backup
+    ac_bak = deepcopy(ac)
+
     #### Construct the objective function
     function obj!(x, grad)
-        #### Sanity check
-        (grad === nothing || isempty(grad)) || throw(ArgumentError("Gradient requested, but obj! has no gradient implementation.
-                                              Use derivative-free NLopt algorithms (NM/DIRECT)."))
-        (length(x) == length(parameters)) || throw(DimensionMismatch("#Param in by optimizer $(length(x)) not equal to the #Param expected $(length(parameters))"))
-
-        #### Insert the parameters into the aircraft model 
-        for (i_param, param_cur) in enumerate(parameters)
-            setNestedProp_fromExpr!(ac, x[i_param]; field_path=param_cur.field_path, index=param_cur.index)
+        #### Always reset back to the same initial aircraft model for the current optimization attempt
+        for i_ac in 1:fieldcount(typeof(ac))
+            setfield!(ac, i_ac, deepcopy(getfield(ac_bak, i_ac)))  # Ensure starting model is always clean regardless what happened before 
         end
 
-        #### Test size the current case
-        flgSuccessed = true
         try
-            TASOPT.size_aircraft!(ac, iter=max_iter_sizing, printiter=false)
-        catch e
-            if e isa InterruptException #Unless user interruption
-                rethrow()
+            #### Sanity check
+            (grad === nothing || isempty(grad)) || throw(ArgumentError("Gradient requested, but obj! has no gradient implementation.
+                                                Use derivative-free NLopt algorithms (NM/DIRECT)."))
+            (length(x) == length(parameters)) || throw(DimensionMismatch("#Param in by optimizer $(length(x)) not equal to the #Param expected $(length(parameters))"))
+
+            #### Insert the parameters into the aircraft model 
+            for (i_param, param_cur) in enumerate(parameters)
+                setNestedProp_fromExpr!(ac, x[i_param]; field_path=param_cur.field_path, index=param_cur.index)
             end
-            flgSuccessed = false #Continue but mark current as failed sizing attempt
+
+            #### Test size the current case
+            flgSuccessed = true
+            try
+                TASOPT.size_aircraft!(ac, iter=max_iter_sizing, printiter=false)
+            catch e
+                if e isa InterruptException #Unless user interruption
+                    rethrow()
+                end
+                println(stderr, sprint(showerror, e))
+                flgSuccessed = false #Continue but mark current as failed sizing attempt
+            end
+
+            #### Primary penalty value
+            main_penalty = flgSuccessed ? ac.parm[imPFEI, 1] : pen_failed_sizing #(J/J)
+            
+            #### Additional penalty because of the violation of the specified constraints
+            add_penalty = 0.0
+            violated_constraints = Vector{Constraint}() #Vector of constraints violated
+            Wpay = Float64(ac.parg[igWpay]) #Used for additional penalty calculation
+            for const_cur in constraints
+                val_cur = getNestedProp_fromExpr(ac; field_path=const_cur.field_path, index=const_cur.index)
+                # Check upper bound
+                flag_const_added = false
+                flag_const_added, add_penalty = Check_Upper_Constraint!(val_cur, ac, const_cur, flag_const_added, Wpay, add_penalty, violated_constraints)
+                # Check lower bound (Will check if constrain has been added, if so, not duplicated constraint will be added to the violated list)
+                flag_const_added, add_penalty = Check_Lower_Constraint!(val_cur, ac, const_cur, flag_const_added, Wpay, add_penalty, violated_constraints)
+            end
+
+            #### Final Penalty
+            total_penalty = main_penalty + add_penalty
+
+            #### Update the Optimization History
+            push!(hist.test_param, copy(x))
+            push!(hist.penalty, total_penalty)
+            push!(hist.PFEI, main_penalty)
+            push!(hist.violations, violated_constraints)
+
+            #### In-flight Printout
+            InFlightPrintOut(hist, print_every)
+            
+            return total_penalty
+
+        finally
+
+            #### Always reset back to the same initial aircraft model for the next optimization attempt
+            for i_ac in 1:fieldcount(typeof(ac))
+                setfield!(ac, i_ac, deepcopy(getfield(ac_bak, i_ac)))  # always try to leave a clean aircraft model
+            end
+
         end
-
-        #### Primary penalty value
-        main_penalty = flgSuccessed ? ac.parm[imPFEI, 1] : pen_failed_sizing #(J/J)
-        
-        #### Additional penalty because of the violation of the specified constraints
-        add_penalty = 0.0
-        violated_constraints = Vector{Constraint}() #Vector of constraints violated
-        Wpay = Float64(ac.parg[igWpay]) #Used for additional penalty calculation
-        for const_cur in constraints
-            val_cur = getNestedProp_fromExpr(ac; field_path=const_cur.field_path, index=const_cur.index)
-            # Check upper bound
-            flag_const_added = false
-            flag_const_added, add_penalty = Check_Upper_Constraint!(val_cur, ac, const_cur, flag_const_added, Wpay, add_penalty, violated_constraints)
-            # Check lower bound (Will check if constrain has been added, if so, not duplicated constraint will be added to the violated list)
-            flag_const_added, add_penalty = Check_Lower_Constraint!(val_cur, ac, const_cur, flag_const_added, Wpay, add_penalty, violated_constraints)
-        end
-
-        #### Final Penalty
-        total_penalty = main_penalty + add_penalty
-
-        ####Update the Optimization History
-        push!(hist.test_param, copy(x))
-        push!(hist.penalty, total_penalty)
-        push!(hist.PFEI, main_penalty)
-        push!(hist.violations, copy(violated_constraints))
-
-        ####In-flight Printout
-        InFlightPrintOut(hist, print_every)
-        
-        return total_penalty
     end
     return (; obj!, hist)
 end
@@ -375,16 +395,16 @@ const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIM
                             max_iter_optim::Int=1000,
                             max_iter_sizing::Int=150,
                             print_every::Int=10,
-                            pen_failed_sizing::Float64=1e10,
+                            pen_failed_sizing::Float64=100.0,
                             optimizer_type::Symbol=:LN_NELDERMEAD)
 
 `optimize_singlePt_PFEI!` perform single sizing mission point optimization for minimum PFEI
 
     ***Inputs:***
-        - ac: Baseline aircraft model for sizing (Need to have mission one sized)
-        - optimize_par: parameters to be optimized (not empty) (updated in place) (constructed using constructor)
-        - mission_req: requirements for the sizing mission (can empty[default mission]) (constructed using constructor)
-        - constraints: constraints to be satisfied by the solution (can empty[unconstrained]) (constructed using constructor)
+        - ac: Baseline aircraft model for sizing (Recommend to have mission one sized, but also auto-size if unsized)
+        - optimize_par: parameters to be optimized (not empty) (:val updated in place if succeeded) (constructed using constructor)
+        - mission_req: requirements for the sizing mission (can be empty[native mission]) (constructed using constructor)
+        - constraints: constraints to be satisfied by the solution (can be empty[unconstrained]) (constructed using constructor)
         - ftol_rel: relative tolerance to converge in optimization
         - max_iter_optim: maixmum optimization iterations (At least 3)
         - max_iter_sizing: maixmum TASOPT sizing iterations within each optimization iteration (At least 10)
@@ -398,20 +418,23 @@ const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIM
           Failed cases: (:NO_FEASIBLE_SOLUTION, :FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
         - hist: Optimization history: {test_param::Vector{Vector{T}}, penalty::Vector{T}, PFEI::Vector{T}, violations::Vector{Vector{Constraint}}}
     ***Updated***
-        - ac: Updated with the best solution if optimization succeeds. Return back to original status but with !!!New Mission!!! requirements if optimization failed.
-        - optimize_par: The value `val` of the parameters are updated to the best solution if optimization succeeds. `val` is still the initial value if optimization failed.
-                        Can be reused as starting guess for next adjacent case
+        - ac: Regardless successful or not. Only updated with the current call mission requirements, and updated with an initial sizing process if initially ac were unsized.
+        - optimize_par: The value `:val` of the parameters are updated to the best feasible solution found if optimization succeeded. `:val` is still the initial value if optimization failed.
     ***Behavior***
-        - Need to sized the aicraft model before input.
+        - Recommend sizing the aicraft model before input.
         - Optimize_par, mission_req, and constraints all need to be in SI unit except for (deg used by sweep angle)
         - Optimize_par, mission_req, and constraints all need to be constructed using special constructor but not manual
         - Only support non-gradient base optimization method
+        - If optimization failed,  keep the starting constraints, mission requirements, aircraft model state(updated_new_mission + sized_If_initial_unsized), and optimization parameters. 
+            Returned status set to failiure.                                         History left by the optimizer.
+        - If optimization succeed, keep the starting constraints, mission requirements, aircraft model state(updated_new_mission + sized_If_initial_unsized). The values (:val) of optimization parameters would be updated with the best attempt. 
+            Returned status set to either successful statuses or recovered_feasible. History left by the optimizer.
 """
 function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
                                  mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(),
                                  constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
                                  ftol_rel::Float64=1e-6, max_iter_optim::Int=1000, max_iter_sizing::Int=150,
-                                 print_every::Int=10, pen_failed_sizing::Float64=1e10, optimizer_type::Symbol=:LN_NELDERMEAD)
+                                 print_every::Int=10, pen_failed_sizing::Float64=100.0, optimizer_type::Symbol=:LN_NELDERMEAD)
 
     #### Size check (Only check parameters that are not checked by sub functions)
     if !(ac.is_sized[1])
@@ -433,22 +456,23 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
         setNestedProp_fromExpr!(ac, miss_req_cur.val; field_path=miss_req_cur.field_path, index=miss_req_cur.index)
     end
 
+    # At this point contains the state ac will be backed up and kept unchanged by the current function call.
+
     #### Create an objective function and optimization history container
-    obj!, hist = make_obj(ac, optimize_par ; constraints=constraints, print_every=print_every,
-                          max_iter_sizing=max_iter_sizing, pen_failed_sizing=pen_failed_sizing)
-                          #Call to obj! function modify ac and hist inplace
+    (; obj!, hist) = make_obj(ac, optimize_par ; constraints=constraints, print_every=print_every,
+                              max_iter_sizing=max_iter_sizing, pen_failed_sizing=pen_failed_sizing)
+                              #Call to obj! function only modify hist inplace. NO change to parameters, constraint, mission requirement, and aircraft model.
 
     #### Setup the optimized parameters
     # Reshape the optimization parameters
-    upper_bounds = Float64.(getfield.(optimize_par, :bon_up))
+    upper_bounds = Float64.(getfield.(optimize_par, :bon_up)) #Boardcasting extraction by copy
     lower_bounds = Float64.(getfield.(optimize_par, :bon_lo))
     initial_step = Float64.(getfield.(optimize_par, :d_val))
     initial_gues = Float64.(getfield.(optimize_par, :val))
     number_param = length(optimize_par) #Number of parameters use to intiailize optimizer
     # Chek again the bounds and initial guess (In case the bounds and intial values are updated without the use of the constructor)
-    any(upper_bounds .< lower_bounds) && error("Some upper bounds are below lower bounds")
+    any(upper_bounds .<= lower_bounds) && error("Some upper bounds are below or equal to lower bounds")
     any(initial_step .<= 0) && error("Some initial step sizes are non-positive")
-    initial_saved = copy(initial_gues) #This saved unclamped starting parameters are reused if the optimization failed
     if any((initial_gues .< lower_bounds) .| (initial_gues .> upper_bounds))
         @warn "Some initial guesses are out of bounds. Clamping them to within bounds."
         initial_gues = clamp.(initial_gues, lower_bounds, upper_bounds)
@@ -468,6 +492,7 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
         # Runing
         (_, _, status)    = NLopt.optimize(opt, initial_gues)
     catch e
+        e isa InterruptException && rethrow()
         @error "Current optimization failed $(typeof(e)): $(e)"
     end
 
@@ -475,28 +500,17 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
     # Extract the best feasible solution
     bestSol = best_feasible(hist) #Name tuple of `index`, `test_param`, `penalty`, `PFEI`
     if isnothing(bestSol)
-        println("No constraint satisfying solutions found, return to starting state")
-        try
-            obj!(initial_saved, nothing) #This will re-assign the starting value into the aircraft model, but the sizing will likely not going to work either.
-        catch e
-            @error "Failed to restore initial state or size aircraft with initial state but new mission requirements $(typeof(e)): $(e)"
-        end
-        if status in success_statuses #Global variable
+        println("No constraint satisfying solutions found, \nOptimize_par is left at its initial state due to passed by copy extraction. \nAircraft model is also guaranteed to be always reset by objective call.")
+        if status in success_statuses #Ex. FTOL is reached but no feasible solution were found.
             status = :NO_FEASIBLE_SOLUTION
         end
     else
         println("Identified and setup the current best solution.")
-        if status in failure_statuses #Global variable
+        if status in failure_statuses #Ex. Maximum memory reached, but some feasible constraint satisfying solution have beed tested.
             @warn "Using feasible solution from history despite optimizer termination status = $(status)"
             status = :RECOVERED_FEASIBLE_FROM_HISTORY
         end
-        try
-            obj!(bestSol.test_param, nothing) # This will re-assign the starting value into aircraft and size the aircraft to be best configuration
-            setproperty!.(optimize_par, :val, bestSol.test_param) #This set the test parameters from the best run back into the optimization parameter container (Use as initial guess for next case)
-        catch e
-            @error "Failed to restore the best state found or size aircraft with the best state (Bizzard) $(typeof(e)): $(e)"
-            status = :FAILURE
-        end
+        setproperty!.(optimize_par, :val, bestSol.test_param) #This set the test parameters from the best run back into the optimization parameter container (Use as mild initial guess for next case)
     end
 
     return status, hist
