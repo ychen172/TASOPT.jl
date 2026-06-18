@@ -9,7 +9,7 @@ const update_fuse_for_pax! = TASOPT.structures.update_fuse_for_pax!
 
 #### Setup IO
 # Initial data path
-read_dir_ini = joinpath(__TASOPTroot__,"../example/","ModelSaved/","JetFuel_NoACT_Opt/","JetFuel_NoACT_Opt300.jld2")
+read_dir_ini = joinpath(__TASOPTroot__,"../example/","ModelSaved/","JetFuel_NoACT_Opt/","JetFuel_NoACT_Opt3000.jld2")
 save_dir  = joinpath(__TASOPTroot__,"../example/","ModelSaved/")
 # Save to
 save_key = "Opt_Jet" #jld2
@@ -53,39 +53,39 @@ push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7))
 
 #### Setup constraints
 con_opt = Constraint[]
-push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1.0, lim_up=35.814))
-push!(con_opt, Constraint(:(parm[imlBF, 1]); pen_sca=1.0, lim_up=2400.0))
-push!(con_opt, Constraint(:(para[iagamV, ipclimbn, 1]); pen_sca=1.0, lim_lo=0.015))
-push!(con_opt, Constraint(:(pare[ieTt3, :, 1]); pen_sca=1.0, lim_up=900.0))
-push!(con_opt, Constraint(:(pare[ieTmet1, :, 1]); pen_sca=1.0, lim_up=1333.33))
-push!(con_opt, Constraint(:(parg[igdfan]); pen_sca=1.0, lim_up=2.0))
-push!(con_opt, Constraint(:(parm[imWTO, 1]); pen_sca=1.0, lim_up=:(parg[igWMTO]), eps_buff=1e-4))
-push!(con_opt, Constraint(:(parm[imVfuel, 1]); pen_sca=1.0, lim_up=:(parg[igVfmax]), eps_buff=1e-4))
+push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1e4, lim_up=35.814))
+push!(con_opt, Constraint(:(parm[imlBF, 1]); pen_sca=1e4, lim_up=2400.0))
+push!(con_opt, Constraint(:(para[iagamV, ipclimbn, 1]); pen_sca=1e4, lim_lo=0.015))
+push!(con_opt, Constraint(:(pare[ieTt3, :, 1]); pen_sca=1e4, lim_up=900.0))
+push!(con_opt, Constraint(:(pare[ieTmet1, :, 1]); pen_sca=1e4, lim_up=1333.33))
+push!(con_opt, Constraint(:(parg[igdfan]); pen_sca=1e4, lim_up=2.0))
+push!(con_opt, Constraint(:(parm[imWTO, 1]); pen_sca=1e4, lim_up=:(parg[igWMTO]), eps_buff=1e-4))
+push!(con_opt, Constraint(:(parm[imVfuel, 1]); pen_sca=1e4, lim_up=:(parg[igVfmax]), eps_buff=1e-4))
 
 #### Setup optimization parameters
 par_opt = Parameter[]
-push!(par_opt, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 5.0))
-push!(par_opt, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 1.5))
-push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
-push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
-push!(par_opt, Parameter(:(wing.inboard.λ), 0.7, 1.0, 0.1, 0.1))
-push!(par_opt, Parameter(:(wing.outboard.λ), 0.3, 1.0, 0.1, 0.1))
-push!(par_opt, Parameter(:(parg[igyeng]), radius_fuselage*3.0, radius_fuselage*4.0, radius_fuselage*2.0, radius_fuselage*0.2))
-push!(par_opt, Parameter(:(wing.layout.ηs), 0.3, 0.4, 0.2, 0.02))
-push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15))
+push!(par_opt, Parameter(:(wing.layout.sweep), 26.0, 37.0, 14.0, 3.0))
+push!(par_opt, Parameter(:(wing.layout.AR), 9.0, 13.0, 6.8, 0.9))
+push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.15, 0.22, 0.10, 0.02))
+push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.12, 0.18, 0.08, 0.015))
+push!(par_opt, Parameter(:(wing.inboard.λ), 0.75, 1.00, 0.45, 0.09))
+push!(par_opt, Parameter(:(wing.outboard.λ), 0.45, 0.75, 0.15, 0.08))
+push!(par_opt, Parameter(:(parg[igyeng]), radius_fuselage*3.5, radius_fuselage*5.2, radius_fuselage*2.3, radius_fuselage*0.30))
+push!(par_opt, Parameter(:(wing.layout.ηs), 0.40, 0.60, 0.22, 0.04))
+push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 0.70, 1.00, 0.35, 0.10))
 
-push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07))
-push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0))
-push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2))
-push!(par_opt, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 30.0, 1.25, 1.0))
-push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2))
-push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0))
+push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.60, 0.82, 0.40, 0.06))
+push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10800.0, 12800.0, 8500.0, 900.0))
+push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 1.65, 2.00, 1.30, 0.10))
+push!(par_opt, Parameter(:(pare[iepihc, ipclimb2:ipdescent4, 1]), 18.0, 30.0, 7.0, 2.0))
+push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.5, 13.5, 4.0, 1.1))
+push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1700.0, 1900.0, 1350.0, 90.0))
 
 push!(par_opt, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.2))
 
 #### Test single point optimization
 mis_opt[1].val = 300*1852.0 #[m]
-optimize_singlePt_PFEI!(ac, par_opt; mission_req=mis_opt, constraints=con_opt, max_iter_optim=50000, pen_failed_sizing=100.0, optimizer_type=:GN_DIRECT)
+_,hist = optimize_singlePt_PFEI!(ac, par_opt; mission_req=mis_opt, constraints=con_opt, max_iter_optim=50000000, pen_failed_sizing=100.0, optimizer_type=:GN_CRS2_LM)
 
 # #### Setup constraints
 # constraints_opt = ConstraintsOpt()

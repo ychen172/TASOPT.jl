@@ -7,7 +7,6 @@ using Printf
 using CSV
 using JLD2
 using DataFrames
-using BenchmarkTools
 include(__TASOPTindices__)
 include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
 
@@ -37,7 +36,7 @@ Constructor for the `Constraint` type
 
     `name`: Expression for state to be extract (Ex. :(parg[igVfuel]), :(parm[imVfuel, :]), :(pare[ierhofuel_driven,:,:]), :(fuselage.layout.cross_section.radius))
             Remember the parameters should be mission 1 parameters for sizing
-    `pen_sca`: pen_sca * Wpay * fractional_exceed^2 -> added penalty ~ scale_of_PFEI
+    `pen_sca`: pen_sca * 1.0 * fractional_exceed^2 -> added penalty ~ scale_of_PFEI
     `lim_up`: Upper limit, trigger maximum modifier if the value is an array
     `lim_lo`: Lower limit, This can be an `Expr` just like name, if the limit depends on solution. Such as the maximum takeoff weight and maximum fuel tank volume.
     `eps_buff:` fractional buffer used to check if value violate the constraint. Due to the iterative nature of sizing loop. Round off error can make near miss that always fail for example fuel volume constrain at R2.
@@ -207,31 +206,33 @@ end
 #     ac.pare[iehvapcombustor, :, :] .= mission_req.hvap_fuel
 
 """
-    make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=1e10)
+    make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=100.0)
 
 `make_obj` constructs and returns an objective function for (PFEI flight) that will be fed to optimizer
 
 !!!! details "🔃 Inputs and Outputs"
     **Inputs:**
-        - `ac`: Baseline aircraft model for sizing
-        - `parameters::AbstractVector{<:Parameter}`: parameters for optimization. (SI unit except for sweep angle using deg) (Unaltered by obj!, but `val` updated in the outer loop)
+        - `ac`: Baseline aircraft model for sizing (Passed by copy)
+        - `parameters::AbstractVector{<:Parameter}`: parameters for optimization. (SI unit except for sweep angle using deg) (Unaltered by obj! call)
         - `constraints::AbstractVector{<:Constraint}=default empty`: constraints for optimization. Empty container of this type for unconstraint problem. (SI unit except for sweep angle using deg)
-        - `print_every::Int=default`: every number of iterations before print out for the current optimization state (Performed by the returned objective function)
+        - `print_every::Int=default`: every number of iterations before print out for the current optimized state (Performed by obj! call)
         - `max_iter_sizing::Int=default`: maximum number of iteration used for the sizing loop
         - `pen_failed_sizing::Float64=default`: penalty value for failed sizing process (to the scale of PFEI)
     
     **Outputs:**
-        - `obj!`::a function: Objective function for optimizer. Only return a penalty value and modify the optimization history. Aircraft model is reset back to initial state after every call for deterministic behavior.
-        - `hist`::OptHistory: Optimization history of test_param, penalty, PFEI, violations. All vector of history. returned by reference and will be modified by objective function call.
+        - `obj!`::a function: Objective function for optimizer. Only return a penalty value and modify the optimization history. 
+                  A copy of aircraft model is changed within obj! call BUT does not affect the model initially inputted into make_obj function. 
+                  The initially inputted model is used to refresh the aircraft model used by obj! before every call for deterministic behavior.
+        - `hist`::OptHistory: Optimization history for only succeed sizing case, containing test_param, penalty, PFEI, violations. returned by reference and will be modified by obj! call.
 
 !!! note "Behavior"
         - PFEI from mission one is assumed to be the main penalty variable for the returned `obj!` function
-        - Call to `obj!` will modify the returned `hist` by reference. However, the input `ac` will NOT be modified by call to obj.
+        - Call to `obj!` will modify the returned `hist` by reference. However, the `ac` changed within obj! call does not affect the ac for make_obj input or the ac outside of the function call. (passed and reset by copy)
         - In the outer loop, if parameters length got changed, then the number of parameters expected by obj! here is also altered correspondingly. Beware.
         - All inputs are in SI unit except for sweep angle that use degree
         - For the constraints, maximum of value will be check against upper bound and minimum value against lower bound. No support for mean, or other statisics feature of data
 """
-function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=1e10)
+function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=100.0)
     #### Size check
     isempty(parameters)    && throw(ArgumentError("`parameters` cannot be empty. Provide at least one optimization variable."))
     print_every >= 1       || throw(ArgumentError("`print_every` must be ≥ 1"))
@@ -243,80 +244,78 @@ function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::Abs
 
     #### make a backup
     ac_bak = deepcopy(ac)
+    
+    #### make a iteration counter
+    count = 0
 
     #### Construct the objective function
     function obj!(x, grad)
         #### Always reset back to the same initial aircraft model for the current optimization attempt
-        for i_ac in 1:fieldcount(typeof(ac))
-            setfield!(ac, i_ac, deepcopy(getfield(ac_bak, i_ac)))  # Ensure starting model is always clean regardless what happened before 
+        ac = deepcopy(ac_bak)
+
+        #### Update current function call count
+        count += 1
+        println("Current Objective Function Call # $(count)")
+
+        #### Sanity check
+        (grad === nothing || isempty(grad)) || throw(ArgumentError("Gradient requested, but obj! has no gradient implementation.
+                                            Use derivative-free NLopt algorithms (NM/DIRECT)."))
+        (length(x) == length(parameters)) || throw(DimensionMismatch("#Param in by optimizer $(length(x)) not equal to the #Param expected $(length(parameters))"))
+
+        #### Insert the parameters into the aircraft model 
+        for (i_param, param_cur) in enumerate(parameters)
+            setNestedProp_fromExpr!(ac, x[i_param]; field_path=param_cur.field_path, index=param_cur.index)
         end
 
+        #### Test sizing the current case
+        flgSuccessed = true
         try
-            #### Sanity check
-            (grad === nothing || isempty(grad)) || throw(ArgumentError("Gradient requested, but obj! has no gradient implementation.
-                                                Use derivative-free NLopt algorithms (NM/DIRECT)."))
-            (length(x) == length(parameters)) || throw(DimensionMismatch("#Param in by optimizer $(length(x)) not equal to the #Param expected $(length(parameters))"))
-
-            #### Insert the parameters into the aircraft model 
-            for (i_param, param_cur) in enumerate(parameters)
-                setNestedProp_fromExpr!(ac, x[i_param]; field_path=param_cur.field_path, index=param_cur.index)
+            TASOPT.size_aircraft!(ac, iter=max_iter_sizing, printiter=false)
+        catch e
+            if e isa InterruptException #Unless user interruption
+                rethrow()
             end
+            flgSuccessed = false #Continue but mark current as failed sizing attempt
+        end
 
-            #### Test size the current case
-            flgSuccessed = true
-            try
-                TASOPT.size_aircraft!(ac, iter=max_iter_sizing, printiter=false)
-            catch e
-                if e isa InterruptException #Unless user interruption
-                    rethrow()
-                end
-                println(stderr, sprint(showerror, e))
-                flgSuccessed = false #Continue but mark current as failed sizing attempt
-            end
-
-            #### Primary penalty value
-            main_penalty = flgSuccessed ? ac.parm[imPFEI, 1] : pen_failed_sizing #(J/J)
-            
-            #### Additional penalty because of the violation of the specified constraints
-            add_penalty = 0.0
-            violated_constraints = Vector{Constraint}() #Vector of constraints violated
-            Wpay = Float64(ac.parg[igWpay]) #Used for additional penalty calculation
+        #### Primary penalty value
+        main_penalty = flgSuccessed ? ac.parm[imPFEI, 1] : pen_failed_sizing #(J/J)
+        
+        #### Additional penalty because of the violation of the specified constraints
+        add_penalty = 0.0
+        violated_constraints = Vector{Constraint}() #Vector of constraints violated
+        if flgSuccessed
             for const_cur in constraints
                 val_cur = getNestedProp_fromExpr(ac; field_path=const_cur.field_path, index=const_cur.index)
                 # Check upper bound
                 flag_const_added = false
-                flag_const_added, add_penalty = Check_Upper_Constraint!(val_cur, ac, const_cur, flag_const_added, Wpay, add_penalty, violated_constraints)
+                flag_const_added, add_penalty = Check_Upper_Constraint!(val_cur, ac, const_cur, flag_const_added, add_penalty, violated_constraints)
                 # Check lower bound (Will check if constrain has been added, if so, not duplicated constraint will be added to the violated list)
-                flag_const_added, add_penalty = Check_Lower_Constraint!(val_cur, ac, const_cur, flag_const_added, Wpay, add_penalty, violated_constraints)
+                flag_const_added, add_penalty = Check_Lower_Constraint!(val_cur, ac, const_cur, flag_const_added, add_penalty, violated_constraints)
             end
+        end
 
-            #### Final Penalty
-            total_penalty = main_penalty + add_penalty
+        #### Final Penalty
+        total_penalty = main_penalty + add_penalty
 
-            #### Update the Optimization History
+        #### Store history only if sizing were successful
+        if flgSuccessed
+            # Update the Optimization History
             push!(hist.test_param, copy(x))
             push!(hist.penalty, total_penalty)
             push!(hist.PFEI, main_penalty)
             push!(hist.violations, violated_constraints)
-
-            #### In-flight Printout
-            InFlightPrintOut(hist, print_every)
-            
-            return total_penalty
-
-        finally
-
-            #### Always reset back to the same initial aircraft model for the next optimization attempt
-            for i_ac in 1:fieldcount(typeof(ac))
-                setfield!(ac, i_ac, deepcopy(getfield(ac_bak, i_ac)))  # always try to leave a clean aircraft model
-            end
-
         end
+
+        #### In-flight Printout
+        InFlightPrintOutBest(hist, print_every, count)
+        
+        return total_penalty
     end
     return (; obj!, hist)
 end
 
-function Check_Upper_Constraint!(val_cur::Union{Real,AbstractArray}, ac, const_cur::Constraint, flag_const_added::Bool, Wpay::AbstractFloat, add_penalty::AbstractFloat, violated_constraints::Vector{Constraint})
+function Check_Upper_Constraint!(val_cur::Union{Real,AbstractArray}, ac, const_cur::Constraint, flag_const_added::Bool, add_penalty::AbstractFloat, violated_constraints::Vector{Constraint})
     lim_up_cur = const_cur.lim_up
     if (lim_up_cur isa Expr)
         lim_up_cur = getNestedProp_fromExpr(ac; parm_sym=lim_up_cur) #Some cost, typically not prefer
@@ -328,7 +327,7 @@ function Check_Upper_Constraint!(val_cur::Union{Real,AbstractArray}, ac, const_c
         lim_up_cur = (abs(lim_up_cur) < eps(lim_up_cur)) ? sgn*eps(lim_up_cur) : lim_up_cur #Clamping a near zero non-zero number
         if val_max > lim_up_cur + abs(lim_up_cur)*const_cur.eps_buff
             err_frac = val_max/lim_up_cur - 1.0
-            pen_cur = const_cur.pen_sca * Wpay * err_frac^2
+            pen_cur = const_cur.pen_sca * err_frac^2
             add_penalty += pen_cur
             if !(flag_const_added)
                 push!(violated_constraints, deepcopy(const_cur))
@@ -342,7 +341,7 @@ function Check_Upper_Constraint!(val_cur::Union{Real,AbstractArray}, ac, const_c
     return flag_const_added, add_penalty
 end
 
-function Check_Lower_Constraint!(val_cur::Union{Real,AbstractArray}, ac, const_cur::Constraint, flag_const_added::Bool, Wpay::AbstractFloat, add_penalty::AbstractFloat, violated_constraints::Vector{Constraint})
+function Check_Lower_Constraint!(val_cur::Union{Real,AbstractArray}, ac, const_cur::Constraint, flag_const_added::Bool, add_penalty::AbstractFloat, violated_constraints::Vector{Constraint})
     lim_lo_cur = const_cur.lim_lo
     if (lim_lo_cur isa Expr)
         lim_lo_cur = getNestedProp_fromExpr(ac; parm_sym=lim_lo_cur)
@@ -354,7 +353,7 @@ function Check_Lower_Constraint!(val_cur::Union{Real,AbstractArray}, ac, const_c
         lim_lo_cur = (abs(lim_lo_cur) < eps(lim_lo_cur)) ? sgn*eps(lim_lo_cur) : lim_lo_cur #Clamping a near zero non-zero number
         if val_min < lim_lo_cur - abs(lim_lo_cur)*const_cur.eps_buff
             err_frac = 1.0 - val_min/lim_lo_cur
-            pen_cur = const_cur.pen_sca * Wpay * err_frac^2
+            pen_cur = const_cur.pen_sca * err_frac^2
             add_penalty += pen_cur
             if !flag_const_added
                 push!(violated_constraints, deepcopy(const_cur))
@@ -366,6 +365,21 @@ function Check_Lower_Constraint!(val_cur::Union{Real,AbstractArray}, ac, const_c
         end
     end
     return flag_const_added, add_penalty
+end
+
+function InFlightPrintOutBest(hist::OptHistory, print_every::Int, count::Int)
+    if ((length(hist.penalty) > 0) && (count % print_every == 0))
+        idx_cur_best = argmin(hist.penalty)
+        println()
+        @printf("Iter %4d | Current Best Penalty = %.4f | Current Best PFEI = %.4f\n",
+                 count,     hist.penalty[idx_cur_best],   hist.PFEI[idx_cur_best])
+        println()
+        @printf("Violates: ")
+        for cur_violates in hist.violations[idx_cur_best]
+            @printf("| %10s", string(cur_violates.name)*"⚠️")
+        end
+        println()
+    end
 end
 
 function InFlightPrintOut(hist::OptHistory, print_every::Int)
@@ -401,41 +415,43 @@ const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIM
 `optimize_singlePt_PFEI!` perform single sizing mission point optimization for minimum PFEI
 
     ***Inputs:***
-        - ac: Baseline aircraft model for sizing (Recommend to have mission one sized, but also auto-size if unsized)
-        - optimize_par: parameters to be optimized (not empty) (:val updated in place if succeeded) (constructed using constructor)
-        - mission_req: requirements for the sizing mission (can be empty[native mission]) (constructed using constructor)
-        - constraints: constraints to be satisfied by the solution (can be empty[unconstrained]) (constructed using constructor)
+        - ac: Baseline aircraft model for sizing (No Change in place) (Recommend to have mission one sized, but also auto-size if unsized)
+        - optimize_par: parameters to be optimized (not empty) (:val updated in place if succeeded, left at input state if failed) (constructed using constructor)
+        - mission_req: requirements for the sizing mission (can be empty[native mission]) (No Change in place) (constructed using constructor)
+        - constraints: constraints to be satisfied by the solution (can be empty[unconstrained]) (No Change in place) (constructed using constructor)
         - ftol_rel: relative tolerance to converge in optimization
         - max_iter_optim: maixmum optimization iterations (At least 3)
         - max_iter_sizing: maixmum TASOPT sizing iterations within each optimization iteration (At least 10)
         - print_every: print out frequency for optimizaion status
         - pen_failed_sizing: penalty to use in the case of TASOPT failed to size the aircraft (Relative to the scale of PFEI)
-        - optimizer_type: optimization method: Ex. Local Search: :LN_NELDERMEAD or Global Search: :GN_DIRECT, :GN_DIRECT_L. (Only non-gradient base supported)
+        - optimizer_type: optimization method: Ex. Local Search: :LN_NELDERMEAD or Global Search: :GN_CRS2_LM, :GN_DIRECT. (Only non-gradient base supported)
     
     ***Outputs***
         - status: Status of optimization: 
-          Working cases: (:RECOVERED_FEASIBLE_FROM_HISTORY, :SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
-          Failed cases: (:NO_FEASIBLE_SOLUTION, :FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
+          Success cases: (:RECOVERED_FEASIBLE_FROM_HISTORY, :SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
+          Fail cases: (:NO_FEASIBLE_SOLUTION, :FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
         - hist: Optimization history: {test_param::Vector{Vector{T}}, penalty::Vector{T}, PFEI::Vector{T}, violations::Vector{Vector{Constraint}}}
+    
     ***Updated***
-        - ac: Regardless successful or not. Only updated with the current call mission requirements, and updated with an initial sizing process if initially ac were unsized.
         - optimize_par: The value `:val` of the parameters are updated to the best feasible solution found if optimization succeeded. `:val` is still the initial value if optimization failed.
+
     ***Behavior***
         - Recommend sizing the aicraft model before input.
         - Optimize_par, mission_req, and constraints all need to be in SI unit except for (deg used by sweep angle)
         - Optimize_par, mission_req, and constraints all need to be constructed using special constructor but not manual
         - Only support non-gradient base optimization method
-        - If optimization failed,  keep the starting constraints, mission requirements, aircraft model state(updated_new_mission + sized_If_initial_unsized), and optimization parameters. 
-            Returned status set to failiure.                                         History left by the optimizer.
-        - If optimization succeed, keep the starting constraints, mission requirements, aircraft model state(updated_new_mission + sized_If_initial_unsized). The values (:val) of optimization parameters would be updated with the best attempt. 
-            Returned status set to either successful statuses or recovered_feasible. History left by the optimizer.
+        - Always unchange the starting constraints, mission requirements, aircraft model state
+        - Update the value inside optimization parametrs, status, and history of optimization (only succeed sizing)
+
 """
 function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
                                  mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(),
                                  constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
                                  ftol_rel::Float64=1e-6, max_iter_optim::Int=1000, max_iter_sizing::Int=150,
                                  print_every::Int=10, pen_failed_sizing::Float64=100.0, optimizer_type::Symbol=:LN_NELDERMEAD)
-
+    #### make a copy of the input aircraft model state to ensure model is unaltered by function call for successive deterministic behavior
+    ac = deepcopy(ac)
+    
     #### Size check (Only check parameters that are not checked by sub functions)
     if !(ac.is_sized[1])
         max_iter_sizing >= 10  || throw(ArgumentError("maximum number of sizing iterations must be >= 10"))
@@ -447,16 +463,16 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
             rethrow()
         end
     end
-    ftol_rel > 0           || throw(ArgumentError("Relative tolerance for optimization must be > 0"))
-    max_iter_optim > 2    || throw(ArgumentError("maximum number of optimization interations must be > 2"))
+    ftol_rel > 0       || throw(ArgumentError("Relative tolerance for optimization must be > 0"))
+    max_iter_optim > 2 || throw(ArgumentError("maximum number of optimization interations must be > 2"))
     
-
     #### Implement the mission requirement into the aircraft model
     for miss_req_cur in mission_req
         setNestedProp_fromExpr!(ac, miss_req_cur.val; field_path=miss_req_cur.field_path, index=miss_req_cur.index)
     end
 
-    # At this point contains the state ac will be backed up and kept unchanged by the current function call.
+    # The optionally sized aircraft model with current mission requirements inserted will be the model copy
+    # reused by the optimizer to as a baseline to test implementing different design parameter.
 
     #### Create an objective function and optimization history container
     (; obj!, hist) = make_obj(ac, optimize_par ; constraints=constraints, print_every=print_every,
@@ -500,7 +516,7 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
     # Extract the best feasible solution
     bestSol = best_feasible(hist) #Name tuple of `index`, `test_param`, `penalty`, `PFEI`
     if isnothing(bestSol)
-        println("No constraint satisfying solutions found, \nOptimize_par is left at its initial state due to passed by copy extraction. \nAircraft model is also guaranteed to be always reset by objective call.")
+        println("No constraint satisfying solutions found, \nOptimize_par is left at its initial state. \nAircraft model is insid the current function call may change but NOT changing the input model to the function due to passed by copy")
         if status in success_statuses #Ex. FTOL is reached but no feasible solution were found.
             status = :NO_FEASIBLE_SOLUTION
         end
@@ -570,8 +586,9 @@ function adjust_bounds!(optimize_par::AbstractVector{<:Parameter},
         global_low_cur = global_bounds_par[idx].bon_lo
         global_upp_cur = global_bounds_par[idx].bon_up
         global_span_cur = global_upp_cur-global_low_cur
-        local_span_cur < global_span_cur || throw(ErrorException("Local span $(local_span_cur) equal or larger than global span $(global_span_cur)"))
+        global_span_cur > 0 || throw(ErrorException("Non-positive global span detected $(global_span_cur)"))
         eps_close = global_span_cur*eps
+        (local_span_cur <= global_span_cur + eps_close) || throw(ErrorException("Local span $(local_span_cur) larger than global span $(global_span_cur)"))
         (sol_cur >= local_low_cur  - eps_close && sol_cur <= local_upp_cur  + eps_close) || @warn "Current solution $(sol_cur) is out of local bounds $(local_low_cur) to $(local_upp_cur). This is only expected if initially setup a placeholder local bound just to provide a fixed local span"
         (sol_cur >= global_low_cur - eps_close && sol_cur <= global_upp_cur + eps_close) || throw(DomainError(sol_cur,"Current solution $(sol_cur) is out of global bounds $(global_low_cur) to $(global_upp_cur)."))
 
@@ -617,29 +634,29 @@ function adjust_bounds!(optimize_par::AbstractVector{<:Parameter},
     return flg_bod_cha
 end
 
-
 """
-     optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Parameter}, global_bounds_par::AbstractVector{<:Parameter};
-                                    mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(), constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
-                                    ftol_rel::Float64=1e-6, max_iter_sizing::Int=150, print_every::Int=10, pen_failed_sizing::Float64=100.0,
-                                    frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
-                                    flag_has_reattempt_local::Bool=false, flag_has_reattempt_global::Bool=false,
-                                    optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_optim_local::Int=10000, max_iter_outer_loop_local::Int=10, ini_iter_optim_local::Int=500, ini_iter_outer_loop_local::Int=100,
-                                    optimizer_global::Symbol=:GN_DIRECT, max_iter_optim_global::Int=5000, frac_local_bound_span::AbstractFloat=0.25, flag_skip_global::Bool=false
-                                    )
+    optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Parameter},
+                                   global_bond::AbstractVector{<:Parameter}; miss_req::AbstractVector{<:Requirement}=Vector{Requirement}(), constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
+                                   ftol_rel::Float64=1e-6, max_iter_sizing::Int=150, print_every::Int=10, pen_failed_sizing::Float64=100.0,
+                                   frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
+                                   optimizer_global::Symbol=:GN_CRS2_LM,   max_iter_glo::Int=50000,   span_glo_to_loc::AbstractFloat=0.25, run_global::Bool=false,
+                                   optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_loc_C::Int=500,   max_round_loc_C::Int=100,
+                                                                           max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10)
 
-`optimizer_wrapper_global_local` wraps around the single point optimizer to create a global then local coarse and local fine search + failsave reattempt algorithm. Incorporate adaptive bounds refinement and more robust against failure.
+`optimizer_wrapper_global_local` wraps around the single point optimizer to create a global then local search algorithm, along with adaptive bounds movement.
 
     **Inputs**
         (Mandatory)
-        - ac: Baseline aircraft model for sizing (Need to have mission one sized)
-        - optimize_par: Have current initial guess in :val, and local bounds either from previous step or equal to global bound (constructed using constructor)
-        - global_bounds_par: only need to provide the hard global bounds :bon_up and :bon_lo to clip the updated local bound (constructed using constructor)
+        - ac: Baseline aircraft model for sizing (Unchanged by call) (Recommended to have mission one sized)
+        - optimize_par: (Unchanged by call) Have current initial guess in :val, 
+                        and local bounds if directly run local optimization or 
+                        global bound if start with global solution. (constructed using constructor) (Step size for local span in mind)
+        - global_bond:  (Unchanged by call)only need to provide the hard global bounds. (Clip local bound movement) (constructed using constructor)
         
         (Optional)
         [Common regardless operating mode]
-        - mission_req(def): requirements for the sizing mission (can empty[default mission]) (constructed using constructor)
-        - constraints(def): constraints to be satisfied by the solution (can empty[unconstrained]) (constructed using constructor)
+        - miss_req(def): (Unchanged by call) requirements for the sizing mission (can empty[default mission]) (constructed using constructor)
+        - constraints(def): (Unchanged by call) constraints to be satisfied by the solution (can empty[unconstrained]) (constructed using constructor)
         - ftol_rel(def): relative tolerance to converge in optimization
         - max_iter_sizing(def): maixmum TASOPT sizing iterations within each optimization iteration (At least 10)
         - print_every(def): print out frequency for optimizaion status
@@ -648,219 +665,274 @@ end
         [Common regardless operating mode but for adaptive bounds adjustment]
         - frac_edge_trigger(def): fractional local span as a threshold distance if solution is too close to either bounds, bound expansion process will be trigger
         - frac_edge_expanded(def): fractional local span to expand from the current solution to the limiting bound side. Need to be larger than that for trigger to avoid repeated boundary expansion.
-        
-        [For failsafe reattempt (Local reattempted before global reattempt)]
-        - flag_has_reattempt_local(def): The current round is an reattempt local run. If failed again, do not retry local run anymore
-        - flag_has_reattempt_global(def): The current round is an reattempt global run. If failed again, do not retry global run anymore
-        
+            
         [Parameters only for local runs]
         - optimizer_local(def): local optimization method. Ex. :LN_NELDERMEAD (Only non-gradient base)
-        - max_iter_optim_local(def): maixmum local optimization iterations for EACH fine run (after the coarse round converge the local bounds)
-        - max_iter_outer_loop_local(def): maximum local optimization rounds for fine runs (after the coarse round converge the local bounds)
-        - ini_iter_optim_local(def): maximum local optimization iterations for EACH coarse run
-        - ini_iter_outer_loop_local(def): maximum local optimization rounds for coarse runs
+        - max_iter_loc_C(def): maixmum optimization iterations for coarse local run
+        - max_round_loc_C(def): maximum bound refinement loops for coarse local run
+        - max_iter_loc_F(def): maixmum optimization iterations for fine local run
+        - max_round_loc_F(def): maximum bound refinement loops for fine local run
+        - max_retry(def) maximum number of reattempts if failed in local runs
 
         [Parameters only for global runs]
-        - optimizer_global(def): global optimization method. Ex. :GN_DIRECT, :GN_DIRECT_L (Only non-gradient base)
-        - max_iter_optim_global(def): maximum global optimiztion iterations (only one global round at the very begining)
-        - frac_local_bound_span(def): fraction of global span used to setup initial local span after that initial global run
-        - flag_skip_global(def): skip the first global round allow directly local run starting from the best solution from previous function call (This control Mode 1 and Mode 2 operation of the current solver)
+        - optimizer_global(def): global optimization method. Ex. :GN_CRS2_LM, :GN_DIRECT, (Only non-gradient base)
+        - max_iter_glo(def): maximum optimization iterations for global run at the beginning
+        - span_glo_to_loc(def): span_local / span_global for creating a local bound after the global run
+        - run_global(def): Activate initial global run. Also, if activated, global search retry will not be performed anymore.
 
     **Outputs**
-        - ac::TASOPT Model: optimized aircraft model (or at least left at a consistent state to the backup case(could be your initial input case))
-        - optimize_par::AbstractVector{<:Parameter}: optimized parameters with the newly adapted local bounds (or at least left at a consistent state to the backup case)
-        - status: Union{Symbol,Nothing}: NLOpt resulted status for optimization. Can only be either nothing(failed) or one of the success criteria
-        - hist: Union{Nothing,struct{test_param, penalty, PFEI, viplations}}: History of the last optimization run. Could be left at back up state too
+        - optimize_par::AbstractVector{<:Parameter}: optimized parameters (:val) with updated local bounds (:bon_up and :bon_lo). Can be one of the known best state or input state.
+        - status::Symbol: NLOpt resulted status for optimization. (Can be success, fail, or :Unknown state) :Unknown state only if input state were returned.
+        - hist::OptHistory{test_param, penalty, PFEI, violations}. (Can be empty if no feasible solution found or return input state)
 
     **Behavior**
-        - Algorithm: 
-            1.Global run from global bound to a starting solution (Turn off by skipping)
-            2.Setup a good starting local bound from the global round solution or input.
-            3.Iteratively run local search with small number of maximum iterations.
-            4.Recenter local bounds around solution from coarse run. (small number of iterations might quicly move the bounds around)
-            5.Local bounds settle down
-            6.Iteratively run local search with large number of maximum iteraitons until FTOL convergence.
-            7.Keep on runing large iteration local run if bounds starts changing again. But bounds should be drifting must slower than the coarse case.
-            8.If bounds converge and fine run get a good solution. Then good, output.
-            9.Any of the inter step failed, immediate goes to two failsafe step.
-            10.If local run reattempt has not be tried, then take the last know good solution or initial solution, perturb the solution state by 0.1% randomly. Put back into local run by recursive call.
-            11.If local run reattempt is already did but still fails, then directly restart a global round for the current case through recursive call.
-            12.If none of the reattempt return nontrivial status from optimization, then taken the current best known solution
-            13.If failsafe succeed, then take the failsafe solution.
-        - Typically for range sweep optimization. Dont skip global run for the first case (Ex. 300 nmi), then for successive case, use the previous step as initial guess and local bounds, then skip the global search.
+        - This function does not change any input variable in place
+        - Step size provided in parameters should be based on the local span in mind. For example, if first run global, then dx should be based on global span * frac_loc_to_glo_span
+        - Local span remains unaltered throughout the adaptive process
+        - This function does not accept fixed placeholder parameter
+        - Aircraft model recommended to be sized first before input
         - Only accept non-gradient based optimization method
-        - aircraft model needs to be sized first
-        - !!!Current solver does not modify inputs inplace. all IO through return. For failsafe mechanism.!!!
-        - !!!DO NOT accept fixed placeholder parameter!!! Like a fixed LPC PR, no please.    
+        - Algorithm: 
+            1.Global run once from global bound to get a starting solution (Opt-in)
+            2.Setup a good starting local bound from the global round solution or input.
+            3.Iteratively run local coarse search with small number of maximum iterations.
+            4.Recenter local bounds around solution from coarse search. (Help bounds quickly converge)
+            5.Local bounds converge
+            6.Iteratively run local fine search with large number of maximum iteraitons.
+            7.Iterate fine search if bounds starts changing again.
+            8.If bounds converge and fine run get a good solution. Then good, return
+            ----- During coarse and fine local run ----
+            9.If fail in each phase, re-iterate multiple times with perturbed starting state
+            10.If global search has not been attempted, re-run the whole solver with global search first.
+            11.If none of the above works, retract to last known best state and go to next phase or output.
 """
 
-function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Parameter}, global_bounds_par::AbstractVector{<:Parameter};
-                                        mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(), constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
+function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Parameter},
+                                        global_bond::AbstractVector{<:Parameter}; miss_req::AbstractVector{<:Requirement}=Vector{Requirement}(), constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
                                         ftol_rel::Float64=1e-6, max_iter_sizing::Int=150, print_every::Int=10, pen_failed_sizing::Float64=100.0,
                                         frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
-                                        flag_has_reattempt_local::Bool=false, flag_has_reattempt_global::Bool=false,
-                                        optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_optim_local::Int=10000, max_iter_outer_loop_local::Int=10, ini_iter_optim_local::Int=500, ini_iter_outer_loop_local::Int=100,
-                                        optimizer_global::Symbol=:GN_DIRECT, max_iter_optim_global::Int=5000, frac_local_bound_span::AbstractFloat=0.25, flag_skip_global::Bool=false
-                                        )
+                                        optimizer_global::Symbol=:GN_CRS2_LM,   max_iter_glo::Int=50000,   span_glo_to_loc::AbstractFloat=0.25, run_global::Bool=false,
+                                        optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_loc_C::Int=500,   max_round_loc_C::Int=100,
+                                                                                max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10)
     #### Size check
-    (frac_local_bound_span>0 && frac_local_bound_span<1) || throw(ArgumentError("frac_local_bound_span $(frac_local_bound_span) needs to be between 0 and 1"))
-    max_iter_outer_loop_local>0 || throw(ArgumentError("max_iter_outer_loop_local $(max_iter_outer_loop_local) is smaller or equal to zero"))
-    ini_iter_outer_loop_local>0 || throw(ArgumentError("ini_iter_outer_loop_local $(ini_iter_outer_loop_local) is smaller or equal to zero"))
-    length(optimize_par) == length(global_bounds_par) || throw(ArgumentError("Dimension of global bounds $(length(global_bounds_par)) not matching with dimension of local bounds $(length(optimize_par))"))
+    ((span_glo_to_loc > 0.0) && (span_glo_to_loc < 1.0)) || throw(ArgumentError("fractional local span to global span $(span_glo_to_loc) should be between 0 to 1"))
+    (max_round_loc_C > 0) || throw(ArgumentError("maximum iterations of local coarse runs  $(max_round_loc_C) should be bigger than 0"))
+    (max_round_loc_F > 0) || throw(ArgumentError("maximum iterations of local fine runs $(max_round_loc_F) should be bigger than 0"))
+    (max_retry >= 0) || throw(ArgumentError("maximum number of reattempt $(max_retry) should be bigger or equal to 0"))
+    (length(optimize_par) == length(global_bond)) || throw(ArgumentError("#parameters $(length(optimize_par)) should match with #globalbounds $(length(global_bond))"))
+    # ftol_rel, max_iter_sizing, print_every, pen_failed_sizing, max_iter_xxxx checked by optimize_singlePt_PFEI!
+    # frac_edge_trigger, frac_edge_expanded checked by adjust_bounds!
 
-    #### Prepare failsafe state and used state (The current method do not intend to change any input in place)
-    ac = deepcopy(ac) #Overwrite with local copy ~57 μs
-    optimize_par = deepcopy(optimize_par) #Overwrite with local copy 
-    status = nothing
-    hist = nothing
-    ac_backup = deepcopy(ac)
-    optimize_par_backup = deepcopy(optimize_par)
-    status_backup = nothing #Optimization status
-    hist_backup = nothing #Optimization history
+    #### Pass inputs by copies to avoid inplace modifications
+    optimize_par = deepcopy(optimize_par)
+    status = :Unknown #Unkown is neither fail nor success criteria
+    hist = OptHistory() #Starting condition is always unknown convergence status with empty history
 
-    #### Optimization
-    countWhile = 0
-    countRerun = 0
-    flag_bound_change = true #Use to converge the optimization bounds
-    rerun_fine = false #Use after the bound convergence, run a final fine search till FTol convergence (Only activate at the end)
-    flag_case_failed = false #Flag for failed case
-    ini_iter_outer_loop_local_mod = flag_skip_global ? ini_iter_outer_loop_local : ini_iter_outer_loop_local+1 #Optionally add a global search at the beginning
-    while (!rerun_fine && flag_bound_change && countWhile<ini_iter_outer_loop_local_mod) || (rerun_fine && countRerun<max_iter_outer_loop_local)
-        # Update counter
-        countWhile += 1
-        if rerun_fine
-            countRerun += 1
+    #### Create backup state for failsafe mechanism
+    optimize_par_bak = deepcopy(optimize_par)
+    status_bak = :Unknown
+    hist_bak = OptHistory()
+
+    #### Phase One: Global Optimization
+    if run_global
+        # Set the starting boundary to the global boundaries (Update boundary)
+        for (idx_par, opt_par_cur) in enumerate(optimize_par)
+            opt_par_cur.bon_up =  global_bond[idx_par].bon_up #For global search, always use the total global bound
+            opt_par_cur.bon_lo =  global_bond[idx_par].bon_lo
+            ((opt_par_cur.val <= opt_par_cur.bon_up) && (opt_par_cur.val >= opt_par_cur.bon_lo)) || throw(DomainError(opt_par_cur.val, "Initial guess $(opt_par_cur.val) shuold be within bounds from $(opt_par_cur.bon_lo) to $(opt_par_cur.bon_up)"))
         end
 
-        # Check the validity of the input
-        for (idx_par,opt_par_cur) in enumerate(optimize_par)
-            if !flag_skip_global && countWhile==1
-                opt_par_cur.bon_up = global_bounds_par[idx_par].bon_up #For global search, always use the total global bound
-                opt_par_cur.bon_lo = global_bounds_par[idx_par].bon_lo
-            else
-                opt_par_cur.bon_up <= global_bounds_par[idx_par].bon_up || throw(DomainError(opt_par_cur.bon_up, "Upper local bound $(opt_par_cur.bon_up) is larger than the global one $(global_bounds_par[idx_par].bon_up)"))
-                opt_par_cur.bon_lo >= global_bounds_par[idx_par].bon_lo || throw(DomainError(opt_par_cur.bon_lo, "Lower local bound $(opt_par_cur.bon_lo) is smaller than the global one $(global_bounds_par[idx_par].bon_lo)"))
-            end
-            ((opt_par_cur.val <= opt_par_cur.bon_up) && (opt_par_cur.val >= opt_par_cur.bon_lo)) || throw(DomainError(opt_par_cur.val, "Initial guess $(opt_par_cur.val) out of the local bounds from $(opt_par_cur.bon_lo) to $(opt_par_cur.bon_up)"))
-        end
-
-        # Setup optimization method
-        method = (!flag_skip_global && countWhile==1) ? optimizer_global : optimizer_local
-        if (!flag_skip_global && countWhile==1)
-            max_iter = max_iter_optim_global
-        elseif rerun_fine
-            max_iter = max_iter_optim_local
-        else
-            max_iter = ini_iter_optim_local
-        end
-
-        # Attempt
-        status = nothing #Clear up previous iteration status
+        # Try the optimization process
         try
-            # Run optimization
-            println("Optimization Run #$(countWhile), method: $(method), maxIter: $(max_iter)")
-            status,hist=optimize_singlePt_PFEI!(ac, optimize_par; mission_req=mission_req, constraints=constraints,
-                                                ftol_rel=ftol_rel, max_iter_optim=max_iter, max_iter_sizing=max_iter_sizing,
-                                                print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=method)
-        catch e # Fail to run the optimization function
-            if e isa InterruptException
-                rethrow(e)
-            end
-            println("Optimization Errored Status: $(e)")
-            flag_case_failed = true
-            break
+            status, hist = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
+                                                   ftol_rel=ftol_rel, max_iter_optim=max_iter_glo, max_iter_sizing=max_iter_sizing,
+                                                   print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_global)
+        catch e
+            (e isa InterruptException) && rethrow(e)
+            status = :FAILURE
         end
 
-        # Post-processing
+        # Post-process
         if status in success_statuses
-            # Backup the good attempt
-            optimize_par_backup = deepcopy(optimize_par)
-            status_backup = status
-            hist_backup = deepcopy(hist)
-            ac_backup = deepcopy(ac)
-
-            println("=== Benchmark: deepcopy history for the last feasible case===")
-            @btime deepcopy($hist) #Probably very expensive need to check
-            println("=== Benchmark: deepcopy aircraft model for the last feasible case===")
-            @btime deepcopy($ac)
-
-            # Create a new local bound
-            println("Optimization succeed. Update local bound")
-            if (!flag_skip_global && countWhile==1)
-                for opt_par_cur in optimize_par
-                    opt_par_cur.bon_up = opt_par_cur.bon_lo + frac_local_bound_span*(opt_par_cur.bon_up-opt_par_cur.bon_lo)
-                end
-            end
-            flag_bound_change = adjust_bounds!(optimize_par, global_bounds_par; frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded)
-            flag_bound_change = (!flag_skip_global && countWhile==1) ? true : flag_bound_change
-            
-            # Setup fine rerunning
-            if (!rerun_fine) #If rerun has not been activated
-                rerun_fine = !flag_bound_change #Activate rerun only if bound stop changing
-            else #If rerun has been activated
-                rerun_fine = flag_bound_change #Keep on activate only if bound still not converge
-            end
-        else
-            # Optimization process returns a failed result
-            println("Optimization Failed Status: $(status)")
-            flag_case_failed = true
-            break
-        end
-    end
-
-    #### catch failed case
-    if (flag_case_failed)
-        res_retry = nothing
-        if !flag_has_reattempt_local
-            #### Try local reattempt
-            println("Retry local run")
-            optimize_par = deepcopy(optimize_par_backup) #Modified in place
-            ac = ac_backup
-            # Add peturbation to last known good solution
-            δ = 0.001 * (2*rand() - 1)
+            # Create a local bound from the global bound
             for opt_par_cur in optimize_par
-                opt_par_cur.val *= (1+δ)
-                opt_par_cur.val = clamp(opt_par_cur.val, opt_par_cur.bon_lo, opt_par_cur.bon_up)
+                # Here only set a local span, only require the solution to be within the global bound. Adjust_bounds! will correct the local bound location. 
+                opt_par_cur.bon_up = opt_par_cur.bon_lo + span_glo_to_loc*(opt_par_cur.bon_up - opt_par_cur.bon_lo)
             end
-            # Rerun the local search
-            res_retry = optimizer_wrapper_global_local(ac, optimize_par, global_bounds_par;
-                        mission_req=mission_req, constraints=constraints,
-                        ftol_rel=ftol_rel, max_iter_sizing=max_iter_sizing, print_every=print_every, pen_failed_sizing=pen_failed_sizing,
-                        frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded,
-                        flag_has_reattempt_local=true, flag_has_reattempt_global=flag_has_reattempt_global,
-                        optimizer_local=optimizer_local, max_iter_optim_local=max_iter_optim_local, max_iter_outer_loop_local=max_iter_outer_loop_local, ini_iter_optim_local=ini_iter_optim_local, ini_iter_outer_loop_local=ini_iter_outer_loop_local,
-                        optimizer_global=optimizer_global, max_iter_optim_global=max_iter_optim_global, frac_local_bound_span=frac_local_bound_span, flag_skip_global=true
-                        )
-        elseif !flag_has_reattempt_global
-            #### Try global attempt
-            println("Retry global run")
-            optimize_par = optimize_par_backup
-            ac = ac_backup
-            # Rerun the global search
-            res_retry = optimizer_wrapper_global_local(ac, optimize_par, global_bounds_par;
-                        mission_req=mission_req, constraints=constraints,
-                        ftol_rel=ftol_rel, max_iter_sizing=max_iter_sizing, print_every=print_every, pen_failed_sizing=pen_failed_sizing,
-                        frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded,
-                        flag_has_reattempt_local=flag_has_reattempt_local, flag_has_reattempt_global=true,
-                        optimizer_local=optimizer_local, max_iter_optim_local=max_iter_optim_local, max_iter_outer_loop_local=max_iter_outer_loop_local, ini_iter_optim_local=ini_iter_optim_local, ini_iter_outer_loop_local=ini_iter_outer_loop_local,
-                        optimizer_global=optimizer_global, max_iter_optim_global=max_iter_optim_global, frac_local_bound_span=frac_local_bound_span, flag_skip_global=false
-                        )
-        end
-        if isnothing(res_retry) || isnothing(res_retry.status)
-            #### If no more retry allowed, return the current best backup (could be an nothing status)
-            # or if tried, but status is nothing from the try, meaning no feasible back up from any of the try. Then, return the current best backup
-            ac = ac_backup #About to return, no need to worry about scope problem for backup in julia
-            optimize_par = optimize_par_backup
-            status = status_backup
-            hist = hist_backup
+            adjust_bounds!(optimize_par, global_bond; frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded) #(Update boundary)
+            
+            # Store the good solution into backup for failsafe
+            optimize_par_bak = deepcopy(optimize_par)
+            status_bak = status
+            hist_bak = hist #No need to copy hist because it were not modified in place in this function call
         else
-            #### there are some non-trivial successful status obtained as backup from the try (could be maximim iteration solution or non true optimal)
-            # In that case, lets believe in the retry's backup over the current backup. Just a design choice.
-            ac, optimize_par, status, hist = res_retry.ac, res_retry.optimize_par, res_retry.status, res_retry.hist
+            # No retry for global cause nothing much except for tuning boundary can be done
+            println("Global optimizatin fails. Go back to the input states. Proceed to local optimization using directly the global bound")
+            optimize_par = deepcopy(optimize_par_bak) #History and status are not required for the following run (save cost)
+            for (idx_par, opt_par_cur) in enumerate(optimize_par)
+                opt_par_cur.bon_up =  global_bond[idx_par].bon_up
+                opt_par_cur.bon_lo =  global_bond[idx_par].bon_lo
+            end
         end
     end
-    @assert isnothing(status) || (status in success_statuses) #sanity check
-    return (; ac, optimize_par, status, hist)
+
+    #### Global run succeeded or skipped. Check for bounds and values before local optimizations. (Only need one check as bound update ensure consistency)
+    for (idx_par, opt_par_cur) in enumerate(optimize_par)
+        (opt_par_cur.bon_up <= global_bond[idx_par].bon_up) || throw(DomainError(opt_par_cur.bon_up, "Local upper bound $(opt_par_cur.bon_up) shuold not be larger than global $(global_bond[idx_par].bon_up)"))
+        (opt_par_cur.bon_lo >= global_bond[idx_par].bon_lo) || throw(DomainError(opt_par_cur.bon_lo, "Local lower bound $(opt_par_cur.bon_lo) shuold not be lower  than global $(global_bond[idx_par].bon_lo)"))
+        ((opt_par_cur.val <= opt_par_cur.bon_up) && (opt_par_cur.val >= opt_par_cur.bon_lo)) || throw(DomainError(opt_par_cur.val, "Initial guess $(opt_par_cur.val) should be within bounds from $(opt_par_cur.bon_lo) to $(opt_par_cur.bon_up)"))
+    end
+
+    #### Phase Two: Local Coarse Optimization
+    # Initialization
+    count_coarse = 0
+    count_retry = 0
+    bound_change = true
+    
+    # Loop through bound change
+    while (bound_change && (count_coarse < max_round_loc_C))
+        # Update counter
+        count_coarse += 1
+
+        # Try the optimization process
+        try
+            status, hist = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
+                                                   ftol_rel=ftol_rel, max_iter_optim=max_iter_loc_C, max_iter_sizing=max_iter_sizing,
+                                                   print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_local)
+        catch e
+            (e isa InterruptException) && rethrow(e)
+            status = :FAILURE
+        end
+
+        # Post-process
+        if status in success_statuses
+            # Update the local bound
+            bound_change = adjust_bounds!(optimize_par, global_bond; frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded)
+            
+            # Store the good solution into backup for failsafe
+            optimize_par_bak = deepcopy(optimize_par)
+            status_bak = status
+            hist_bak = hist #Again, rebind is good enough
+        else
+            # Try 1. rerun, 2. global rerun, 3. return the last known good solution
+            if count_retry < max_retry
+                # Get back to the last known good solution (Only need parameter for retry)
+                optimize_par = deepcopy(optimize_par_bak)
+
+                # Randomly perturb the solution as initial try
+                for opt_par_cur in optimize_par
+                    δ = 0.001 * (2.0 * rand() - 1.0) #0.1% randome perturbation
+                    opt_par_cur.val *= (1.0 + δ)
+                    opt_par_cur.val = clamp(opt_par_cur.val, opt_par_cur.bon_lo, opt_par_cur.bon_up)
+                end
+
+                # Setup retry process
+                max_round_loc_C += 1 #Rerun process create new iteration out of the original limitation
+                count_retry += 1 #Rerun might happens multiple times non-consecutively, but the total number of rerun allowed in each phase is fixed
+                bound_change = true #Treate each rerun as fake bound update
+            elseif !run_global
+                # Attempt to use rerun the whole solution process with a global search to reconverge the solution
+                # This is only trigger if and only if the current optimization did not involve global search, though sometimes it is still helpful if method are stoichastics, but assume not much impact.
+                # optimize_par_bak is still used here but not much impact, as global_bond is the key for this rerun
+                (optimize_par_retry, status_retry, hist_retry) = optimizer_wrapper_global_local(ac, optimize_par_bak,
+                                                                 global_bond; miss_req=miss_req, constraints=constraints,
+                                                                 ftol_rel=ftol_rel, max_iter_sizing=max_iter_sizing, print_every=print_every, pen_failed_sizing=pen_failed_sizing,
+                                                                 frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded,
+                                                                 optimizer_global=optimizer_global, max_iter_glo=max_iter_glo,     span_glo_to_loc=span_glo_to_loc, run_global=true,
+                                                                 optimizer_local=optimizer_local,   max_iter_loc_C=max_iter_loc_C, max_round_loc_C=max_round_loc_C,
+                                                                                                    max_iter_loc_F=max_iter_loc_F, max_round_loc_F=max_round_loc_F, max_retry=max_retry)
+                
+                # Post-process (Due to recursive nature. No point to repeated the process by continue from here if recursive call failed)
+                if status_retry in success_statuses
+                    println("reattempt global search succeeded. Return the best solution from there directly.")
+                    return (optimize_par_retry, status_retry, hist_retry)
+                else
+                    println("Reattempt global search failed. Return the outer function last known best solution. Dont know which one is better.")
+                    return (optimize_par_bak, status_bak, hist_bak)
+                end
+            else
+                println("Local search failed. Run out of retry and have already done global search. Take the last best solution and directly goes to fine search.")
+                optimize_par = deepcopy(optimize_par_bak)
+                break #Break out because 1. Sometime fine search allows converged solution due to longer run. 2. No point to keep the same starting guess rerun local (same staled result).
+            end
+        end
+    end
+
+    #### Phase Three: Local Fine Optimization
+    # Initialization
+    count_fine = 0
+    count_retry = 0
+    bound_change = true
+    
+    # Loop through bound change
+    while (bound_change && (count_fine < max_round_loc_F))
+        # Update counter
+        count_fine += 1
+
+        # Try the optimization process
+        try
+            status, hist = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
+                                                   ftol_rel=ftol_rel, max_iter_optim=max_iter_loc_F, max_iter_sizing=max_iter_sizing,
+                                                   print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_local)
+        catch e
+            (e isa InterruptException) && rethrow(e)
+            status = :FAILURE
+        end
+
+        # Post-process
+        if status in success_statuses
+            # Update the local bound
+            bound_change = adjust_bounds!(optimize_par, global_bond; frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded)
+            
+            # Store the good solution into backup for failsafe
+            optimize_par_bak = deepcopy(optimize_par)
+            status_bak = status
+            hist_bak = hist #Again, rebind is good enough
+        else
+            # Try 1. rerun, 2. global rerun, 3. return the last known good solution
+            if count_retry < max_retry
+                # Get back to the last known good solution (Only need parameter for retry)
+                optimize_par = deepcopy(optimize_par_bak)
+
+                # Randomly perturb the solution as initial try
+                for opt_par_cur in optimize_par
+                    δ = 0.001 * (2.0 * rand() - 1.0) #0.1% randome perturbation
+                    opt_par_cur.val *= (1.0 + δ)
+                    opt_par_cur.val = clamp(opt_par_cur.val, opt_par_cur.bon_lo, opt_par_cur.bon_up)
+                end
+
+                # Setup retry process
+                max_round_loc_F += 1 #Rerun process create new iteration out of the original limitation
+                count_retry += 1 #Rerun might happens multiple times non-consecutively, but the total number of rerun allowed in each phase is fixed
+                bound_change = true #Treate each rerun as fake bound update
+            elseif !run_global
+                # Attempt to use rerun the whole solution process with a global search to reconverge the solution
+                # This is only trigger if and only if the current optimization did not involve global search, though sometimes it is still helpful if method are stoichastics, but assume not much impact.
+                # optimize_par_bak is still used here but not much impact, as global_bond is the key for this rerun
+                (optimize_par_retry, status_retry, hist_retry) = optimizer_wrapper_global_local(ac, optimize_par_bak,
+                                                                 global_bond; miss_req=miss_req, constraints=constraints,
+                                                                 ftol_rel=ftol_rel, max_iter_sizing=max_iter_sizing, print_every=print_every, pen_failed_sizing=pen_failed_sizing,
+                                                                 frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded,
+                                                                 optimizer_global=optimizer_global, max_iter_glo=max_iter_glo,     span_glo_to_loc=span_glo_to_loc, run_global=true,
+                                                                 optimizer_local=optimizer_local,   max_iter_loc_C=max_iter_loc_C, max_round_loc_C=max_round_loc_C,
+                                                                                                    max_iter_loc_F=max_iter_loc_F, max_round_loc_F=max_round_loc_F, max_retry=max_retry)
+                
+                # Post-process (Due to recursive nature. No point to repeated the process by continue from here if recursive call failed)
+                if status_retry in success_statuses
+                    println("reattempt global search succeeded. Return the best solution from there directly.")
+                    return (optimize_par_retry, status_retry, hist_retry)
+                else
+                    println("Reattempt global search failed. Return the outer function last known best solution. Dont know which one is better.")
+                    return (optimize_par_bak, status_bak, hist_bak)
+                end
+            else
+                println("Local search failed. Run out of retry and have already done global search. Take the last best solution and directly return them.")
+                return (optimize_par_bak, status_bak, hist_bak)
+            end
+        end
+    end
+    
+    return (optimize_par, status, hist) # return for successful case
 end
 
 """Type conversion"""
