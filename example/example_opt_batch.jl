@@ -14,15 +14,10 @@ save_dir  = joinpath(__TASOPTroot__,"../example/","ModelSaved/")
 # Save to
 save_key = "Opt_Jet" #jld2
 
-#### Setup optimization
-iters_global = 500
-iters_local_coarse = 500
-iters_local_fine = 20000
-
 #### Setup mission requirement
 # Some special parameters to fix
 num_pass_per_row = Int(6)
-front_seat_offset = 3.048
+front_seat_offset = 0.0 #3.048
 rear_seat_offset = front_seat_offset/2.0
 # Load and setup the aircraft (There are some overwriting cannot be fully automated by the solver)
 ac = quickload_aircraft(read_dir_ini)
@@ -64,22 +59,22 @@ push!(con_opt, Constraint(:(parm[imVfuel, 1]); pen_sca=1e4, lim_up=:(parg[igVfma
 
 #### Setup optimization parameters
 par_opt = Parameter[]
-push!(par_opt, Parameter(:(wing.layout.sweep), 26.0, 37.0, 14.0, 3.0))
-push!(par_opt, Parameter(:(wing.layout.AR), 9.0, 13.0, 6.8, 0.9))
-push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.15, 0.22, 0.10, 0.02))
-push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.12, 0.18, 0.08, 0.015))
-push!(par_opt, Parameter(:(wing.inboard.λ), 0.75, 1.00, 0.45, 0.09))
-push!(par_opt, Parameter(:(wing.outboard.λ), 0.45, 0.75, 0.15, 0.08))
-push!(par_opt, Parameter(:(parg[igyeng]), radius_fuselage*3.5, radius_fuselage*5.2, radius_fuselage*2.3, radius_fuselage*0.30))
-push!(par_opt, Parameter(:(wing.layout.ηs), 0.40, 0.60, 0.22, 0.04))
-push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 0.70, 1.00, 0.35, 0.10))
+push!(par_opt, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 5.0))
+push!(par_opt, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 1.5))
+push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
+push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
+push!(par_opt, Parameter(:(wing.inboard.λ), 0.7, 1.0, 0.1, 0.1))
+push!(par_opt, Parameter(:(wing.outboard.λ), 0.3, 1.0, 0.1, 0.1))
+push!(par_opt, Parameter(:(parg[igyeng]), radius_fuselage*3.0, radius_fuselage*4.0, radius_fuselage*2.0, radius_fuselage*0.2))
+push!(par_opt, Parameter(:(wing.layout.ηs), 0.3, 0.4, 0.2, 0.02))
+push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15))
 
-push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.60, 0.82, 0.40, 0.06))
-push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10800.0, 12800.0, 8500.0, 900.0))
-push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 1.65, 2.00, 1.30, 0.10))
-push!(par_opt, Parameter(:(pare[iepihc, ipclimb2:ipdescent4, 1]), 18.0, 30.0, 7.0, 2.0))
-push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.5, 13.5, 4.0, 1.1))
-push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1700.0, 1900.0, 1350.0, 90.0))
+push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07))
+push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0))
+push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2))
+push!(par_opt, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 1.0))
+push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2))
+push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0))
 
 push!(par_opt, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.2))
 
