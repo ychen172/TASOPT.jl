@@ -1,6 +1,6 @@
 module ObjectiveFactory
 export Constraint, Parameter, OptHistory, Requirement, optimize_singlePt_PFEI!, optimizer_wrapper_global_local, size_aircraft_w_param!,
-       save_vec_struct_csv, load_vec_struct_csv, save_jld2, load_jld2
+       save_vec_struct_csv, load_csv_constraints, load_csv_parameters, load_csv_requirements, save_jld2, load_jld2
 using TASOPT
 using NLopt
 using Printf
@@ -999,7 +999,7 @@ end
     _encode_union(x::Union{Nothing,Expr,Real})
 
 `_encode_union` encodes several values of different datatype into strings
-For real: Only int is specially handled, assume all interger size less than Int64
+For real: Only bool and int are specially handled
           Rational, Abstract Irrational, and Float all handled as Float64
     
     **Inputs**
@@ -1015,7 +1015,9 @@ function _encode_union(x::Union{Nothing,Expr,Real})
     elseif x isa Expr
         return ("expr", _expr_to_str(x))
     else #x isa Real
-        if x isa Integer
+        if x isa Bool
+            return ("bool", string(x))
+        elseif x isa Integer
             return ("int", string(x))
         else
             x = Float64(x)
@@ -1028,8 +1030,7 @@ end
     _decode_union(data_val, data_type::AbstractString)
 
 `_decode_union` corresponds to _encode_union to reconvert the stored string form data back to
-their original form. For Real, only conversion back to int and float64 are assumed. Int (probably Int64 attempts to handle all Interger)
-(Float64 handles also rational and abstractirrational data)
+their original form. For Real, only conversion back to bool, int, and float64 are assumed.
     
     **Inputs**
         - data_val: The raw value read from CSV
@@ -1047,6 +1048,8 @@ function _decode_union(data_val, data_type::AbstractString)
         return nothing
     elseif data_type == "expr"
         return _str_to_expr(string(data_val))
+    elseif data_type == "bool"
+        return parse(Bool, string(data_val))
     elseif data_type == "int"
         return parse(Int, string(data_val))
     else #float
@@ -1105,76 +1108,117 @@ function save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIg
     return nothing
 end
 
-function _default_ignored_value(ft::Type, fname::Symbol, defaults::AbstractDict{Symbol,<:Any})
-    if haskey(defaults, fname)
-        v = defaults[fname]
-        (v isa ft || ft == Any) || throw(ArgumentError("Default for $fname has wrong type: $(typeof(v)) vs $ft"))
-        return v
-    end
-    if nothing isa ft
-        return nothing
-    end
-    throw(ArgumentError("Ignored field $fname is required by type $ft; provide it in `defaults`"))
-end
+"""
+    load_csv_constraints(path::AbstractString)
+
+`load_csv_constraints` loads a vector of constraints from a csv file
+
+    **Inputs**
+        - path: the path of the csv
+    
+    **Outputs**
+        - constraint_out::Vector{Constraint}: The mission constraints
 
 """
-load_vec_struct_csv(path::AbstractString, ::Type{S}; fieldIgnore::AbstractVector{<:AbstractString} = ["field_path", "index"], defaults::AbstractDict{Symbol,<:Any} = Dict(:field_path => nothing, :index => nothing))
-load_constraints_csv("YesHere.csv",Constraint{Float64};fieldIgnore = ["field_path", "index"],defaults = Dict(:field_path => nothing, :index => nothing))
-"""
-function load_vec_struct_csv(path::AbstractString, ::Type{S}; fieldIgnore::AbstractVector{<:AbstractString} = ["field_path", "index"], defaults::AbstractDict{Symbol,<:Any} = Dict(:field_path => nothing, :index => nothing)) where {S}
-    isconcretetype(S) || throw(ArgumentError("Use a concrete type, e.g. Constraint{Float64}"))
+function load_csv_constraints(path::AbstractString)
+    #### Read in the csv
     df = CSV.read(path, DataFrame)
-    ignore = Set(Symbol.(fieldIgnore))
 
-    fns = fieldnames(S)
-    fts = fieldtypes(S)
-
-    # quick column existence check for non-ignored fields
-    cols = Set(Symbol.(names(df)))
-    for f in fns
-        if !(f in ignore)
-            kcol = Symbol(f, "_kind")
-            vcol = Symbol(f, "_val")
-            (kcol in cols && vcol in cols) || throw(ArgumentError("Missing columns $kcol/$vcol in CSV"))
-        end
+    #### Read in data to reconstruct the constraint
+    constraint_out = Constraint[]
+    for row in eachrow(df)
+        name = _decode_union(row.name_value, string(row.name_type))
+        pen_sca = _decode_union(row.pen_sca_value, string(row.pen_sca_type))
+        lim_up = _decode_union(row.lim_up_value, string(row.lim_up_type))
+        lim_lo = _decode_union(row.lim_lo_value, string(row.lim_lo_type))
+        eps_buff = _decode_union(row.eps_buff_value, string(row.eps_buff_type))
+        push!(constraint_out, Constraint(name; pen_sca=pen_sca, lim_up=lim_up, lim_lo=lim_lo, eps_buff=eps_buff))
     end
-
-    out = Vector{S}(undef, nrow(df))
-
-    for (i, row) in enumerate(eachrow(df))
-        vals = Vector{Any}(undef, length(fns))
-
-        for j in eachindex(fns)
-            f  = fns[j]
-            ft = fts[j]
-
-            if f in ignore
-                vals[j] = _default_ignored_value(ft, f, defaults)
-            else
-                kind = row[Symbol(f, "_kind")]
-                val  = row[Symbol(f, "_val")]
-                vals[j] = _decode_typed(kind, val, ft)
-            end
-        end
-
-        out[i] = S(vals...)
-    end
-
-    return out
+    return constraint_out
 end
 
 """
-save_jld2("history.jld2", hist)
+    load_csv_parameters(path::AbstractString)
+
+`load_csv_parameters` loads a vector of parameters from a csv file
+
+    **Inputs**
+        - path: the path of the csv
+    
+    **Outputs**
+        - parameters_out::Vector{Parameter}: The design parameters
+
+"""
+function load_csv_parameters(path::AbstractString)
+    #### Read in the csv
+    df = CSV.read(path, DataFrame)
+
+    #### Read in data to reconstruct the parameters
+    parameters_out = Parameter[]
+    for row in eachrow(df)
+        name = _decode_union(row.name_value, string(row.name_type))
+        val = _decode_union(row.val_value, string(row.val_type))
+        bon_up = _decode_union(row.bon_up_value, string(row.bon_up_type))
+        bon_lo = _decode_union(row.bon_lo_value, string(row.bon_lo_type))
+        d_val = _decode_union(row.d_val_value, string(row.d_val_type))
+        push!(parameters_out, Parameter(name, val, bon_up, bon_lo, d_val))
+    end
+    return parameters_out
+end
+
+"""
+    load_csv_requirements(path::AbstractString)
+
+`load_csv_requirements` loads a vector of requirements from a csv file
+
+    **Inputs**
+        - path: the path of the csv
+    
+    **Outputs**
+        - requirements_out::Vector{Requirement}: The mission requirements
+
+"""
+function load_csv_requirements(path::AbstractString)
+    #### Read in the csv
+    df = CSV.read(path, DataFrame)
+
+    #### Read in data to reconstruct the requirements
+    requirements_out = Requirement[]
+    for row in eachrow(df)
+        name = _decode_union(row.name_value, string(row.name_type))
+        val = _decode_union(row.val_value, string(row.val_type))
+        push!(requirements_out, Requirement(name, val))
+    end
+    return requirements_out
+end
+
+"""
+    save_jld2(path::AbstractString, h)
+
+`save_jld2` quickly save whatever object into jld2 file. Ex. save_jld2("history.jld2", hist)
+
+    **Inputs**
+        - path: the file path to save to ***.jld2
+        - h: the object
 """
 function save_jld2(path::AbstractString, h)
     jldopen(path, "w") do f
         f["data"] = h
     end
-    return path
+    return nothing
 end
 
 """
-hist2 = load_jld2("history.jld2", OptHistory{Float64})
+    load_jld2(path::AbstractString, ::Type{H})
+
+`load_jld2` quickly load an object from jld2 file. Ex. hist2 = load_jld2("history.jld2", OptHistory{Float64})
+
+    **Inputs**
+        - path: the file path to load from to ***.jld2
+        - ::Type{H}: Concrete type of the object to load into
+    
+    **OUtputs**
+        - x::Type{H}: the object created from jld2
 """
 function load_jld2(path::AbstractString, ::Type{H}) where {H}
     x = load(path, "data")
