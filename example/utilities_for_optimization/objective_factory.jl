@@ -156,54 +156,6 @@ function best_feasible(hist_all::OptHistory)
     i = idx[argmin(hist_all.penalty[idx])]
     return (index=i, test_param=hist_all.test_param[i], penalty=hist_all.penalty[i], PFEI=hist_all.PFEI[i])
 end
-                              #Try to start with all 1 here actually
-#penal_scale::Vector{Float64}=[25.0, 1.0, 1.0, 5.0, 5.0, 1.0, 10.0, 10.0]
-#                       buffer[0     0    0      0   0.  0.  1e-4   1e-4]
-#ac.wing.layout.span (Double check what goes in here)
-#ac.parm[imlBF,1]
-#ac.para[iagamV, ipclimbn, 1]
-#maximum(ac.pare[ieTt3, :, 1])
-#maximum(ac.pare[ieTmet1, :, 1])
-#ac.parg[igdfan]
-#ac.parm[imWTO, 1] -> ac.parg[igWMTO] as upper bound
-#ac.parm[imVfuel, 1] -> ac.parg[igVfmax] as upper bound
-#
-#
-#         ac.wing.layout.AR    = x[1]                                # Aspect Ratio 
-#         ac.wing.layout.sweep = x[3]                                # Sweep angle (deg)
-#         ac.wing.inboard.λ    = x[5]                                # Inner panel taper ratio
-#         ac.wing.outboard.λ   = x[6]                                # Outer panel taper ratio
-#         ac.wing.inboard.cross_section.thickness_to_chord  = x[7]   # Root thickness-to-chord ratio
-#         ac.wing.outboard.cross_section.thickness_to_chord = x[8]   # Spanbreak thickness-to-chord ratio
-
-#         # Update flight condition parameters
-#         ac.para[iaCL, ipclimb1+1:ipdescentn-1, 1] .= x[2]       # Cruise lift coefficient
-#         ac.para[iaalt, ipclimbn:ipcruise1, 1]     .= x[4]       # Cruise altitude
-#         ac.para[iarcls, ipclimb2:ipdescent4, 1]   .= x[9]       # Break/root CL ratio = cls/clo
-#         ac.para[iarclt, ipclimb2:ipdescent4, 1]   .= x[10]      # Tip/root CL ratio = clt/clo
-
-#         # Update engine parameters
-#         ac.pare[ieTt4, ipcruise1:ipcruise2, 1] .= x[11]         # Turbine inlet temperature
-#         ac.pare[iepihc, ipcruise1, 1]           = x[12]         # High pressure compressor pressure ratio
-#         ac.pare[iepif, ipcruise1, 1]            = x[13]         # Fan pressure ratio
-#         ac.pare[iepilc, ipcruise1, 1]           = x[14]         # Low pressure compressor pressure ratio (fixed)
-#         ac.pare[ieBPR, ipcruise1, 1]            = x[15]         # Bypass ratio
-#     mission_req.range_des > 0 || throw(ArgumentError("Design flight range > 0"))
-#     mission_req.rho_fuel > 0 || throw(ArgumentError("Fuel density > 0"))
-#     mission_req.hvap_fuel >= 0 || throw(ArgumentError("Fuel heat of vaporization >= 0"))
-#     # Constraints
-#     constraints_opt.span_max > 0 || throw(ArgumentError("span_max > 0")) # Maximum span (m)
-#     constraints_opt.lenField_max > 0 || throw(ArgumentError("lenField_max > 0")) # Maximum balanced field length (m)
-#     constraints_opt.TOCGamma_min > 0 || throw(ArgumentError("TOCGamma_min > 0")) # Minimum top-of-climb flight angle (rad)
-#     constraints_opt.Tt3_max > 0 || throw(ArgumentError("Tt3_max > 0")) # Maximum combustor inlet temperature (K)
-#     constraints_opt.TMetal_max > 0 || throw(ArgumentError("TMetal_max > 0")) # Maximum metal temperature (K)
-#     constraints_opt.DiaFan_max > 0 || throw(ArgumentError("DiaFan_max > 0")) # Maximum fan diameter (m)
-#     
-#     ac.parm[imRange,:] .= mission_req.range_des #Design flight range (m)
-#     ac.options.ifuel = mission_req.idx_fuel #Fuel Index
-#     ac.parg[igrhofuel] = mission_req.rho_fuel #Fuel Density (kg/m3)
-#     ac.pare[iehvap, :, :] .= mission_req.hvap_fuel #Heat of Vaporization (J/kg)
-#     ac.pare[iehvapcombustor, :, :] .= mission_req.hvap_fuel
 
 """
     make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=100.0)
@@ -706,7 +658,6 @@ end
             10.If global search has not been attempted, re-run the whole solver with global search first.
             11.If none of the above works, retract to last known best state and go to next phase or output.
 """
-
 function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Parameter},
                                         global_bond::AbstractVector{<:Parameter}; miss_req::AbstractVector{<:Requirement}=Vector{Requirement}(), constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
                                         ftol_rel::Float64=1e-6, max_iter_sizing::Int=150, print_every::Int=10, pen_failed_sizing::Float64=100.0,
