@@ -983,64 +983,126 @@ function size_aircraft_w_param!(ac; mission_req::AbstractVector{<:Requirement}=V
     return flgSuccessed
 end
 
-"""Type conversion"""
-_expr_to_str(ex::Expr) = sprint(Base.show_unquoted, ex)
-_str_to_expr(s::AbstractString) = Meta.parse(s)
-_toT(x, ::Type{T}) where {T<:AbstractFloat} = x isa AbstractString ? parse(T, x) : convert(T, x) #Convert from string form number to number type
+####### Type conversion helper functions. Used to store TASOPT data into and from csv
 
-"""Convert to savable string"""
-function _encode_union(x)
+"""From Expr conversion to String"""
+function _expr_to_str(ex::Expr)
+    return sprint(Base.show_unquoted, ex)
+end
+
+"""From String conversion to Expr"""
+function _str_to_expr(s::AbstractString)
+    return Meta.parse(s)
+end
+
+"""
+    _encode_union(x::Union{Nothing,Expr,Real})
+
+`_encode_union` encodes several values of different datatype into strings
+For real: Only int is specially handled, assume all interger size less than Int64
+          Rational, Abstract Irrational, and Float all handled as Float64
+    
+    **Inputs**
+        - x: Variable for conversion
+    
+    **Outputs**
+        - (string of data type(nothing, expr, int, float), data in string form)
+
+"""
+function _encode_union(x::Union{Nothing,Expr,Real})
     if x === nothing
         return ("nothing", "")
     elseif x isa Expr
         return ("expr", _expr_to_str(x))
-    elseif x isa Real
-        return ("num", string(x))
-    else
-        throw(ArgumentError("Unsupported union value type: $(typeof(x))"))
-    end
-end
-
-function _numeric_target_type(ft::Type)
-    members = ft isa Union ? Base.uniontypes(ft) : (ft,)
-    for m in members
-        m <: AbstractFloat && return m
-    end
-    for m in members
-        m <: Integer && return m
-    end
-    for m in members
-        m <: Real && return Float64
-    end
-    return nothing
-end
-
-function _decode_typed(kind_raw, val_raw, ft::Type)
-    kind = lowercase(strip(String(kind_raw)))
-
-    if kind == "nothing"
-        nothing isa ft || throw(ArgumentError("Field type $ft does not allow `nothing`"))
-        return nothing
-
-    elseif kind == "expr"
-        s = val_raw isa AbstractString ? String(val_raw) : string(val_raw)
-        ex = Meta.parse(s)
-        (ex isa ft || ft == Any) || throw(ArgumentError("Field type $ft does not allow Expr"))
-        return ex
-
-    elseif kind == "num"
-        nt = _numeric_target_type(ft)
-        nt === nothing && throw(ArgumentError("Field type $ft does not allow numeric values"))
-
-        if val_raw isa AbstractString
-            return parse(nt, String(val_raw))
+    else #x isa Real
+        if x isa Integer
+            return ("int", string(x))
         else
-            return convert(nt, val_raw)
+            x = Float64(x)
+            return ("float", string(x))
         end
-
-    else
-        throw(ArgumentError("Unknown kind '$kind' (expected num|expr|nothing)"))
     end
+end
+
+"""
+    _decode_union(data_val, data_type::AbstractString)
+
+`_decode_union` corresponds to _encode_union to reconvert the stored string form data back to
+their original form. For Real, only conversion back to int and float64 are assumed. Int (probably Int64 attempts to handle all Interger)
+(Float64 handles also rational and abstractirrational data)
+    
+    **Inputs**
+        - data_val: The raw value read from CSV
+        - data_type: the type of data
+    
+    **Outputs**
+        - data_val in the converted form
+
+"""
+function _decode_union(data_val, data_type::AbstractString)
+    #### Reformat data type
+    data_type = lowercase(strip(data_type))
+    #### Conversion
+    if data_type == "nothing"
+        return nothing
+    elseif data_type == "expr"
+        return _str_to_expr(string(data_val))
+    elseif data_type == "int"
+        return parse(Int, string(data_val))
+    else #float
+        return parse(Float64, string(data_val))
+    end
+end
+
+"""
+    save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIgnore::AbstractVector{<:AbstractString}=["field_path", "index"])
+
+`save_vec_struct_csv` saves Constraint, Requirement, and Parameter into csv file
+
+    **Inputs**
+        - `path`: Path of csv to save. "xxxx.csv"
+        - `data`: One of the three type (Vector of of the three types)
+        - `fieldIgnore`: fields to not save due to complexity of the data
+    
+"""
+function save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIgnore::AbstractVector{<:AbstractString}=["field_path", "index"])
+    #### Size check
+    if isempty(data)
+        @warn "No data to save"
+        return nothing
+    end
+    
+    #### Process ignore fields
+    ignore = Set(Symbol.(fieldIgnore))
+    keep_fields = Vector{Symbol}()
+    for f in fieldnames(typeof(data[1]))
+        if !(f in ignore)
+            push!(keep_fields, f)
+        end
+    end
+    
+    #### Extract data into container
+    rows = Vector{NamedTuple}(undef, length(data))
+    for (idx, sub_data) in enumerate(data)
+        # Collector for all fields
+        pairs_row = Vector{Pair{Symbol,String}}() #Both the data type and data are stored in string form
+        for f in keep_fields
+            v = getfield(sub_data, f)
+            try
+                # Store the current field
+                val_kind, val = _encode_union(v)
+                push!(pairs_row, Symbol(f, "_type")  => val_kind)
+                push!(pairs_row, Symbol(f, "_value") => val)
+            catch err
+                throw(ArgumentError("Data conversion for field $(f) failed: $(typeof(err)), $err"))
+            end
+        end
+        rows[idx] = (; pairs_row...) # Conver to a named tuple for storage
+    end
+
+    #### Save to csv
+    CSV.write(path, DataFrame(rows))
+    return nothing
 end
 
 function _default_ignored_value(ft::Type, fname::Symbol, defaults::AbstractDict{Symbol,<:Any})
@@ -1053,36 +1115,6 @@ function _default_ignored_value(ft::Type, fname::Symbol, defaults::AbstractDict{
         return nothing
     end
     throw(ArgumentError("Ignored field $fname is required by type $ft; provide it in `defaults`"))
-end
-
-"""
-save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIgnore::AbstractVector{<:AbstractString}=["field_path", "index"])
-Use: save_vec_struct_csv("req.csv", req_lst)
-"""
-function save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIgnore::AbstractVector{<:AbstractString}=["field_path", "index"])
-    isempty(data) && throw(ArgumentError("data is empty"))
-    T0 = typeof(first(data))
-    all(typeof(x) == T0 for x in data) || throw(ArgumentError("all elements in data must have the same concrete type"))
-    ignore = Set(Symbol.(fieldIgnore))
-    keep_fields = [f for f in fieldnames(T0) if !(f in ignore)]
-    rows = Vector{NamedTuple}(undef, length(data))
-    for (idx, sub_data) in enumerate(data)
-        pairs_row = Pair{Symbol,Any}[]
-        push!(pairs_row, :schema_version => 1)
-        for f in keep_fields
-            v = getfield(sub_data, f)
-            try
-                val_kind, val = _encode_union(v)  # your existing encoder
-                push!(pairs_row, Symbol(f, "_kind") => val_kind)
-                push!(pairs_row, Symbol(f, "_val")  => val)
-            catch err
-                throw(ArgumentError("Data conversion for field $(String(f)) failed: $err"))
-            end
-        end
-        rows[idx] = (; pairs_row...)
-    end
-    CSV.write(path, DataFrame(rows))
-    return path
 end
 
 """
