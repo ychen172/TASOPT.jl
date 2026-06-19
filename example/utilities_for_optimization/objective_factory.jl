@@ -1,5 +1,5 @@
 module ObjectiveFactory
-export Constraint, Parameter, OptHistory, Requirement, optimize_singlePt_PFEI!, optimizer_wrapper_global_local,
+export Constraint, Parameter, OptHistory, Requirement, optimize_singlePt_PFEI!, optimizer_wrapper_global_local, size_aircraft_w_param!,
        save_vec_struct_csv, load_vec_struct_csv, save_jld2, load_jld2
 using TASOPT
 using NLopt
@@ -240,7 +240,7 @@ function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::Abs
     pen_failed_sizing > 0  || throw(ArgumentError("`pen_failed_sizing` must be > 0"))
 
     #### Construct an optimization history to be returned by reference for successive update
-    hist = OptHistory() #History with emtpy entries
+    hist = OptHistory() #History with empty entries
 
     #### make a backup
     ac_bak = deepcopy(ac)
@@ -933,6 +933,54 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
     end
     
     return (optimize_par, status, hist) # return for successful case
+end
+
+"""
+    size_aircraft_w_param!(ac; mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(),
+                           parameters::AbstractVector{<:Parameter}=Vector{Parameter}(), 
+                           max_iter_sizing::Int=150, printiter::Bool=false)
+
+`size_aircraft_w_param!` sizes an aircraft based on a provided mission_requirements and parameters
+
+    **Inputs**
+        - `ac`: TASOPT aircraft model, can be unsized (Modified in place)
+        - `mission_req`(def): mission requirement (can be empty) (requirements within :val)
+        - `parameters` (def): design parameters (can be empty) (parameters within :val)
+        - `max_iter_sizing` (def): maximum number of sizing loop
+        - `printiter` (def): whether to print out the sizing process
+    
+    **Outputs**
+        - `flgSuccessed`::Bool: whether sizing were successful
+    
+    **Behavior**
+        - aircraft model modified in place
+"""
+function size_aircraft_w_param!(ac; mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(),
+                                parameters::AbstractVector{<:Parameter}=Vector{Parameter}(), 
+                                max_iter_sizing::Int=150, printiter::Bool=false)
+
+    #### Implement the mission requirement into the aircraft model
+    for miss_req_cur in mission_req
+        setNestedProp_fromExpr!(ac, miss_req_cur.val; field_path=miss_req_cur.field_path, index=miss_req_cur.index)
+    end
+    
+    #### Insert the design variables into the aircraft model 
+    for param_cur in parameters
+        setNestedProp_fromExpr!(ac, param_cur.val; field_path=param_cur.field_path, index=param_cur.index)
+    end
+
+    #### Try to size the aircraft
+    flgSuccessed = true
+    try
+        TASOPT.size_aircraft!(ac, iter=max_iter_sizing, printiter=printiter)
+    catch e
+        if e isa InterruptException #Unless user interruption
+            rethrow()
+        end
+        flgSuccessed = false
+    end
+
+    return flgSuccessed
 end
 
 """Type conversion"""
