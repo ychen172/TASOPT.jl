@@ -349,8 +349,8 @@ function InFlightPrintOut(hist::OptHistory, print_every::Int)
 end
 
 """These are the statuses for NLOpt optimization results"""
-const success_statuses = (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
-const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
+const success_statuses = (:SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED, :RECOVERED_FEASIBLE_FROM_HISTORY)
+const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP, :NO_FEASIBLE_SOLUTION, :UNKNOWN, :FAILED_TO_REPRODUCE)
 
 """
     optimize_singlePt_PFEI!(ac,
@@ -383,6 +383,7 @@ const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIM
           Success cases: (:RECOVERED_FEASIBLE_FROM_HISTORY, :SUCCESS, :STOPVAL_REACHED, :FTOL_REACHED, :XTOL_REACHED, :MAXEVAL_REACHED, :MAXTIME_REACHED)
           Fail cases: (:NO_FEASIBLE_SOLUTION, :FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIMITED, :FORCED_STOP)
         - hist: Optimization history: {test_param::Vector{Vector{T}}, penalty::Vector{T}, PFEI::Vector{T}, violations::Vector{Vector{Constraint}}}
+        - bestSol: Best solution from the history: either nothing or one element from OptHistory variable
     
     ***Updated***
         - optimize_par: The value `:val` of the parameters are updated to the best feasible solution found if optimization succeeded. `:val` is still the initial value if optimization failed.
@@ -481,7 +482,7 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
         setproperty!.(optimize_par, :val, bestSol.test_param) #This set the test parameters from the best run back into the optimization parameter container (Use as mild initial guess for next case)
     end
 
-    return status, hist
+    return status, hist, bestSol
 end
 
 """
@@ -634,7 +635,7 @@ end
 
     **Outputs**
         - optimize_par::AbstractVector{<:Parameter}: optimized parameters (:val) with updated local bounds (:bon_up and :bon_lo). Can be one of the known best state or input state.
-        - status::Symbol: NLOpt resulted status for optimization. (Can be success, fail, or :Unknown state) :Unknown state only if input state were returned.
+        - status::Symbol: NLOpt resulted status for optimization. (Can be success, fail, or :UNKNOWN state) :UNKNOWN state only if input state were returned.
         - hist::OptHistory{test_param, penalty, PFEI, violations}. (Can be empty if no feasible solution found or return input state)
 
     **Behavior**
@@ -676,12 +677,12 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
 
     #### Pass inputs by copies to avoid inplace modifications
     optimize_par = deepcopy(optimize_par)
-    status = :Unknown #Unkown is neither fail nor success criteria
+    status = :UNKNOWN #Unkown is neither fail nor success criteria
     hist = OptHistory() #Starting condition is always unknown convergence status with empty history
 
     #### Create backup state for failsafe mechanism
     optimize_par_bak = deepcopy(optimize_par)
-    status_bak = :Unknown
+    status_bak = :UNKNOWN
     hist_bak = OptHistory()
 
     #### Phase One: Global Optimization
@@ -695,7 +696,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
 
         # Try the optimization process
         try
-            status, hist = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
+            status, hist, _ = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
                                                    ftol_rel=ftol_rel, max_iter_optim=max_iter_glo, max_iter_sizing=max_iter_sizing,
                                                    print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_global)
         catch e
@@ -747,7 +748,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
 
         # Try the optimization process
         try
-            status, hist = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
+            status, hist, _ = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
                                                    ftol_rel=ftol_rel, max_iter_optim=max_iter_loc_C, max_iter_sizing=max_iter_sizing,
                                                    print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_local)
         catch e
@@ -814,15 +815,17 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
     count_fine = 0
     count_retry = 0
     bound_change = true
+    optim_change = true #To reverify the results from fine search
+    PFEI_previous = -1.0 #Set a previous step best PFEI to calculate the change in optimized solution
     
     # Loop through bound change
-    while (bound_change && (count_fine < max_round_loc_F))
+    while ((bound_change||optim_change) && (count_fine < max_round_loc_F))
         # Update counter
         count_fine += 1
 
         # Try the optimization process
         try
-            status, hist = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
+            status, hist, bestSol = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
                                                    ftol_rel=ftol_rel, max_iter_optim=max_iter_loc_F, max_iter_sizing=max_iter_sizing,
                                                    print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_local)
         catch e
@@ -839,6 +842,10 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
             optimize_par_bak = deepcopy(optimize_par)
             status_bak = status
             hist_bak = hist #Again, rebind is good enough
+
+            # Monitor change of best found PFEI for reverification of solver convergence
+            optim_change = abs((bestSol.PFEI - PFEI_previous)/PFEI_previous) > ftol_rel
+            PFEI_previous = bestSol.PFEI
         else
             # Try 1. rerun, 2. global rerun, 3. return the last known good solution
             if count_retry < max_retry
