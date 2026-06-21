@@ -594,7 +594,7 @@ end
                                    frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
                                    optimizer_global::Symbol=:GN_CRS2_LM,   max_iter_glo::Int=50000,   span_glo_to_loc::AbstractFloat=0.25, run_global::Bool=false,
                                    optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_loc_C::Int=500,   max_round_loc_C::Int=100,
-                                                                           max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10)
+                                                                           max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10,    rel_tol_round_converge::Float64 = 5e-3)
 
 `optimizer_wrapper_global_local` wraps around the single point optimizer to create a global then local search algorithm, along with adaptive bounds movement.
 
@@ -626,6 +626,7 @@ end
         - max_iter_loc_F(def): maixmum optimization iterations for fine local run
         - max_round_loc_F(def): maximum bound refinement loops for fine local run
         - max_retry(def) maximum number of reattempts if failed in local runs
+        - rel_tol_round_converge(def): relative tolerance across fine local runs to show convergence. After fine round complete one run, reverify the convergence by comparing PFEI with one more fine run.
 
         [Parameters only for global runs]
         - optimizer_global(def): global optimization method. Ex. :GN_CRS2_LM, :GN_DIRECT, (Only non-gradient base)
@@ -665,7 +666,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
                                         frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
                                         optimizer_global::Symbol=:GN_CRS2_LM,   max_iter_glo::Int=50000,   span_glo_to_loc::AbstractFloat=0.25, run_global::Bool=false,
                                         optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_loc_C::Int=500,   max_round_loc_C::Int=100,
-                                                                                max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10)
+                                                                                max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10,    rel_tol_round_converge::Float64 = 5e-3)
     #### Size check
     ((span_glo_to_loc > 0.0) && (span_glo_to_loc < 1.0)) || throw(ArgumentError("fractional local span to global span $(span_glo_to_loc) should be between 0 to 1"))
     (max_round_loc_C > 0) || throw(ArgumentError("maximum iterations of local coarse runs  $(max_round_loc_C) should be bigger than 0"))
@@ -817,7 +818,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
     bound_change = true
     optim_change = true #To reverify the results from fine search
     PFEI_previous = -1.0 #Set a previous step best PFEI to calculate the change in optimized solution
-    
+    bestSol = nothing
     # Loop through bound change
     while ((bound_change||optim_change) && (count_fine < max_round_loc_F))
         # Update counter
@@ -844,7 +845,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
             hist_bak = hist #Again, rebind is good enough
 
             # Monitor change of best found PFEI for reverification of solver convergence
-            optim_change = abs((bestSol.PFEI - PFEI_previous)/PFEI_previous) > ftol_rel
+            optim_change = abs((bestSol.PFEI - PFEI_previous)/PFEI_previous) > rel_tol_round_converge
             PFEI_previous = bestSol.PFEI
         else
             # Try 1. rerun, 2. global rerun, 3. return the last known good solution

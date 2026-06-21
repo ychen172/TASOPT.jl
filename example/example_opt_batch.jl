@@ -9,12 +9,13 @@ const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
 # Baseline aircraft model path (already sized)
-read_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/JetFuel_NoACT_Opt/JetFuel_NoACT_Opt3000.jld2")
+read_ac = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Eth_ACT_NoComp_UniEta_NoWSpan_/Opti_Eth_ACT_NoComp_UniEta_NoWSpan_1700.jld2")
+read_par = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Eth_ACT_NoComp_UniEta_NoWSpan_/Opti_Eth_ACT_NoComp_UniEta_NoWSpan_1700_optimized_parameters.csv")
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet" # Optimized results saved under folder save_dir/save_key/save_key*range.xxx
+save_key = "Opti_Eth_ACT_NoComp_UniEta_NoWSpan" # Optimized results saved under folder save_dir/save_key/save_key*range.xxx
 # First load the aircraft as some parameters depends on aircraft updated dimension
-ac = quickload_aircraft(read_dir)
+ac = quickload_aircraft(read_ac)
 @assert ac.is_sized[1] #Ensure the design mission is sized for this baseline aircraft model
 # 1) Fuselage geometry setup that require pre-processing
 num_pass_row = Int(6) # Numebr of passengers per row
@@ -24,24 +25,25 @@ ac.fuselage.cabin.front_seat_offset = 0.0  # [m] Front seat offset from the fron
 ac.fuselage.cabin.rear_seat_offset = 0.0 # [m] Back seat offset from the back of cylinder
 upd_fuse_pax!(ac) #Activate carbin geometry
 # 1.1) Optimization configuration parameters
+flag_skip_global = true #Switch to skip the global round for first iteration and !!!Use the read in parameters as starting bounds!!!
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
 optimizers = [:GN_CRS2_LM, :LN_NELDERMEAD] # Optimizer choice. [Global,Local]
-max_num_iter_opt = [20000, 800, 10000] # Maximum number of optimization steps [Global, Local Coarse, Local Fine]
+max_num_iter_opt = [30000, 800, 10000] # Maximum number of optimization steps [Global, Local Coarse, Local Fine]
 max_num_round_loc = [120, 30] #Maximum number of adaptive bounds refinements rounds for local search [Local Coarse, Local Fine]
 span_glo_to_loc = 0.25 # span_local_search/span_global_search
 # 1.2) Setup an entry (value does not matter) for test ratio to be sweep later in optimization loop
-optimization_ranges = collect(2700:100:2800) #[nmi] ranges to optimize the current aircraft !!! Will be converted to meter later !!!
+optimization_ranges = collect(1800:100:3000) #collect(300:100:3000) #[nmi] ranges to optimize the current aircraft !!! Will be converted to meter later !!!
 mis_opt = Requirement[]
 push!(mis_opt, Requirement(:(parm[imRange,1]), 300*1852.0)) #[m] Range !!! To be updated across various missions !!!
 # 2) Fixed design parameters throughout the simulation
-push!(mis_opt, Requirement(:(options.ifuel), Int(24)))                # Fuel type.                   Ex. Jet Fuel(24),       Ethanol(32)
-push!(mis_opt, Requirement(:(parg[igrhofuel]), 817.0))                # [kg/m3] Fuel Density.        Ex. Jet Fuel(817.0),    Ethanol(789.0)
-push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 358694.0))          # [J/kg] Fuel LHV_vapor. Ex. Jet Fuel(358694.0), Ethanol(918187.9)
-push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 358694.0)) # Duplicated just in case. Only use if heat exchanger.
-push!(mis_opt, Requirement(:(options.has_ACT_fuel), false))  # Whether to allow additional center fuel tank (ACT)
+push!(mis_opt, Requirement(:(options.ifuel), Int(32)))                # Fuel type.                   Ex. Jet Fuel(24),       Ethanol(32)
+push!(mis_opt, Requirement(:(parg[igrhofuel]), 789.0))                # [kg/m3] Fuel Density.        Ex. Jet Fuel(817.0),    Ethanol(789.0)
+push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 918187.9))          # [J/kg] Fuel LHV_vapor. Ex. Jet Fuel(358694.0), Ethanol(918187.9)
+push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 918187.9)) # Duplicated just in case. Only use if heat exchanger.
+push!(mis_opt, Requirement(:(options.has_ACT_fuel), true))  # Whether to allow additional center fuel tank (ACT)
 push!(mis_opt, Requirement(:(options.compensate_ACT), false)) # Whether to increase the aircraft length to accmondate for the cargo space taken by ACT
-push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_vol), 0.88))  # Volumetric efficiency of ACT fuel tank
-push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_wei), 0.93))  # Gravimetric efficiency of ACT fuel tank
+push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_vol), 1.00))  # Volumetric efficiency of ACT fuel tank
+push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_wei), 1.00))  # Gravimetric efficiency of ACT fuel tank
 push!(mis_opt, Requirement(:(para[iaMach, ipclimbn:ipdescent1, 1]), 0.8))        # Cruise Mach number
 push!(mis_opt, Requirement(:(para[iarcls, ipclimb2:ipdescent4, 1]), 1.08))       # Wing cl ratio span break to root
 push!(mis_opt, Requirement(:(parg[igxeng]), ac.wing.layout.box_x - fuse_radius)) # [m] Engine axial location
@@ -52,7 +54,7 @@ push!(mis_opt, Requirement(:(htail.opt_sizing), TailSizing.CLmaxFwdCG)) # Horizo
 push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7))               # Horizontal tail CL at forward CG condition
 # 3) Constraints for this optimization
 con_opt = Constraint[]
-push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1e4, lim_up=35.814)) # [m] Type C wing span constraint
+# push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1e4, lim_up=35.814)) # [m] Type C wing span constraint
 push!(con_opt, Constraint(:(parm[imlBF, 1]); pen_sca=1e4, lim_up=2400.0)) # [m] Maximum balanced field length for takeoff
 push!(con_opt, Constraint(:(para[iagamV, ipclimbn, 1]); pen_sca=1e4, lim_lo=0.015)) # [rad] Minimum cruise climb angle at TOC
 push!(con_opt, Constraint(:(pare[ieTt3, :, 1]); pen_sca=1e4, lim_up=900.0)) # [K] Maximum compressor outlet temperature
@@ -62,27 +64,34 @@ push!(con_opt, Constraint(:(parm[imWTO, 1]); pen_sca=1e4, lim_up=:(parg[igWMTO])
 push!(con_opt, Constraint(:(parm[imVfuel, 1]); pen_sca=1e4, lim_up=:(parg[igVfmax]), eps_buff=1e-4)) # [m3] Maximum fuel volume
 # 4) Parameters to be optimized (Initial guess(Only for local search), Upper bound, Lower bound, Initial Step Size(Only for local search))
 par_opt = Parameter[] #Step size = 1/5 of local search span = 1/5 * 1/4 * global search span specified below
-push!(par_opt, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 3.0)) # [deg] Wing sweep angle 
-push!(par_opt, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 0.75)) # Wing aspect ratio
-push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.03)) # Wing inner thickness to chord
-push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.03))
-push!(par_opt, Parameter(:(wing.inboard.λ), 0.7, 1.0, 0.1, 0.05)) # Wing inner taper ratio
-push!(par_opt, Parameter(:(wing.outboard.λ), 0.3, 1.0, 0.1, 0.05))
-push!(par_opt, Parameter(:(parg[igyeng]), fuse_radius*3.0, fuse_radius*4.0, fuse_radius*2.0, fuse_radius*0.1)) # [m] Span wise engine location
-push!(par_opt, Parameter(:(wing.layout.ηs), 0.3, 0.4, 0.2, 0.01)) # Wing span break location over half span
-push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.08)) # Wing cl ratio of tip to root at cruise
-push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.04)) # Wing CL at cruise
-push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 800.0)) # [m] Cruise altitude
-push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.14)) # Fan PR at cruise 
+push!(par_opt, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 5.0)) # [deg] Wing sweep angle 
+push!(par_opt, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 1.5)) # Wing aspect ratio
+push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05)) # Wing inner thickness to chord
+push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
+push!(par_opt, Parameter(:(wing.inboard.λ), 0.7, 1.0, 0.1, 0.1)) # Wing inner taper ratio
+push!(par_opt, Parameter(:(wing.outboard.λ), 0.3, 1.0, 0.1, 0.1))
+push!(par_opt, Parameter(:(parg[igyeng]), fuse_radius*3.0, fuse_radius*4.0, fuse_radius*2.0, fuse_radius*0.2)) # [m] Span wise engine location
+push!(par_opt, Parameter(:(wing.layout.ηs), 0.3, 0.4, 0.2, 0.02)) # Wing span break location over half span
+push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15)) # Wing cl ratio of tip to root at cruise
+push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07)) # Wing CL at cruise
+push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0)) # [m] Cruise altitude
+push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2)) # Fan PR at cruise 
 push!(par_opt, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 1.0)) # HPC PR at cruise
-push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 1.5)) # Fan BPR at cruise
-push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 50.0)) #[K] Turbine inlet temperature  at cruise
+push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2.0)) # Fan BPR at cruise
+push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0)) #[K] Turbine inlet temperature  at cruise
 push!(par_opt, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.2)) #Vertical tail aspec ratio 
 # 5) Create a fixed global bounds container fixed throughout local searches
 bound_glob = deepcopy(par_opt)
+# 6) Optionally overwrite the starting parameters if skip the initial global run
+if flag_skip_global
+    par_opt = load_csv_parameters(read_par)
+    for (idx_cur, par_cur) in enumerate(par_opt) #Update the initial step size
+        par_cur.d_val = bound_glob[idx_cur].d_val
+    end
+end
 
 #### Save the directory to save the optimized solution
-save_dir_actual = joinpath(save_dir,save_key) #Actual directory to save data
+save_dir_actual = joinpath(save_dir,save_key*"_") #Actual directory to save data
 mkpath(save_dir_actual)
 
 #### Initialize and save fixed configuration parameters for the optimization
@@ -101,7 +110,7 @@ save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_global_bounds.csv"), 
 #### Optimization
 for (i,ran_cur) in enumerate(optimization_ranges)
     # Choose whether to run global
-    run_global = (i==1) #only run global for the first case
+    run_global = (i==1 && !flag_skip_global) #only run global for the first case if turned on
     # Convert current range to meter and update in the mission requirement
     mis_opt[1].val = ran_cur*1852.0 #[m]
     # Run the global local optimization process
