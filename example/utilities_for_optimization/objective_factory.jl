@@ -666,7 +666,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
                                         frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
                                         optimizer_global::Symbol=:GN_CRS2_LM,   max_iter_glo::Int=50000,   span_glo_to_loc::AbstractFloat=0.25, run_global::Bool=false,
                                         optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_loc_C::Int=500,   max_round_loc_C::Int=100,
-                                                                                max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10,    rel_tol_round_converge::Float64 = 5e-3)
+                                                                                max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10,    rel_tol_round_converge::Float64 = 1e-3)
     #### Size check
     ((span_glo_to_loc > 0.0) && (span_glo_to_loc < 1.0)) || throw(ArgumentError("fractional local span to global span $(span_glo_to_loc) should be between 0 to 1"))
     (max_round_loc_C > 0) || throw(ArgumentError("maximum iterations of local coarse runs  $(max_round_loc_C) should be bigger than 0"))
