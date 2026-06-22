@@ -28,7 +28,7 @@ Outpus:
             If all ranges are not feasible, each element will have length 0 (Empty element)
 """
 function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-    epsWpay::Float64 = 1e-8, epsBuff::Float64 = 0.0, save_dir::String = "ModelSaved", save_name::String = "OffDesign",  flg_save_ac::Bool = true)
+    epsWpay::Float64 = 1e-8, epsBuff::Float64 = 0.0, save_dir::String = "ModelSaved", save_name::String = "OffDesign",  flg_save_ac::Bool = false)
 
     #### Check on sizing
     ac.is_sized[1] || error("Aircraft model needs to be sized before runing offdesign.")
@@ -195,86 +195,90 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
     return output
 end
 
-function findR1R2_wrapper(mode, R_LB, R_UB, epsRange, epsBuff, flg_save_ac, ac, idxFuel, rhoFuel, hvap_fuel, save_dir, save_name)
-    gap_range_ini = R_UB-R_LB #Initial search range gap, can be at least 0.0
-    frac_range_cur = (gap_range_ini <= epsRange*max(abs(R_UB),abs(R_LB),1.0)) ? 0.0 : 1.0 #No search if intial search range is too small
-    R_guess = 0.5*(R_UB+R_LB) #Initial guess
+"""
+    findR1R2R3(mode::Symbol, R_LB::Float64, R_UB::Float64, ac, idxFuel::Int, rhoFuel::Float64, hvap_fuel::Float64; 
+               epsRange::Float64 = 1e-8, epsWpay::Float64 = 1e-8, minBoundSpan::Float64 = 1.0, eps_buff_pay_vol_Range::Float64 = 1e-6, eps_buff_weight_vol_Weight::Float64 = 0.0,
+               flg_save_ac::Bool = false, save_name::String = "Dummy", save_dir::String = "ModelSaved")
+
+`findR1R2R3` finds R1, R2, R3 of a aircraft model
+
+    **Inputs**
+        - mode: Select for :R1, :R2, or :R3 to find
+        - R_LB: [nmi] Lower bound for the search, needs to be at least feasible for one passenger. If R1 smaller or equal to this, then this will be the final output range too. 
+        - R_UB: [nmi] upper bound. Can be large where solution where to not feasible
+                R_LB and R_UB both need to be bigger than zero and R_UB needs to be minBoundSpan nmi larger than R_LB
+        - ac: Aircraft model. The first mission needs to be sized. Will NOT be altered by the current function.
+        - idxFuel: fuel index(type) for this mission
+        - rhoFuel: (kg/m3) fuel density for this mission
+        - hvap_fuel: (J/kg) fuel heat of vaporization
+        - epsRange: Fractional range span WRT initial below which bisection search is complete (Outer loop for range)
+        - epsWpay: Fractional payload span WRT initial below which bisection search is complete (Inner loop for weight)
+        - minBoundSpan: [nmi] Minimum starting span or gap between the upper and lower range bounds
+        - eps_buff_pay_vol_Range: (Outer loop) Buffer so that R1 has payload fraction > 1-this and R2 has fuel volume < 1-this. Necessary as a feasible case always have fuel volume and payload weight strictly within constraint.
+        - eps_buff_weight_vol_Weight: (Inner loop) Buffer so that feasible case allow WTO fraction < 1+this and fuel volume < 1+this, NOT Necessary. 0.0 allows strictly constraint satisfying
+        - flg_save_ac: To save the R mission found
+        - save_name
+        - save_dir: will be created if not exist
+
+    **Outputs**
+        - out_dict::Dict: (Assured not empty or else will error out) 
+                    for the R mission "payload_weight_N", "range_nmi", "PFEI_JJ", "fuel_tank_frac", "payload_frac"
+"""
+function findR1R2R3(mode::Symbol, R_LB::Float64, R_UB::Float64, ac, idxFuel::Int, rhoFuel::Float64, hvap_fuel::Float64;
+                    epsRange::Float64 = 1e-8, epsWpay::Float64 = 1e-8, minBoundSpan::Float64 = 1.0, eps_buff_pay_vol_Range::Float64 = 1e-6, eps_buff_weight_vol_Weight::Float64 = 0.0,
+                    flg_save_ac::Bool = false, save_name::String = "Dummy", save_dir::String = "ModelSaved")
+    #### Size check
+    ((R_LB > 0.0) && (R_UB > 0.0)) || throw(ArgumentError("Upper $(R_UB) and lower $(R_LB) range bounds have to have larger than 0.0"))
+    ((R_UB - R_LB)>minBoundSpan) || throw(ArgumentError("R_UB - R_LB $(R_UB - R_LB) has to be bigger than $(minBoundSpan) nmi"))
+    test_out = off_design_PRD(ac, idxFuel, rhoFuel, hvap_fuel, [R_LB]; flg_save_ac = false, epsWpay = epsWpay, epsBuff = eps_buff_weight_vol_Weight)
+    (length(test_out["payload_frac"]) > 0) || throw(ArgumentError("Input lower range bound $(R_LB) does not lead to any feasible solution"))
+
+    #### Initialization
+    gap_range_ref = R_UB-R_LB #Reference search range span for convergence calculation
+    frac_range_cur = 1.0 #Current fractional search range
+    R_guess = 0.5*(R_UB+R_LB) #Initial guess [nmi]
     R_out = R_LB #final solution
     count_iter = 0
     while  (frac_range_cur>epsRange) && (count_iter<1000)
-        #### Test the new guess range
-        out_dict = off_design_PRD(ac, idxFuel, rhoFuel, hvap_fuel, [R_guess]; save_dir="", save_name="", flg_save_ac=false)
-        #### Judge
-        condition = nothing
+        # Test the new guess range
+        out_dict = off_design_PRD(ac, idxFuel, rhoFuel, hvap_fuel, [R_guess]; flg_save_ac = false, epsWpay = epsWpay, epsBuff = eps_buff_weight_vol_Weight)
+
+        # Judge
+        cond_upper_bound = nothing
         if mode == :R1
             #If case simulation failed (flight range too far to be feasible) or payload is not at max capacity, that is an upper bound. If R1<MinRange, UB will be as short as possible.
-            condition = (length(out_dict["payload_frac"])   <= 0) || (out_dict["payload_frac"][1]   <= 1.0-epsBuff)
+            cond_upper_bound = (length(out_dict["payload_frac"]) <= 0) || (out_dict["payload_frac"][1] <= 1.0-eps_buff_pay_vol_Range)
         elseif mode == :R2
             #If case simulation failed (flight range too far to be feasible) or fuel tank is at max capacity, that is an upper bound.
-            condition = (length(out_dict["fuel_tank_frac"]) <= 0) || (out_dict["fuel_tank_frac"][1] >= 1.0-epsBuff)
+            cond_upper_bound = (length(out_dict["payload_frac"]) <= 0) || (out_dict["fuel_tank_frac"][1] >= 1.0-eps_buff_pay_vol_Range)
+        elseif mode == :R3
+            #If case simulation failed (flight range too far to be feasible), that is an upper bound.
+            cond_upper_bound = (length(out_dict["payload_frac"]) <= 0)
         else
-            error("Unknown Mode of Calculation")
+            error("Unknown Mode of Calculation $(mode)")
         end
+        
         # Set new guess
-        if condition
+        if cond_upper_bound
             R_UB = R_guess
         else
             R_LB = R_guess
             R_out = R_guess
         end
-        # Recompute criteria
-        frac_range_cur = (R_UB-R_LB)/gap_range_ini
+        
+        # Recompute convergence criteria
+        frac_range_cur = (R_UB-R_LB)/gap_range_ref
         R_guess = 0.5*(R_UB+R_LB)
         count_iter += 1
     end
-    (count_iter < 1000) || println("Warning: time out for range search loop(Unlikely due to bisection nature(something is off))")
-    # Rerun the feasible case and store the data
-    out_dict = off_design_PRD(ac, idxFuel, rhoFuel, hvap_fuel, [R_out]; save_dir=save_dir, save_name=save_name*String(mode)*"_", flg_save_ac=flg_save_ac)
-    return out_dict
-end
-
-"""
-off_design_R1R2(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-                epsRange::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "R1R2",  flg_save_ac::Bool = true)
-
-This function determine the R1 and R2 range of an aircraft
-    Assume fixed CL for off-design
-    Assume starting from design point engine parameters
-    In terms of flight model to be saved from here. Beware the following variable will not be same as design point anymore. (idxFuel, rhoFuel, hvap_fuel)
-    The aircraft model provided has to have the mission 1 containing the original design mission and all design parameters unmodified by any off-design operation
-    Make sure lower range bounding are runable feasible cases, or else the bisection condition cannot distringuish short range crashing versus long range crashing 
-Inputs:
-    ac: TASOPT aircraft model: (First mission has to be design point with unmodified idxFuel(optional), rhoFuel, and hvap_fuel(optional))
-    idxFuel: int: the fuel to be use for these two R1 R2 offdesign missions
-    rhoFuel: float: fuel density (kg/m3)
-    hvap_fuel: float: Heat of vaporization of the fuel (J/kg)
-    ranges: vector{float}: A list of four bounding ranges to test [R1_LB, R1_UB, R2_LB, R2_UB] [nmi] (Have to ensure lower bounds are runnable)
-    epsRange: float: fractional search range for convergence
-    epsBuff: float: small fractional buffer given to the fuel tank and payload weight limits for R1 and R2 find
-    save_dir: String: name of the save directory (No need if no saving)
-    save_name: String: name for the saved model (save_name*string(round(Int,ran_cur))*".jld2") (No need if no saving)
-    flg_save_ac: bool: true then the off-design ac models will be saved
-Outpus:
-    two output in a list: Dict: ["payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}, "fuel_tank_frac": Vector{Float64}, "payload_frac": Vector{Float64}] #If all ranges not feasible, each element will have length 0
-"""
-function off_design_R1R2(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-                         epsRange::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "R1R2",
-                         flg_save_ac::Bool = true)
-
-    #### Check on sizing
-    length(ranges) == 4 || error("Need to provide a list of LB UB ranges for R1 and R2 Bisectioning")
-    R1_LB, R1_UB, R2_LB, R2_UB = ranges
-    (R1_LB <= R1_UB) || error("R1_LB: $(R1_LB) is bigger than R1_UB: $(R1_UB)")
-    (R2_LB <= R2_UB) || error("R2_LB: $(R2_LB) is bigger than R2_UB: $(R2_UB)")
-
-    #### Determine R1
-    out_dict_R1 = findR1R2_wrapper(:R1, R1_LB, R1_UB, epsRange, epsBuff, flg_save_ac, ac, idxFuel, rhoFuel, hvap_fuel, save_dir, save_name)
-
-    #### Determine R2
-    out_dict_R2 = findR1R2_wrapper(:R2, R2_LB, R2_UB, epsRange, epsBuff, flg_save_ac, ac, idxFuel, rhoFuel, hvap_fuel, save_dir, save_name)
+    (count_iter < 1000) || @warn "Maximum iterations reached for range search loop(Unlikely due to bisection nature(something is off))"
     
-    ####Ouput
-    return out_dict_R1, out_dict_R2
+    #### Rerun the feasible case and output
+    out_dict = off_design_PRD(ac, idxFuel, rhoFuel, hvap_fuel, [R_out]; 
+                              epsWpay = epsWpay, epsBuff = eps_buff_weight_vol_Weight,
+                              flg_save_ac = flg_save_ac, save_name = save_name, save_dir = save_dir)
+    (length(out_dict["payload_frac"]) > 0) || throw(ErrorException("Determined range $(R_out) does not lead to any feasible solution"))
+    return out_dict
 end
 
 """
