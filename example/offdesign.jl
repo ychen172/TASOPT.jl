@@ -6,28 +6,29 @@ include(__TASOPTindices__)
 
 """
 off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-               epsWpay::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign", flg_save_ac::Bool = true)
+               epsWpay::Float64 = 1e-8, epsBuff::Float64 = 0.0, save_dir::String = "ModelSaved", save_name::String = "OffDesign",  flg_save_ac::Bool = true)
 
 This function determine the maximum payload range envelope with a prescribe list of possible flight range
     Assume fixed CL for off-design
     Assume starting from design point engine parameters
-    In terms of flight model to be saved. Beware the following variable will not be same as design point anymore. (idxFuel, rhoFuel, hvap_fuel)
+    In terms of flight model to be saved. Beware the following variable will not be same at design point anymore. (idxFuel, rhoFuel, hvap_fuel)
 Inputs:
-    ac: TASOPT aircraft model: has to be sized
-    idxFuel: int: the fuel to be use
+    ac: TASOPT aircraft model: has to be sized at the design mission (1st mission)
+    idxFuel: int: the fuel to use
     rhoFuel: float: fuel density (kg/m3)
     hvap_fuel: float: Heat of vaporization of the fuel (J/kg)
     ranges: vector{float}: A list of potential off-design ranges to test [nmi]
     epsWpay: float: fractional search range for convergence
-    epsBuff: float: small fractional buffer given to the constraint for roundoff error
+    epsBuff: float: small fractional buffer given to the constraint for roundoff error (Set to 0 for strictly constraint satisfying)
     save_dir: String: name of the save directory (No need if no saving)
     save_name: String: name for the saved model (save_name*string(round(Int,ran_cur))*".jld2") (No need if no saving)
     flg_save_ac: bool: true then the off-design ac models will be saved
 Outpus:
-    output: Dict: ["payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}, "fuel_tank_frac": Vector{Float64}, "payload_frac": Vector{Float64}] #If all ranges not feasible, each element will have length 0
+    output: Dict: ["payload_weight_N": Vector{Float64} , "range_nmi": Vector{Float64}, "PFEI_JJ": Vector{Float64}, "fuel_tank_frac": Vector{Float64}, "payload_frac": Vector{Float64}] 
+            If all ranges are not feasible, each element will have length 0 (Empty element)
 """
 function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, hvap_fuel::Float64, ranges::Vector{Float64}; 
-    epsWpay::Float64 = 1e-4, epsBuff::Float64 = 1e-4, save_dir::String = "ModelSaved", save_name::String = "OffDesign",  flg_save_ac::Bool = true)
+    epsWpay::Float64 = 1e-8, epsBuff::Float64 = 0.0, save_dir::String = "ModelSaved", save_name::String = "OffDesign",  flg_save_ac::Bool = true)
 
     #### Check on sizing
     ac.is_sized[1] || error("Aircraft model needs to be sized before runing offdesign.")
@@ -46,7 +47,7 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
 
     #### Design parameter to check the validity of the solution
     weight_TO_max = ac.parg[igWMTO] #Maximum takeoff mass (N)
-    vol_fuel_max = ac.parg[igWfmax] / gee / ac.parg[igrhofuel] #Fuel volume maximum m3
+    vol_fuel_max = ac.parg[igVfmax] #Fuel volume maximum m3
     weight_empty = ac.parm[imWTO,1] - ac.parm[imWfuel,1] - ac.parm[imWpay, 1] #Empty weight (N)
     weight_one_passen = ac.parm[imWperpax, 1] #Weight of one passenger (N)
     weight_payload_max = ac.parg[igWpaymax] #Maximum weight of payload including cargo (N)
@@ -90,10 +91,10 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
         
         # Run the sizing
         try
-            fly_mission!(ac, 2; itermax = 100, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
+            fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
             weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
-            vol_fuel = ac.parm[imWfuel,2] / gee / ac.parg[igrhofuel] #m3
-            if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO < 0.0 || vol_fuel < 0.0
+            vol_fuel = ac.parm[imVfuel, 2] #m3
+            if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO <= 0.0 || vol_fuel <= 0.0
                 range_max_found = range_cur
                 continue
             end
@@ -121,10 +122,10 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
 
             # Run the sizing
             try
-                fly_mission!(ac, 2; itermax = 100, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
+                fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
                 weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
-                vol_fuel = ac.parm[imWfuel,2] / gee / ac.parg[igrhofuel] #m3
-                if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO < 0.0 || vol_fuel < 0.0
+                vol_fuel = ac.parm[imVfuel, 2] #m3
+                if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO <= 0.0 || vol_fuel <= 0.0
                     flg_good = false
                 else
                     flg_good = true
@@ -156,10 +157,10 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
         payload_good = min(payload_good, weight_payload_max)  #N
         ac.parm[imWpay,2] = payload_good
         try
-            fly_mission!(ac, 2; itermax = 100, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
+            fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
             weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
-            vol_fuel = ac.parm[imWfuel,2] / gee / ac.parg[igrhofuel] #m3
-            if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO < 0.0 || vol_fuel < 0.0
+            vol_fuel = ac.parm[imVfuel, 2] #m3
+            if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO <= 0.0 || vol_fuel <= 0.0
                 println("The final rerun did not work: Wpay: $(payload_good) N at range $(range_cur) nmi with weight_TO/max 
                 $(weight_TO/weight_TO_max) and vol_fuel/max $(vol_fuel/vol_fuel_max)")
                 continue
