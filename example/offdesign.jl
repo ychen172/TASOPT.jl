@@ -1,5 +1,5 @@
 module PRD
-export off_design_PRD, off_design_specified, off_design_R1R2
+export off_design_PRD, off_design_specified, findR1R2R3
 
 using TASOPT
 include(__TASOPTindices__)
