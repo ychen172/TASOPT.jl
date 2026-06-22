@@ -44,8 +44,8 @@ for (i,range_cur) in enumerate(ranges_design)
                           flg_save_ac = true, save_name = save_key*"_$(round(Int,range_cur))_R2_", save_dir = save_dir)
     out_R3 = findR1R2R3(:R3, range_LB, range_UB, ac, fuel_idx, rho_fuel, hvap_fuel;
                           flg_save_ac = true, save_name = save_key*"_$(round(Int,range_cur))_R3_", save_dir = save_dir)
-    (length(out_R1[payload_weight_N])>0 && length(out_R2[payload_weight_N])>0 && length(out_R3[payload_weight_N])>0) ||
-    throw(ErrorException("One of the len(R1)$(length(out_R1[payload_weight_N])), len(R2)$(length(out_R2[payload_weight_N])), len(R3)$(length(out_R3[payload_weight_N])), finding cases has zero element (no solution found)"))
+    (length(out_R1["payload_weight_N"])>0 && length(out_R2["payload_weight_N"])>0 && length(out_R3["payload_weight_N"])>0) ||
+    throw(ErrorException("One of the len(R1)$(length(out_R1["payload_weight_N"])), len(R2)$(length(out_R2["payload_weight_N"])), len(R3)$(length(out_R3["payload_weight_N"])), finding cases has zero element (no solution found)"))
 
     # Collect the R1 R2 R3 Information
     if i == 1
