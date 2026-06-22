@@ -23,7 +23,7 @@ rho_fuel      = 789.0    #Eth: 789.0 , Jet: 817.0 #kg/m3
 hvap_fuel     = 918187.9 #Eth: 918187.9 , Jet: 358694.0 #J/kg
 
 #### Initialize new folder for saved aircraft model
-save_dir = save_dir_pre*save_key*"_" #Consistent naming between content and folder
+save_dir = joinpath(save_dir_pre,save_key*"_") #Consistent naming between content and folder
 mkpath(save_dir)
 
 #### Initialize container to save ranges output into CSV
@@ -49,9 +49,9 @@ for (i,range_cur) in enumerate(ranges_design)
 
     # Collect the R1 R2 R3 Information
     if i == 1
-        out_R1_collect = out_R1
-        out_R2_collect = out_R2
-        out_R3_collect = out_R3
+        global out_R1_collect = out_R1
+        global out_R2_collect = out_R2
+        global out_R3_collect = out_R3
     else
         for (key, value) in out_R1
             push!(out_R1_collect[key], value[1])

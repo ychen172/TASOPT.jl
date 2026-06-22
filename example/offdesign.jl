@@ -91,7 +91,7 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
         
         # Run the sizing
         try
-            fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
+            fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL", printTO = false)
             weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
             vol_fuel = ac.parm[imVfuel, 2] #m3
             if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO <= 0.0 || vol_fuel <= 0.0
@@ -122,7 +122,7 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
 
             # Run the sizing
             try
-                fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
+                fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL", printTO = false)
                 weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
                 vol_fuel = ac.parm[imVfuel, 2] #m3
                 if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO <= 0.0 || vol_fuel <= 0.0
@@ -157,7 +157,7 @@ function off_design_PRD(ac::TASOPT.aircraft, idxFuel::Int64, rhoFuel::Float64, h
         payload_good = min(payload_good, weight_payload_max)  #N
         ac.parm[imWpay,2] = payload_good
         try
-            fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
+            fly_mission!(ac, 2; itermax = 150, initializes_engine = true, opt_prescribed_cruise_parameter = "CL", printTO = false)
             weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
             vol_fuel = ac.parm[imVfuel, 2] #m3
             if weight_TO > weight_TO_max || vol_fuel > vol_fuel_max || weight_TO <= 0.0 || vol_fuel <= 0.0
