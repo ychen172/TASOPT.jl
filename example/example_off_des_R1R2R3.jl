@@ -65,6 +65,11 @@ for (i,range_cur) in enumerate(ranges_design)
     end
 end
 
+#### Preprending the design range Information
+out_R1_collect["design_range_nmi"] = ranges_design
+out_R2_collect["design_range_nmi"] = ranges_design
+out_R3_collect["design_range_nmi"] = ranges_design
+
 #### Print out the collect R1 R2 R3 data into csv a csv file
 R1_df = DataFrame(; (Symbol(k) => v for (k,v) in out_R1_collect)...)
 CSV.write(joinpath(save_dir,save_key*"_R1.csv"), R1_df)
