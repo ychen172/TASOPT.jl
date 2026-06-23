@@ -137,6 +137,21 @@ function Requirement(name::Expr, val::Union{Real,Enum,AbstractArray{<:Real},Abst
     return Requirement{typeof(val)}(name,val,field_path,index)
 end
 
+"""
+Container specifically used to pass off design mission requirements into the make_obj function
+    An empty constructor is also provided to allow succesive pushing. Need to define type.
+"""
+mutable struct OffDesMission{T<:Real}
+    ranges_m::Vector{T}
+    wei_pay_N::Vector{T}
+end
+
+"""
+Empty constructor for OffDesMission, need to specify a concrete type
+"""
+function OffDesMission{T}() where {T<:Real}
+    return OffDesMission(Vector{T}(), Vector{T}())
+end
 
 """
     best_feasible(hist_all::OptHistory)
