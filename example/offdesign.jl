@@ -1,5 +1,5 @@
 module PRD
-export off_design_PRD, off_design_specified, findR1R2R3
+export off_design_PRD, off_design_specified!, findR1R2R3
 
 using TASOPT
 include(__TASOPTindices__)
@@ -439,7 +439,7 @@ function off_design_specified!(ac, idxFuel::Int, rhoFuel::AbstractFloat, hvap_fu
         
         #### Attempt the off-design mission
         try
-            fly_mission!(ac, 2; itermax = itermax, initializes_engine = true, opt_prescribed_cruise_parameter = "CL")
+            fly_mission!(ac, 2; itermax = itermax, initializes_engine = true, opt_prescribed_cruise_parameter = "CL", printTO = false)
             weight_TO = weight_empty + ac.parm[imWfuel,2] + ac.parm[imWpay,2] #N
             vol_fuel = ac.parm[imVfuel, 2] #m3
             if (:MWTO in constraints) && ((weight_TO > weight_TO_max) || (weight_TO <= 0.0))
