@@ -9,6 +9,8 @@ using JLD2
 using DataFrames
 include(__TASOPTindices__)
 include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
+include(joinpath(__TASOPTroot__,"../example/utilities_for_offdesign/offdesign.jl"))
+using .PRD:off_design_specified!, has_two_missions, create_duplicated_two_missions!
 
 """
 Container type for contraint for optimization
@@ -141,15 +143,15 @@ end
 Container specifically used to pass off design mission requirements into the make_obj function
     An empty constructor is also provided to allow succesive pushing. Need to define type.
 """
-mutable struct OffDesMission{T<:Real}
-    ranges_m::Vector{T}
+mutable struct OffDesMission{T<:AbstractFloat}
+    ranges_nmi::Vector{T}
     wei_pay_N::Vector{T}
 end
 
 """
 Empty constructor for OffDesMission, need to specify a concrete type
 """
-function OffDesMission{T}() where {T<:Real}
+function OffDesMission{T}() where {T<:AbstractFloat}
     return OffDesMission(Vector{T}(), Vector{T}())
 end
 
@@ -173,7 +175,7 @@ function best_feasible(hist_all::OptHistory)
 end
 
 """
-    make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=100.0)
+    make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), off_des_miss::OffDesMission=OffDesMission{Float64}(), off_des_constraints::AbstractVector{Symbol}=[:WPay,:MWTO,:VolFuel], print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=100.0)
 
 `make_obj` constructs and returns an objective function for (PFEI flight) that will be fed to optimizer
 
@@ -182,6 +184,8 @@ end
         - `ac`: Baseline aircraft model for sizing (Passed by copy)
         - `parameters::AbstractVector{<:Parameter}`: parameters for optimization. (SI unit except for sweep angle using deg) (Unaltered by obj! call)
         - `constraints::AbstractVector{<:Constraint}=default empty`: constraints for optimization. Empty container of this type for unconstraint problem. (SI unit except for sweep angle using deg)
+        - `off_des_miss::OffDesMission`: off-design flight ranges and payload weights to achieve
+        - `off_des_constraints::AbstractVector{Symbol}`: constraints for off-design missions to judge for a successful run. Only accept :WPay,:MWTO,:VolFuel
         - `print_every::Int=default`: every number of iterations before print out for the current optimized state (Performed by obj! call)
         - `max_iter_sizing::Int=default`: maximum number of iteration used for the sizing loop
         - `pen_failed_sizing::Float64=default`: penalty value for failed sizing process (to the scale of PFEI)
@@ -198,13 +202,15 @@ end
         - In the outer loop, if parameters length got changed, then the number of parameters expected by obj! here is also altered correspondingly. Beware.
         - All inputs are in SI unit except for sweep angle that use degree
         - For the constraints, maximum of value will be check against upper bound and minimum value against lower bound. No support for mean, or other statisics feature of data
+        - If off_des_miss were empty or not provided, no additional penalty will be calculated from the off-design mission
 """
-function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=100.0)
+function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::AbstractVector{<:Constraint}=Vector{Constraint}(), off_des_miss::OffDesMission=OffDesMission{Float64}(), off_des_constraints::AbstractVector{Symbol}=[:WPay,:MWTO,:VolFuel], print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=100.0)
     #### Size check
     isempty(parameters)    && throw(ArgumentError("`parameters` cannot be empty. Provide at least one optimization variable."))
     print_every >= 1       || throw(ArgumentError("`print_every` must be ≥ 1"))
     max_iter_sizing >= 10  || throw(ArgumentError("`max_iter_sizing` must be ≥ 10"))
     pen_failed_sizing > 0  || throw(ArgumentError("`pen_failed_sizing` must be > 0"))
+    all(in([:WPay,:MWTO,:VolFuel]), off_des_constraints) || throw(ArgumentError("Provided off-design constraints not within the acceptable types"))
 
     #### Construct an optimization history to be returned by reference for successive update
     hist = OptHistory() #History with empty entries
@@ -212,6 +218,13 @@ function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::Abs
     #### make a backup
     ac_bak = deepcopy(ac)
     
+    #### optionally create a duplicated off-design mission if off-design requirements were requested
+    if !isempty(off_des_miss.ranges_nmi) # If there were off-design mission requested
+        if !has_two_missions(ac_bak) # Pre-setup two missions allows faster design parameters update to off-design mission later
+            create_duplicated_two_missions!(ac_bak)
+        end
+    end
+
     #### make a iteration counter
     count = 0
 
@@ -262,8 +275,20 @@ function make_obj(ac, parameters::AbstractVector{<:Parameter} ; constraints::Abs
             end
         end
 
+        #### Check for any off-design mission requirements
+        off_des_penalty = 0.0
+        if !isempty(off_des_miss.ranges_nmi)
+            # Run the off-design missions (Probably also corrupte the aircraft model locally)
+            off_des_out = off_design_specified!(ac, ac.options.ifuel, ac.parg[igrhofuel], ac.pare[iehvap, ipcruise1, 1], off_des_miss.ranges_nmi, off_des_miss.wei_pay_N;
+                                                mod_ac_inplace=true, itermax=max_iter_sizing, constraints=off_des_constraints, save_model=false)
+            # Non-zero penalty for unconverged off-design missions
+            if length(off_des_out.PFEI_JJ) != length(off_des_miss.ranges_nmi)
+                off_des_penalty = pen_failed_sizing # J/J
+            end
+        end
+
         #### Final Penalty
-        total_penalty = main_penalty + add_penalty
+        total_penalty = main_penalty + add_penalty + off_des_penalty
 
         #### Store history only if sizing were successful
         if flgSuccessed
@@ -372,6 +397,8 @@ const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIM
                             optimize_par::AbstractVector{<:Parameter};
                             mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(),
                             constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
+                            off_des_miss::OffDesMission=OffDesMission{Float64}(), 
+                            off_des_constraints::AbstractVector{Symbol}=[:WPay,:MWTO,:VolFuel],
                             ftol_rel::Float64=1e-6,
                             max_iter_optim::Int=1000,
                             max_iter_sizing::Int=150,
@@ -386,6 +413,8 @@ const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIM
         - optimize_par: parameters to be optimized (not empty) (:val updated in place if succeeded, left at input state if failed) (constructed using constructor)
         - mission_req: requirements for the sizing mission (can be empty[native mission]) (No Change in place) (constructed using constructor)
         - constraints: constraints to be satisfied by the solution (can be empty[unconstrained]) (No Change in place) (constructed using constructor)
+        - off_des_miss: off-design flight ranges and payload weights to achieve (Empty object for design only case)
+        - off_des_constraints: constraints for off-design missions to judge for a successful run. Only accept :WPay,:MWTO,:VolFuel
         - ftol_rel: relative tolerance to converge in optimization
         - max_iter_optim: maixmum optimization iterations (At least 3)
         - max_iter_sizing: maixmum TASOPT sizing iterations within each optimization iteration (At least 10)
@@ -410,11 +439,14 @@ const failure_statuses = (:FAILURE, :INVALID_ARGS, :OUT_OF_MEMORY, :ROUNDOFF_LIM
         - Only support non-gradient base optimization method
         - Always unchange the starting constraints, mission requirements, aircraft model state
         - Update the value inside optimization parametrs, status, and history of optimization (only succeed sizing)
+        - Allow optional off-design missions to also being satisfied besides the design mission
 
 """
 function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
                                  mission_req::AbstractVector{<:Requirement}=Vector{Requirement}(),
                                  constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
+                                 off_des_miss::OffDesMission=OffDesMission{Float64}(), 
+                                 off_des_constraints::AbstractVector{Symbol}=[:WPay,:MWTO,:VolFuel],
                                  ftol_rel::Float64=1e-6, max_iter_optim::Int=1000, max_iter_sizing::Int=150,
                                  print_every::Int=10, pen_failed_sizing::Float64=100.0, optimizer_type::Symbol=:LN_NELDERMEAD)
     #### make a copy of the input aircraft model state to ensure model is unaltered by function call for successive deterministic behavior
@@ -444,7 +476,8 @@ function optimize_singlePt_PFEI!(ac, optimize_par::AbstractVector{<:Parameter} ;
 
     #### Create an objective function and optimization history container
     (; obj!, hist) = make_obj(ac, optimize_par ; constraints=constraints, print_every=print_every,
-                              max_iter_sizing=max_iter_sizing, pen_failed_sizing=pen_failed_sizing)
+                              max_iter_sizing=max_iter_sizing, pen_failed_sizing=pen_failed_sizing,
+                              off_des_miss=off_des_miss, off_des_constraints=off_des_constraints)
                               #Call to obj! function only modify hist inplace. NO change to parameters, constraint, mission requirement, and aircraft model.
 
     #### Setup the optimized parameters
@@ -605,6 +638,7 @@ end
 """
     optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Parameter},
                                    global_bond::AbstractVector{<:Parameter}; miss_req::AbstractVector{<:Requirement}=Vector{Requirement}(), constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
+                                   off_des_miss::OffDesMission=OffDesMission{Float64}(), off_des_constraints::AbstractVector{Symbol}=[:WPay,:MWTO,:VolFuel],
                                    ftol_rel::Float64=1e-6, max_iter_sizing::Int=150, print_every::Int=10, pen_failed_sizing::Float64=100.0,
                                    frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
                                    optimizer_global::Symbol=:GN_CRS2_LM,   max_iter_glo::Int=50000,   span_glo_to_loc::AbstractFloat=0.25, run_global::Bool=false,
@@ -625,6 +659,8 @@ end
         [Common regardless operating mode]
         - miss_req(def): (Unchanged by call) requirements for the sizing mission (can empty[default mission]) (constructed using constructor)
         - constraints(def): (Unchanged by call) constraints to be satisfied by the solution (can empty[unconstrained]) (constructed using constructor)
+        - off_des_miss(def): off-design flight ranges and payload weights to achieve (Empty object for design only case)
+        - off_des_constraints(def): constraints for off-design missions to judge for a successful run. Only accept :WPay,:MWTO,:VolFuel
         - ftol_rel(def): relative tolerance to converge in optimization
         - max_iter_sizing(def): maixmum TASOPT sizing iterations within each optimization iteration (At least 10)
         - print_every(def): print out frequency for optimizaion status
@@ -661,6 +697,7 @@ end
         - This function does not accept fixed placeholder parameter
         - Aircraft model recommended to be sized first before input
         - Only accept non-gradient based optimization method
+        - Can optionally provide off-design mission requirements to optimize the design point while satisfying off-design requirements
         - Algorithm: 
             1.Global run once from global bound to get a starting solution (Opt-in)
             2.Setup a good starting local bound from the global round solution or input.
@@ -677,6 +714,7 @@ end
 """
 function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Parameter},
                                         global_bond::AbstractVector{<:Parameter}; miss_req::AbstractVector{<:Requirement}=Vector{Requirement}(), constraints::AbstractVector{<:Constraint}=Vector{Constraint}(),
+                                        off_des_miss::OffDesMission=OffDesMission{Float64}(), off_des_constraints::AbstractVector{Symbol}=[:WPay,:MWTO,:VolFuel],
                                         ftol_rel::Float64=1e-6, max_iter_sizing::Int=150, print_every::Int=10, pen_failed_sizing::Float64=100.0,
                                         frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
                                         optimizer_global::Symbol=:GN_CRS2_LM,   max_iter_glo::Int=50000,   span_glo_to_loc::AbstractFloat=0.25, run_global::Bool=false,
@@ -713,8 +751,9 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
         # Try the optimization process
         try
             status, hist, _ = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
-                                                   ftol_rel=ftol_rel, max_iter_optim=max_iter_glo, max_iter_sizing=max_iter_sizing,
-                                                   print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_global)
+                                                      off_des_miss=off_des_miss, off_des_constraints=off_des_constraints,
+                                                      ftol_rel=ftol_rel, max_iter_optim=max_iter_glo, max_iter_sizing=max_iter_sizing,
+                                                      print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_global)
         catch e
             (e isa InterruptException) && rethrow(e)
             status = :FAILURE
@@ -765,8 +804,9 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
         # Try the optimization process
         try
             status, hist, _ = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
-                                                   ftol_rel=ftol_rel, max_iter_optim=max_iter_loc_C, max_iter_sizing=max_iter_sizing,
-                                                   print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_local)
+                                                      off_des_miss=off_des_miss, off_des_constraints=off_des_constraints,
+                                                      ftol_rel=ftol_rel, max_iter_optim=max_iter_loc_C, max_iter_sizing=max_iter_sizing,
+                                                      print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_local)
         catch e
             (e isa InterruptException) && rethrow(e)
             status = :FAILURE
@@ -842,8 +882,9 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
         # Try the optimization process
         try
             status, hist, bestSol = optimize_singlePt_PFEI!(ac, optimize_par; mission_req=miss_req, constraints=constraints, #(Update value)
-                                                   ftol_rel=ftol_rel, max_iter_optim=max_iter_loc_F, max_iter_sizing=max_iter_sizing,
-                                                   print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_local)
+                                                            off_des_miss=off_des_miss, off_des_constraints=off_des_constraints,                                       
+                                                            ftol_rel=ftol_rel, max_iter_optim=max_iter_loc_F, max_iter_sizing=max_iter_sizing,
+                                                            print_every=print_every, pen_failed_sizing=pen_failed_sizing, optimizer_type=optimizer_local)
         catch e
             (e isa InterruptException) && rethrow(e)
             status = :FAILURE
