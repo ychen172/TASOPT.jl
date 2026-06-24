@@ -1,5 +1,5 @@
 module PRD
-export off_design_PRD, off_design_specified!, findR1R2R3
+export off_design_PRD, findR1R2R3, create_duplicated_two_missions!, update_the_second_mission!, has_two_missions, off_design_specified!
 
 using TASOPT
 include(__TASOPTindices__)
