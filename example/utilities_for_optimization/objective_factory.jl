@@ -640,6 +640,8 @@ function adjust_bounds!(optimize_par::AbstractVector{<:Parameter},
         end
 
         # Check if any of the bound is changed
+        println("Fractional lower bound changed by : $(abs((local_low_cur-optimize_par[idx].bon_lo)/optimize_par[idx].bon_lo))")
+        println("Fractional upper bound changed by : $(abs((local_upp_cur-optimize_par[idx].bon_up)/optimize_par[idx].bon_up))")
         if (!isapprox(local_low_cur, optimize_par[idx].bon_lo; atol=eps_close, rtol=eps) ||
             !isapprox(local_upp_cur, optimize_par[idx].bon_up; atol=eps_close, rtol=eps))
             flg_bod_cha = true
@@ -920,7 +922,9 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
             hist_bak = hist #Again, rebind is good enough
 
             # Monitor change of best found PFEI for reverification of solver convergence
-            optim_change = abs((bestSol.PFEI - PFEI_previous)/PFEI_previous) > rel_tol_round_converge
+            frac_change_optim = abs((bestSol.PFEI - PFEI_previous)/PFEI_previous)
+            println("Optimal PFEI changes by $(frac_change_optim) times")
+            optim_change = frac_change_optim > rel_tol_round_converge
             PFEI_previous = bestSol.PFEI
         else
             # Try 1. rerun, 2. global rerun, 3. return the last known good solution
