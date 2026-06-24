@@ -78,17 +78,18 @@ save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_mission_requirements.
 save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_design_constraints.csv"), con_opt)
 
 #### Read in the R1 R2 R3 requirements
+idx_start = 1
 df_R1 = CSV.read(R1_csv_path, DataFrame)
 df_R2 = CSV.read(R2_csv_path, DataFrame)
 df_R3 = CSV.read(R3_csv_path, DataFrame)
-ran_des_nmi  = Vector{Float64}(df_R1.design_range_nmi)
+ran_des_nmi  = Vector{Float64}(df_R1.design_range_nmi[idx_start:end])
 ran_des_nmi  = round.(Int, ran_des_nmi) #Round the original jet aircraft design range just for name in saving
-wei_pay_N_R1 = Vector{Float64}(df_R1.payload_weight_N)
-ran_nmi_R1   = Vector{Float64}(df_R1.range_nmi)
-wei_pay_N_R2 = Vector{Float64}(df_R2.payload_weight_N)
-ran_nmi_R2   = Vector{Float64}(df_R2.range_nmi)
-wei_pay_N_R3 = Vector{Float64}(df_R3.payload_weight_N)
-ran_nmi_R3   = Vector{Float64}(df_R3.range_nmi)
+wei_pay_N_R1 = Vector{Float64}(df_R1.payload_weight_N[idx_start:end])
+ran_nmi_R1   = Vector{Float64}(df_R1.range_nmi[idx_start:end])
+wei_pay_N_R2 = Vector{Float64}(df_R2.payload_weight_N[idx_start:end])
+ran_nmi_R2   = Vector{Float64}(df_R2.range_nmi[idx_start:end])
+wei_pay_N_R3 = Vector{Float64}(df_R3.payload_weight_N[idx_start:end])
+ran_nmi_R3   = Vector{Float64}(df_R3.range_nmi[idx_start:end])
 
 #### Optimization
 for (i,name_cur_range) in enumerate(ran_des_nmi)
