@@ -58,7 +58,13 @@ function extract_acModel(ac_cur,idx_miss)
     volWingFuelMax = volFuelMax-volACTFuelMax
     FuelVolumeFractionACT = max(volFuelTot-volWingFuelMax,0)/volFuelTot #Fraction of fuel inside the ACT tank
 
+    #### wing geometry
+    span_wing = ac_cur.wing.span #[m]
+    AR_wing = ac_cur.wing.layout.AR #aspect ratio
+
     #### flight performance data
+    CL_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, idx_miss] + ac_cur.para[iaCL, ipcruise2, idx_miss]) #Averaged cruise CL
+    Alt_cruise = 0.5 * (ac_cur.para[iaalt, ipcruise1, idx_miss] + ac_cur.para[iaalt, ipcruise2, idx_miss]) * 3.280839895 #Averaged cruise altitude [ft]
     LD_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, idx_miss]/ac_cur.para[iaCD, ipcruise1, idx_miss] + 
                         ac_cur.para[iaCL, ipcruise2, idx_miss]/ac_cur.para[iaCD, ipcruise2, idx_miss]) #Averaged cruise lift-to-drag ratio
     LHV_cruise = 0.5 * (ac_cur.pare[iehfuel, ipcruise1, idx_miss] + ac_cur.pare[iehfuel, ipcruise2, idx_miss]) #Averaged cruise heating value (J/kg) (Include vaporization already)
@@ -148,6 +154,10 @@ function extract_acModel(ac_cur,idx_miss)
         volWingFuelMax_m3 = volWingFuelMax,
         FuelVolumeFractionACT = FuelVolumeFractionACT,
         lenACT_m = ac_cur.fuse_tank.ACT_l,
+        span_wing_m = span_wing,
+        AR_wing = AR_wing,
+        CL_cruise = CL_cruise,
+        Alt_cruise_ft = Alt_cruise,
     )
     return output
 end
