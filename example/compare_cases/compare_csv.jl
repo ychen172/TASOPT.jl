@@ -63,6 +63,14 @@ for i in eachindex(ran_nmi_des_R1_lst)
 end
 savefig(p, joinpath(save_dir_sub, "Design_Range_to_Retrofit_Range.png"))
 
+p = plot(xlabel="Design Range (nmi)", ylabel="Payload Weight (N)", dpi=800)
+for i in eachindex(ran_nmi_des_R1_lst)
+    plot!(p, ran_nmi_des_R1_lst[i], wei_pay_N_R1_lst[i], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=labels[i]*"_R1")
+    plot!(p, ran_nmi_des_R2_lst[i], wei_pay_N_R2_lst[i], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=labels[i]*"_R2")
+    plot!(p, ran_nmi_des_R3_lst[i], wei_pay_N_R3_lst[i], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=labels[i]*"_R3")
+end
+savefig(p, joinpath(save_dir_sub, "Design_Wpay_to_Retrofit_Wpay.png"))
+
 p = plot(xlabel="Retrofit R1 (nmi)", ylabel="R1 PFEI (J/J)", dpi=800)
 for i in eachindex(ran_nmi_R1_lst)
     plot!(p, ran_nmi_R1_lst[i], PFEI_JJ_R1_lst[i], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=labels[i])
