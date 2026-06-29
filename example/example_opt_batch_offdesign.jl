@@ -29,6 +29,12 @@ max_num_round_loc = [120, 30] #Maximum number of adaptive bounds refinements rou
 span_glo_to_loc = 0.25 # span_local_search/span_global_search
 # 1.2) Setup an entry (value does not matter) for test ratio to be sweep later in optimization loop
 mis_opt = Requirement[]
+push!(mis_opt, Requirement(:(parm[imRange,1]), 1e10)) #[m] will be overwritten
+push!(mis_opt, Requirement(:(parm[imWpay, 1]), 1e10)) #[N] will be overwritten
+push!(mis_opt, Requirement(:(options.ifuel), Int(32)))                
+push!(mis_opt, Requirement(:(parg[igrhofuel]), 789.0))                
+push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 918187.9))       
+push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 918187.9)) 
 push!(mis_opt, Requirement(:(options.has_ACT_fuel), false))  # Whether to allow additional center fuel tank (ACT)
 push!(mis_opt, Requirement(:(options.compensate_ACT), false)) # Whether to increase the aircraft length to accmondate for the cargo space taken by ACT
 push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_vol), 1.00))  # Volumetric efficiency of ACT fuel tank
@@ -96,7 +102,7 @@ for (i,name_cur_range) in enumerate(ran_des_nmi)
     # Load the baseline aircraft model as a starting guess
     ac = quickload_aircraft(par_path_base_prefix*"$(name_cur_range).jld2")
     
-    # Uset the baseline fuselage radius to update the y engine bounds as optimization parameters
+    # Use the baseline fuselage radius to update the y engine bounds as optimization parameters
     global bound_glob[7].val = ac.fuselage.layout.cross_section.radius * 3.0
     global bound_glob[7].bon_up = ac.fuselage.layout.cross_section.radius * 4.0
     global bound_glob[7].bon_lo = ac.fuselage.layout.cross_section.radius * 2.0
@@ -111,15 +117,19 @@ for (i,name_cur_range) in enumerate(ran_des_nmi)
         par_cur.d_val = bound_glob[idx_cur].d_val
     end
 
+    # Overwrite the mission requirement directly for R2 mission
+    mis_opt[1].val = ran_nmi_R2[i]*1852.0 #[m]
+    mis_opt[2].val = wei_pay_N_R2[i] #[N]
+
     # Design mission follows the baseline setup. Specify off-design missions requirements here
-    range_off_des_nmi = [ran_nmi_R1[i], ran_nmi_R2[i], ran_nmi_R3[i]]
-    wei_pay_off_des_N = [wei_pay_N_R1[i], wei_pay_N_R2[i], wei_pay_N_R3[i]]
-    idx_fuel_off_des = fill(Int(32), 3)
-    rho_fuel_off_des_kgm3 = fill(789.0, 3)
-    hvap_fuel_off_des_Jkg = fill(918187.9, 3)
+    range_off_des_nmi = [ran_nmi_R1[i], ran_nmi_R3[i]]
+    wei_pay_off_des_N = [wei_pay_N_R1[i], wei_pay_N_R3[i]]
+    idx_fuel_off_des = fill(Int(32), 2)
+    rho_fuel_off_des_kgm3 = fill(789.0, 2)
+    hvap_fuel_off_des_Jkg = fill(918187.9, 2)
     off_des_miss = OffDesMission{Float64}(range_off_des_nmi, wei_pay_off_des_N, idx_fuel_off_des, rho_fuel_off_des_kgm3, hvap_fuel_off_des_Jkg)
     off_des_constraints = [:WPay,:MWTO,:VolFuel]
-    PFEI_Weighting = [0.0,0.0,1.0,0.0] # Here we only use R2 PFEI for optimization
+    PFEI_Weighting = [1.0,0.0,0.0] # Here we only use R2 PFEI for optimization
 
     # Run the global local optimization process
     par_opt_found, status_found, hist_found = 
