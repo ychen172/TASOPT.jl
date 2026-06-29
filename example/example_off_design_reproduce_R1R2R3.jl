@@ -116,8 +116,8 @@ end
 
 #### Print out the collect R1 R2 R3 data into csv a csv file
 R1_df = DataFrame(; (Symbol(k) => v for (k,v) in out_R1_collect)...)
-CSV.write(joinpath(save_dir,save_key*"R1.csv"), R1_df)
+CSV.write(joinpath(save_dir,save_key*"MatR1R2R3_"*"R1.csv"), R1_df)
 R2_df = DataFrame(; (Symbol(k) => v for (k,v) in out_R2_collect)...)
-CSV.write(joinpath(save_dir,save_key*"R2.csv"), R2_df)
+CSV.write(joinpath(save_dir,save_key*"MatR1R2R3_"*"R2.csv"), R2_df)
 R3_df = DataFrame(; (Symbol(k) => v for (k,v) in out_R3_collect)...)
-CSV.write(joinpath(save_dir,save_key*"R3.csv"), R3_df)
+CSV.write(joinpath(save_dir,save_key*"MatR1R2R3_"*"R3.csv"), R3_df)
