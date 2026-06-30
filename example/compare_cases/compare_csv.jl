@@ -52,7 +52,7 @@ for key_cur in keys
 end
 
 #### Plotting
-markers = [:circle, :square, :diamond, :utriangle, :dtriangle, :star5]
+markers = [:square, :circle, :diamond, :pentagon]
 linestyles = [:solid, :dash, :dot, :dashdot]
 
 p = plot(xlabel="Design Range (nmi)", ylabel="Retrofit Range (nmi)", dpi=800, ylims=(300.0,3000.0))
