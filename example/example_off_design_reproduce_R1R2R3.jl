@@ -15,8 +15,9 @@ R1_csv_path = joinpath(__TASOPTroot__,"../example/ModelSaved/R1R2R3_Jet_NoACT_to
 R2_csv_path = joinpath(__TASOPTroot__,"../example/ModelSaved/R1R2R3_Jet_NoACT_to_Eth_/R1R2R3_Jet_NoACT_to_Eth_R2.csv")
 R3_csv_path = joinpath(__TASOPTroot__,"../example/ModelSaved/R1R2R3_Jet_NoACT_to_Eth_/R1R2R3_Jet_NoACT_to_Eth_R3.csv")
 # Prefix for baseline aircraft parameters as a starting point
-save_key = "Opti_Jet_NoACT_to_Eth_for_Eth_"
-par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/$(save_key)/$(save_key)") #Also the prefixed for aircraft model
+read_key = "Opti_Jet_NoACT_"
+save_key = "Opti_Jet_NoACT_to_Eth_"
+par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/$(read_key)/$(read_key)") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/$(save_key)MatR1R2R3_")
 mkpath(save_dir)

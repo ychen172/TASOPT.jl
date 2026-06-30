@@ -19,7 +19,7 @@ mkpath(save_dir_sub)
 #### file keys and labels
 read_dir = "../ModelSaved/"
 keys = ["R1R2R3_Jet_NoACT_to_Eth_","Opti_Jet_NoACT_to_Eth_for_Eth_MatR1R2R3_","Opti_Eth_NoACT_Mat_Jet_NoACT_to_Eth_MatR1R2R3_"]
-labels = ["Retrofit", "Optimized Retrofit", "Pure Optimization"]
+labels = ["Retrofit", "Optimized through Retrofitting", "Optimized Directly"]
 ran_nmi_des_R1_lst = []
 ran_nmi_des_R2_lst = []
 ran_nmi_des_R3_lst = []
@@ -55,7 +55,7 @@ end
 markers = [:circle, :square, :diamond, :utriangle, :dtriangle, :star5]
 linestyles = [:solid, :dash, :dot, :dashdot]
 
-p = plot(xlabel="Design Range (nmi)", ylabel="Retrofit Range (nmi)", dpi=800)
+p = plot(xlabel="Design Range (nmi)", ylabel="Retrofit Range (nmi)", dpi=800, ylims=(300.0,3000.0))
 for i in eachindex(ran_nmi_des_R1_lst)
     plot!(p, ran_nmi_des_R1_lst[i], ran_nmi_R1_lst[i], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=labels[i]*"_R1")
     plot!(p, ran_nmi_des_R2_lst[i], ran_nmi_R2_lst[i], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=labels[i]*"_R2")
@@ -63,7 +63,7 @@ for i in eachindex(ran_nmi_des_R1_lst)
 end
 savefig(p, joinpath(save_dir_sub, "Design_Range_to_Retrofit_Range.png"))
 
-p = plot(xlabel="Design Range (nmi)", ylabel="Payload Weight (N)", dpi=800)
+p = plot(xlabel="Design Range (nmi)", ylabel="Payload Weight (N)", dpi=800, ylims=(0.0,5e5))
 for i in eachindex(ran_nmi_des_R1_lst)
     plot!(p, ran_nmi_des_R1_lst[i], wei_pay_N_R1_lst[i], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=labels[i]*"_R1")
     plot!(p, ran_nmi_des_R2_lst[i], wei_pay_N_R2_lst[i], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=labels[i]*"_R2")
