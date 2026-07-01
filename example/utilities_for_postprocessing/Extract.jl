@@ -1,7 +1,7 @@
 module Extract
-export init_results_2Layers,extract_acModel,fill_results!,plot_cases
+export init_results_2Layers,extract_acModel,fill_results!,plot_cases,extract_combustion_inputs
 using Plots
-
+using DataFrames, CSV
 using TASOPT
 include(__TASOPTindices__)
 using Statistics
@@ -175,6 +175,50 @@ function plot_cases(xlab::String,ylab::String,cases::AbstractVector{<:AbstractDi
     end
     savefig(p,save_name)
     return p
+end
+
+"""
+    extract_combustion_inputs(ac,idx_miss::Int,save_name::AbstractString,save_dir::AbstractString)
+
+`extract_combustion_inputs` extract combustor input parameters and save to csv for Pycaso
+
+    **Inputs**
+        - ac: TASOPT model
+        - idx_miss: Mission index to extract combustor operating conditions
+        - save_name: Name for the csv file without the .csv extension
+        - save_dir: Folder to save the csv. Will be created if it did not exist.
+    **Ouputs**
+        - Saved combustor input conditions
+          All parameters are for single engine
+"""
+function extract_combustion_inputs(ac,idx_miss::Int,save_name::AbstractString,save_dir::AbstractString)
+    #### Extract combustor input parameters
+    phase_miss = ["C1","C2","C3","C4","C5","R1","R2","D1","D2","D3","D4","D5"]
+    time_miss = ac.para[iatime, ipclimb1:ipdescentn, idx_miss]  #[s] Time of the phases
+    thrust_miss = ac.pare[ieFe, ipclimb1:ipdescentn, idx_miss] ./ 1000.0 #[kN] Mission thrust
+    Pt3_miss = ac.pare[iept3, ipclimb1:ipdescentn, idx_miss] ./ 6894.757 #[psi] combustor inlet pressure
+    Pt4_miss = ac.pare[iept4, ipclimb1:ipdescentn, idx_miss] ./ 6894.757 #[psi] combustor outlet pressure
+    Tt3_miss = ac.pare[ieTt3, ipclimb1:ipdescentn, idx_miss] .* 1.8 #[R] combustor inlet temperature
+    Tt4_miss = ac.pare[ieTt4, ipclimb1:ipdescentn, idx_miss] .* 1.8 #[R] combustor outlet temperature
+    _mdot_core_miss_single_ = ac.pare[iemcore, ipclimb1:ipdescentn, idx_miss] #[kg/s] single engine core mass flow range
+    mdot_fuel_miss_single = (_mdot_core_miss_single_ .* ac.pare[ieff, ipclimb1:ipdescentn, idx_miss]) .* 2.204622 #[lbm/s] single engine combustor fuel flow rate
+    mdot_air_miss_single  = (_mdot_core_miss_single_ .* (1.0 .- ac.pare[iefc, ipclimb1:ipdescentn, idx_miss]) .- ac.pare[iemofft, ipclimb1:ipdescentn, idx_miss]) .* 2.204622 #[lbm/s] single engine combustor air flow rate
+    water_air_ratio = fill(0.0, length(time_miss))
+    #### Store data into csv
+    mission_param = DataFrame()
+    mission_param[!, Symbol("Phase")] = phase_miss
+    mission_param[!, Symbol("Time[s]")] = time_miss
+    mission_param[!, Symbol("Thrust[kN]")] = thrust_miss
+    mission_param[!, Symbol("Pt3[psi]")] = Pt3_miss
+    mission_param[!, Symbol("Pt4[psi]")] = Pt4_miss
+    mission_param[!, Symbol("Tt3[R]")] = Tt3_miss
+    mission_param[!, Symbol("Tt4[R]")] = Tt4_miss
+    mission_param[!, Symbol("Wf[lbm/s]")] = mdot_fuel_miss_single
+    mission_param[!, Symbol("W3[lbm/s]")] =  mdot_air_miss_single
+    mission_param[!, Symbol("WAR[m]")] = water_air_ratio
+    #### Save csv
+    mkpath(save_dir)
+    CSV.write(joinpath(save_dir,save_name*".csv"), mission_param)
 end
 
 end #module
