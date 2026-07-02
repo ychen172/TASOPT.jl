@@ -15,7 +15,7 @@ dir_cyc = joinpath(__TASOPTroot__,"../example/CombustorCycleSaved/")
 key_cyc = ["Opti_Jet_NoACT_V2_CycIn_", "Opti_Eth_NoACT_V2_CycIn_"]
 nam_read = ["Jet Fuel",                 "Ethanol"]
 ranges   = collect(300:100:3000)
-range_expose = 3000
+range_expose = 400
 # Output
 save_dir = joinpath(__TASOPTroot__,"../example/ModelProcessed/")
 save_nam = "NOx_Jet_vs_Eth_No_ACT_Des"
@@ -25,7 +25,7 @@ mkpath(save_dir)
 #### Initialization
 fields = (:ranges_nmi, :NOx_Cli_kg, :NOx_Cru_kg, :NOx_Des_kg, :NOx_Tot_kg)
 results = [Dict(field => Vector{Any}(undef, length(ranges)) for field in fields) for _ in eachindex(nam_read)] #NumKey * Fields * numRange
-fields_expose = (:phases, :Tt4_K_Comp, :Tt4_K_Exp)
+fields_expose = (:phases, :Tt4_K_Comp, :Tt4_K_Exp, :Tt3_K, :mdot_air_kgs)
 results_expose = [Dict(field => Vector{Any}(undef, 12) for field in fields_expose) for _ in eachindex(nam_read)] #NumKey * Fields_expose * numPhases
 
 #### Extract Emissions Data
@@ -57,6 +57,8 @@ for idx_key in eachindex(nam_read)
             results_expose[idx_key][:phases] .= phases
             results_expose[idx_key][:Tt4_K_Comp] .= out[:, Symbol(" T4(K)")] #[K]
             results_expose[idx_key][:Tt4_K_Exp] .= cyc[:, Symbol("Tt4[R]")] .* (5.0/9.0) #[K]
+            results_expose[idx_key][:Tt3_K] .= cyc[:, Symbol("Tt3[R]")] .* (5.0/9.0) #[K]
+            results_expose[idx_key][:mdot_air_kgs] .= cyc[:, Symbol("W3[lbm/s]")] .* 0.45359237 #[kg/s]
         end
     end
 end
@@ -82,8 +84,19 @@ savefig(p, joinpath(save_dir, "NOx_Comp.png"))
 for idx_key in eachindex(nam_read)
     filename = replace(nam_read[idx_key], " " => "_")
     x = eachindex(results_expose[idx_key][:phases])
+    # Tt4 plot
     global p = plot(lw=2, xticks=(collect(x), results_expose[idx_key][:phases]), xlabel="Phase", ylabel="Tt4 [K]", dpi=800)
     plot!(p, x, results_expose[idx_key][:Tt4_K_Comp],label="Computed",marker=markers[1])
     plot!(p, x, results_expose[idx_key][:Tt4_K_Exp],label="Expected",marker=markers[1])
     savefig(p, joinpath(save_dir, "Tt4_Comp_$(filename)_$(range_expose).png"))
+
+    # Tt3 Plot
+    global p = plot(lw=2, xticks=(collect(x), results_expose[idx_key][:phases]), xlabel="Phase", ylabel="Tt3 [K]", dpi=800)
+    plot!(p, x, results_expose[idx_key][:Tt3_K],marker=markers[1])
+    savefig(p, joinpath(save_dir, "Tt3_Comp_$(filename)_$(range_expose).png"))
+
+    # Air flow rate
+    global p = plot(lw=2, xticks=(collect(x), results_expose[idx_key][:phases]), xlabel="Phase", ylabel="Air Flow Rate [kg/s]", dpi=800)
+    plot!(p, x, results_expose[idx_key][:mdot_air_kgs],marker=markers[1])
+    savefig(p, joinpath(save_dir, "mdotAir_Comp_$(filename)_$(range_expose).png"))
 end
