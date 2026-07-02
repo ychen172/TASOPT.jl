@@ -59,8 +59,24 @@ function extract_acModel(ac_cur,idx_miss)
     FuelVolumeFractionACT = max(volFuelTot-volWingFuelMax,0)/volFuelTot #Fraction of fuel inside the ACT tank
 
     #### wing geometry
-    span_wing = ac_cur.wing.span #[m]
-    AR_wing = ac_cur.wing.layout.AR #aspect ratio
+    span_wing = ac_cur.wing.span #Wing Span [m]
+    sweep_wing = ac_cur.wing.layout.sweep #Wing Sweep Angle [deg]
+    AR_wing = ac_cur.wing.layout.AR #Wing Aspect Ratio
+    ThiCho_wing_in = ac_cur.wing.inboard.cross_section.thickness_to_chord
+    ThiCho_wing_out = ac_cur.wing.outboard.cross_section.thickness_to_chord
+    taper_wing_in = ac_cur.wing.inboard.λ
+    taper_wing_out = ac_cur.wing.outboard.λ
+    y_engine = ac_cur.parg[igyeng] #[m] spanwise engine location
+    x_engine = ac_cur.parg[igxeng] #[m] axial engine location
+    SpanBreak_wing = ac_cur.wing.layout.ηs #Wing span break
+    cls_wing = ac_cur.para[iarcls, ipcruise1, 1]
+    clt_wing = ac_cur.para[iarclt, ipcruise1, 1]
+    PR_fan = ac_cur.pare[iepif, ipcruise1, 1]
+    PR_LPC = ac_cur.pare[iepilc, ipcruise1, 1]
+    PR_HPC = ac_cur.pare[iepihc,ipcruise1, 1]
+    BPR = ac_cur.pare[ieBPR, ipcruise1, 1]
+    Tt4 = ac_cur.pare[ieTt4, ipcruise1, 1] #[K]
+    AR_vtail = ac_cur.vtail.layout.AR
 
     #### flight performance data
     CL_cruise = 0.5 * (ac_cur.para[iaCL, ipcruise1, idx_miss] + ac_cur.para[iaCL, ipcruise2, idx_miss]) #Averaged cruise CL
@@ -155,9 +171,25 @@ function extract_acModel(ac_cur,idx_miss)
         FuelVolumeFractionACT = FuelVolumeFractionACT,
         lenACT_m = ac_cur.fuse_tank.ACT_l,
         span_wing_m = span_wing,
+        sweep_wing_deg = sweep_wing,
         AR_wing = AR_wing,
+        ThiCho_wing_in = ThiCho_wing_in,
+        ThiCho_wing_out = ThiCho_wing_out,
+        taper_wing_in = taper_wing_in,
+        taper_wing_out = taper_wing_out,
+        y_engine_m = y_engine,
+        x_engine_m = x_engine,
+        SpanBreak_wing = SpanBreak_wing,
+        cls_wing = cls_wing,
+        clt_wing = clt_wing,
         CL_cruise = CL_cruise,
         Alt_cruise_ft = Alt_cruise,
+        PR_fan = PR_fan,
+        PR_LPC = PR_LPC,
+        PR_HPC = PR_HPC,
+        BPR = BPR,
+        Tt4 = Tt4,
+        AR_vtail = AR_vtail,
     )
     return output
 end
