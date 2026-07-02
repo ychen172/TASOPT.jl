@@ -11,9 +11,9 @@ using .Extract: extract_acModel, init_results_2Layers, fill_results!, plot_cases
 #### Setup IO
 # Input case names - Retrofit
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Jet_NoACT_",   "Opti_Eth_NoACT_",  "Opti_Eth_NoACT_NoWSpan_", "Opti_Eth_ACT_NoComp_UniEta_NoWSpan_"]
-caseNames  = ["Jet Fuel Baseline", "Ethanol Baseline", "Ethanol Extended Wing",   "Ethanol Extended Wing Ideal ACT"]
-idxMiss    = [1,1,1,1]
+caseKeys   = ["Opti_Jet_NoACT_",   "Opti_Eth_NoACT_",  "Opti_Eth_NoACT_NoWSpan_", "Opti_Jet_NoACT_NoWSpan_", "Opti_Eth_ACT_NoComp_UniEta_NoWSpan_"]
+caseNames  = ["Jet Fuel Baseline", "Ethanol Baseline", "Ethanol Extended Wing",   "Jet Fuel Extended Wing", "Ethanol Extended Wing Ideal ACT"]
+idxMiss    = [1,1,1,1,1]
 ranges     = collect(300:100:3000) 
 # Output directory
 save_dir      = "../ModelProcessed"
