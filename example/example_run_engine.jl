@@ -9,13 +9,31 @@ include(__TASOPTindices__)
 read_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_/Opti_Jet_NoACT_2900.jld2")
 ac = quickload_aircraft(read_dir)
 
+# print a reference case
+Fe_test = ac.pare[ieFe,ipcruise2,1] #(N)
+M0_test = ac.pare[ieM0,ipcruise2,1]
+p0_test = ac.pare[iep0,ipcruise2,1] #(Pa)
+T0_test = ac.pare[ieT0,ipcruise2,1] #(K)
+a0_test = ac.pare[iea0,ipcruise2,1] #(m/s)
+OPR_test = ac.pare[iepilc,ipcruise2,1]*ac.pare[iepihc,ipcruise2,1]
+Tt4_test = ac.pare[ieTt4,ipcruise2,1]
+TSFC_test = ac.pare[ieTSFC,ipcruise2,1]
+println("engine thrust: $(Fe_test/1000.0) N")
+println("Inlet mach number: $(M0_test)")
+println("Inlet static pressure: $(p0_test) Pa")
+println("Inlet static temperature: $(T0_test) K")
+println("Inlet speed of sound: $(a0_test) m/s")
+println("OPR: $(OPR_test)")
+println("Tt4: $(Tt4_test) K")
+println("TSFC: $(TSFC_test)")
+
 ####Extract parameters
 gee = TASOPT.gee
 # sea-level static inlet conditions
-M0 = 0.0
-p0 = 101320.0 #Pa
-T0 = 288.2 #K
-a0 = 340.2074661144284 #m/s
+M0 = M0_test#0.0
+p0 = p0_test#101320.0 #Pa
+T0 = T0_test#288.2 #K
+a0 = a0_test#340.2074661144284 #m/s
 # for scaling
 pref = 101320.0 #Pa
 Tref = 288.2 #K
@@ -88,7 +106,7 @@ ncrow = ncrowx #both are the number of blade rows to be coolled directly fixed b
 epsrow = ac.pare[ieepsc1:(ieepsc1+ncrowx-1),ipcruise1,1] #mass fraction of cooling air for the 4 rows (Driving parameters)
 Tmrow = ac.pare[ieTmet1:(ieTmet1+ncrowx-1),ipcruise1,1] #metal temprature for the 4 rows              (Driven parameters to be updated)
 # mision requirements
-Fe = 130*1000.0 #ac.pare[ieFe,ipcruise1,1] #[N]thrust to be altered #single engine
+Fe = Fe_test#130*1000.0 #ac.pare[ieFe,ipcruise1,1] #[N]thrust to be altered #single engine
 # Initial guesses to be iterated
 M2 = ac.pare[ieM2,ipcruise1,1]
 M25 = ac.pare[ieM25,ipcruise1,1]
@@ -110,9 +128,9 @@ mcore = ac.pare[iemcore,ipcruise1,1]
 Δp_InterC = ac.pare[ieInterCDeltap,ipcruise1,1]
 Δp_Regen = ac.pare[ieRegenDeltap,ipcruise1,1]
 
-println("ini Fe(kN): $(Fe/1000.0)")
-println("ini OPR: $(pihc*pilc)")
-println("ini Tt4: $(Tt4)")
+# println("ini Fe(kN): $(Fe/1000.0)")
+# println("ini OPR: $(pihc*pilc)")
+# println("ini Tt4: $(Tt4)")
 
 ####Run engine
 TSFC, Fsp, hfuel, ff,
@@ -172,8 +190,13 @@ M2, pif, pilc, pihc, mbf, mblc, mbhc, Tt4, pt5, mcore, M25,
 Δh_PreC, Δh_InterC, Δh_Regen, Δh_TurbC,
 Δp_PreC, Δp_InterC, Δp_Regen)
 
-println()
-println("Fe(kN): $(Fe/1000.0)")
-println("OPR: $(pihc*pilc)")
-println("Tt4: $(Tt4)")
+# println()
+# println("Fe(kN): $(Fe/1000.0)")
+# println("OPR: $(pihc*pilc)")
+# println("Tt4: $(Tt4)")
 
+println()
+println("Found engine thrust: $(Fe/1000.0) kN")
+println("Found OPR: $(pilc*pihc)")
+println("Found Tt4: $(Tt4) K")
+println("Found TSFC: $(TSFC)")
