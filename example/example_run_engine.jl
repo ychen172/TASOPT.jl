@@ -4,199 +4,69 @@ This script intends to probe the sea-level static operation performance of engin
 
 using TASOPT
 include(__TASOPTindices__)
+using CSV, DataFrames
+include(joinpath(__TASOPTroot__,"../example/utilities_engines/run_engine.jl"))
+using .RunEngine:runOffDes
 
-####Load aircraft model to for engine test
-read_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_/Opti_Jet_NoACT_2900.jld2")
-ac = quickload_aircraft(read_dir)
+#### IO
+save_name = "Engine_Opti_Jet_NoACT_2900" #Save for engine off-design performance
+save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved")
+ac_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_/Opti_Jet_NoACT_2900.jld2")
+Fn_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/reference_engine_cycle_CFM5B/CFM5B_Finepts_NewLHV.csv")
 
-# print a reference case
-Fe_test = ac.pare[ieFe,ipcruise2,1] #(N)
-M0_test = ac.pare[ieM0,ipcruise2,1]
-p0_test = ac.pare[iep0,ipcruise2,1] #(Pa)
-T0_test = ac.pare[ieT0,ipcruise2,1] #(K)
-a0_test = ac.pare[iea0,ipcruise2,1] #(m/s)
-OPR_test = ac.pare[iepilc,ipcruise2,1]*ac.pare[iepihc,ipcruise2,1]
-Tt4_test = ac.pare[ieTt4,ipcruise2,1]
-TSFC_test = ac.pare[ieTSFC,ipcruise2,1]
-println("engine thrust: $(Fe_test/1000.0) N")
-println("Inlet mach number: $(M0_test)")
-println("Inlet static pressure: $(p0_test) Pa")
-println("Inlet static temperature: $(T0_test) K")
-println("Inlet speed of sound: $(a0_test) m/s")
-println("OPR: $(OPR_test)")
-println("Tt4: $(Tt4_test) K")
-println("TSFC: $(TSFC_test)")
+#### Create a save directory
+save_dir = joinpath(save_dir,save_name)
+mkpath(save_dir)
 
-####Extract parameters
-gee = TASOPT.gee
-# sea-level static inlet conditions
-M0 = M0_test#0.0
-p0 = p0_test#101320.0 #Pa
-T0 = T0_test#288.2 #K
-a0 = a0_test#340.2074661144284 #m/s
-# for scaling
-pref = 101320.0 #Pa
-Tref = 288.2 #K
-# for BLI
-Phiinl = 0.0
-Kinl = 0.0
-eng_has_BLI_cores = false #For 0 speed, having core or not does not matter
-# about the engine design (constant pressure ratio)
-pid = ac.pare[iepid,ipcruise1,1] #diffuser pressure ratio (0.998)
-pib = ac.pare[iepib,ipcruise1,1] #burner (0.94)
-pifn = ac.pare[iepifn,ipcruise1,1] #fan nozzle (0.98)
-pitn = ac.pare[iepitn,ipcruise1,1] #turbine nozzle (0.989)
-epsl = ac.pare[ieepsl,ipcruise1,1] #low spool shaft power loss fraction 1%
-epsh = ac.pare[ieepsh,ipcruise1,1] #high spool shaft power loss fraction 2.2%
-etab = ac.pare[ieetab,ipcruise1,1] #combustion efficiency 98%
-# about the engine design (gear ratio)
-Gearf = ac.parg[igGearf] #gear ratio (1.0) for no gear
-# about the engine design (design point pressure ratio, mass flow, and speed for map scaling purpose)
-pifD  = ac.pare[iepifD,ipcruise1,1]
-pilcD = ac.pare[iepilcD,ipcruise1,1]
-pihcD = ac.pare[iepihcD,ipcruise1,1]
-pihtD = ac.pare[iepihtD,ipcruise1,1]
-piltD = ac.pare[iepiltD,ipcruise1,1]
-#
-mbfD  = ac.pare[iembfD,ipcruise1,1]
-mblcD = ac.pare[iemblcD,ipcruise1,1]
-mbhcD = ac.pare[iembhcD,ipcruise1,1]
-mbhtD = ac.pare[iembhtD,ipcruise1,1]
-mbltD = ac.pare[iembltD,ipcruise1,1]
-#
-NbfD  = ac.pare[ieNbfD,ipcruise1,1]
-NblcD = ac.pare[ieNblcD,ipcruise1,1]
-NbhcD = ac.pare[ieNbhcD,ipcruise1,1]
-NbhtD = ac.pare[ieNbhtD,ipcruise1,1]
-NbltD = ac.pare[ieNbltD,ipcruise1,1]
-#
-epolf  = ac.pare[ieepolf,ipcruise1,1] #89.48
-epollc = ac.pare[ieepollc,ipcruise1,1] #88
-epolhc = ac.pare[ieepolhc,ipcruise1,1] #87
-epolht = ac.pare[ieepolht,ipcruise1,1] #88.9
-epollt = ac.pare[ieepollt,ipcruise1,1] #89.9
-# about the engine design (fixed geometry)
-A2  = ac.pare[ieA2,ipcruise1,1]
-A25 = ac.pare[ieA25,ipcruise1,1]
-A5  = ac.pare[ieA5,ipcruise1,1]
-A7  = ac.pare[ieA7,ipcruise1,1]
-# for off-design mission operation, use thrust as mision requirement
-opt_calc_call = TASOPT.engine.CalcMode.FixedFeOffDes
-opt_cooling = TASOPT.engine.CoolingOpt.FixedCoolingFlowRatio
-# about the engine design (fuel and combustor)
-Tfuel = ac.pare[ieTfuel,ipcruise1,1] #280 K
-ifuel = ac.options.ifuel
-hvap = ac.pare[iehvapcombustor,ipcruise1,1] #358694.0 J/kg for jet fuel
-# off-take
-mofft = (ac.parg[igmofWpay] * ac.parg[igWpay] + ac.parg[igmofWMTO] * ac.parg[igWMTO]) / ac.parg[igneng]
-Pofft = (ac.parg[igPofWpay] * ac.parg[igWpay] + ac.parg[igPofWMTO] * ac.parg[igWMTO]) / ac.parg[igneng] + ac.pare[ieHXrecircP,ipcruise1,1]
-Tt9 = ac.pare[ieTt9,ipcruise1,1] #[K] offtake air discharge total temperature
-pt9 = ac.pare[iept9,ipcruise1,1] #[Pa] offtake air discharge total pressure
-# cooling
-Mtexit = ac.pare[ieMtexit,ipcruise1,1] #turbine exit mach number for temperature calculation
-dTstrk = ac.pare[iedTstrk,ipcruise1,1] #temperatrue gradient for heat transfer
-StA = ac.pare[ieStA,ipcruise1,1] #Staton number for heat transfer
-efilm = ac.pare[ieefilm,ipcruise1,1] #cooling efficiency
-tfilm = ac.pare[ietfilm,ipcruise1,1] #film effectiveness
-fc0   = ac.pare[iefc0,ipcruise1,1] #design point fraction cooling flow fraction for efficiency scaling
-epht_fc = ac.pare[iedehtdfc,ipcruise1,1] #gradient of hpt efficiency with respect to the cooling flow fraction
-M4a = ac.pare[ieM4a,ipcruise1,1] #cooling flow outlet effective mach number
-ruc = ac.pare[ieruc,ipcruise1,1] #cooling flow outlet velocity ratio
-ncrow = ncrowx #both are the number of blade rows to be coolled directly fixed by the tasopt indices (4 rows)
-epsrow = ac.pare[ieepsc1:(ieepsc1+ncrowx-1),ipcruise1,1] #mass fraction of cooling air for the 4 rows (Driving parameters)
-Tmrow = ac.pare[ieTmet1:(ieTmet1+ncrowx-1),ipcruise1,1] #metal temprature for the 4 rows              (Driven parameters to be updated)
-# mision requirements
-Fe = Fe_test#130*1000.0 #ac.pare[ieFe,ipcruise1,1] #[N]thrust to be altered #single engine
-# Initial guesses to be iterated
-M2 = ac.pare[ieM2,ipcruise1,1]
-M25 = ac.pare[ieM25,ipcruise1,1]
-pif = max(ac.pare[iepif,ipcruise1,1], 1.1)
-pilc = max(ac.pare[iepilc,ipcruise1,1], 1.1)
-pihc = max(ac.pare[iepihc,ipcruise1,1], 1.1)
-mbf = ac.pare[iembf,ipcruise1,1]
-mblc = ac.pare[iemblc,ipcruise1,1]
-mbhc = ac.pare[iembhc,ipcruise1,1]
-Tt4 = ac.pare[ieTt4,ipcruise1,1]
-pt5 = ac.pare[iept5,ipcruise1,1]
-mcore = ac.pare[iemcore,ipcruise1,1]
-#Heat exchanger variables (all 0 here dont worry)
-Δh_PreC = ac.pare[iePreCDeltah,ipcruise1,1]
-Δh_InterC = ac.pare[ieInterCDeltah,ipcruise1,1]
-Δh_Regen = ac.pare[ieRegenDeltah,ipcruise1,1]
-Δh_TurbC = ac.pare[ieTurbCDeltah,ipcruise1,1]
-Δp_PreC = ac.pare[iePreCDeltap,ipcruise1,1]
-Δp_InterC = ac.pare[ieInterCDeltap,ipcruise1,1]
-Δp_Regen = ac.pare[ieRegenDeltap,ipcruise1,1]
+#### Load aircraft model that has the sized engine model
+ac = quickload_aircraft(ac_dir)
 
-# println("ini Fe(kN): $(Fe/1000.0)")
-# println("ini OPR: $(pihc*pilc)")
-# println("ini Tt4: $(Tt4)")
+#### Load the requested thrust levels
+df = CSV.read(Fn_dir, DataFrame)
+Fn_run = df[:, "Thrust (kN)"] .* 1000.0 #[N]
 
-####Run engine
-TSFC, Fsp, hfuel, ff,
-Fe, mcore,
-pif, pilc, pihc,
-mbf, mblc, mbhc,
-Nbf, Nblc, Nbhc,
-Tt0, ht0, pt0, cpt0, Rt0,
-Tt18, ht18, pt18, cpt18, Rt18,
-Tt19, ht19, pt19, cpt19, Rt19,
-Tt19c, ht19c, pt19c, cpt19c, Rt19c,
-Tt2, ht2, pt2, cpt2, Rt2,
-Tt21, ht21, pt21, cpt21, Rt21,
-Tt25, ht25, pt25, cpt25, Rt25,
-Tt25c, ht25c, pt25c, cpt25c, Rt25c,
-Tt3, ht3, pt3, cpt3, Rt3,
-Tt4, ht4, pt4, cpt4, Rt4,
-Tt41, ht41, pt41, cpt41, Rt41,
-Tt45, ht45, pt45, cpt45, Rt45,
-Tt49, ht49, pt49, cpt49, Rt49,
-Tt5, ht5, pt5, cpt5, Rt5,
-Tt7, ht7, pt7, cpt7, Rt7,
-u0,
-T2, u2, p2, cp2, R2, M2,
-T25, u25, p25, cp25, R25, M25,
-T5, u5, p5, cp5, R5, M5,
-T6, u6, p6, cp6, R6, M6, A6,
-T7, u7, p7, cp7, R7, M7,
-T8, u8, p8, cp8, R8, M8, A8,
-u9, A9,
-epf, eplc, ephc, epht, eplt,
-etaf, etalc, etahc, etaht, etalt,
-Lconv = 
-TASOPT.engine.tfoper!(
-gee, M0, T0, p0, a0, Tref, pref,
-Phiinl, Kinl, eng_has_BLI_cores,
-pid, pib, pifn, pitn,
-Gearf,
-pifD, pilcD, pihcD, pihtD, piltD,
-mbfD, mblcD, mbhcD, mbhtD, mbltD,
-NbfD, NblcD, NbhcD, NbhtD, NbltD,
-A2, A25, A5, A7,
-opt_calc_call,
-Tfuel, ifuel, hvap, etab,
-epolf, epollc, epolhc, epolht, epollt,
-mofft, Pofft,
-Tt9, pt9,
-epsl, epsh,
-opt_cooling,
-Mtexit, dTstrk, StA, efilm, tfilm,
-fc0, epht_fc,
-M4a, ruc,
-ncrowx, ncrow,
-epsrow, Tmrow,
-Fe,
-M2, pif, pilc, pihc, mbf, mblc, mbhc, Tt4, pt5, mcore, M25, 
-Δh_PreC, Δh_InterC, Δh_Regen, Δh_TurbC,
-Δp_PreC, Δp_InterC, Δp_Regen)
+#### Assume using the TASOPT sea-level static inlet conditions
+M0 = 0.0
+p0 = 101320.0 #Pa
+T0 = 288.2 #K
+a0 = 340.2074661144284 #m/s
 
-# println()
-# println("Fe(kN): $(Fe/1000.0)")
-# println("OPR: $(pihc*pilc)")
-# println("Tt4: $(Tt4)")
+#### Run each of the off-design thrust requirements
+num_Fn = length(Fn_run)
+Fn_kN = Fn_run./1000.0 #[kN]
+flg_conv = Vector{Bool}(undef,num_Fn)
+Pt3_psi = zeros(num_Fn)
+Tt3_R = zeros(num_Fn)
+Wf_lbms = zeros(num_Fn)
+BPR = zeros(num_Fn)
+W3_lbms = zeros(num_Fn)
+T04_R = zeros(num_Fn)
+OPR = zeros(num_Fn)
+for (idx,Fn_cur) in enumerate(Fn_run)
+    res_cur = runOffDes(ac,M0,p0,T0,a0,Fn_cur)
+    println("For thrust $(Fn_cur/1000.0) kN, solution converged: $(res_cur.Lconv)")
+    flg_conv[idx] = res_cur.Lconv
+    Pt3_psi[idx] = res_cur.pt3 * 0.000145038 #[psi]
+    Tt3_R[idx] = res_cur.Tt3 * 9.0/5.0 #[R]
+    Wf_lbms[idx] = res_cur.mcore * res_cur.ff * 2.20462 #[lbm/s]
+    BPR[idx]  = res_cur.Fe / res_cur.Fsp / res_cur.u0 / res_cur.mcore - 1.0
+    W3_lbms[idx] = 2.20462 * (res_cur.Fe + res_cur.u0 * res_cur.mcore - BPR[idx] * (res_cur.u8 - res_cur.u0) * res_cur.mcore)/res_cur.u6 #[lbm/s]
+    T04_R[idx] = res_cur.Tt4 * 9.0/5.0 #[R]
+    OPR[idx] = res_cur.pilc * res_cur.pihc
+end
+W4_lbms = W3_lbms .+ Wf_lbms
 
-println()
-println("Found engine thrust: $(Fe/1000.0) kN")
-println("Found OPR: $(pilc*pihc)")
-println("Found Tt4: $(Tt4) K")
-println("Found TSFC: $(TSFC)")
+#### Save data
+df = DataFrame(
+    "Converged"   => flg_conv,
+    "Thrust (kN)" => Fn_kN,
+    "Pt3[psi]"    => Pt3_psi,
+    "Tt3[R]"      => Tt3_R,
+    "W4[lbm/s]"   => W4_lbms,
+    "W3[lbm/s]"   => W3_lbms,
+    "Wf[lbm/s]"   => Wf_lbms,
+    "T04[R]"      => T04_R,
+    "BPR"         => BPR,
+    "OPR"         => OPR,
+)
+CSV.write(joinpath(save_dir, save_name*".csv"), df)
