@@ -2735,6 +2735,10 @@ function tfoper!(gee, M0, T0, p0, a0, Tref, pref,
                   pt5 = Pc
                   BPR = mf / ml * sqrt(Tt19c / Tt2) * pt2 / pt19c
 
+                  OPR = pt3/pt19 #For output purpose only
+
+                  mburner = mcore * (1.0 - fo - fc) #For output purpose only
+
                   println("pt18 Tt18 =", pt18, Tt18)
                   println("pt2  Tt2  =", pt2, Tt2)
                   println("pt25 Tt25 =", pt25, Tt25)
@@ -2775,6 +2779,7 @@ function tfoper!(gee, M0, T0, p0, a0, Tref, pref,
                   u9, A9,
                   epf, eplc, ephc, epht, eplt,
                   etaf, etalc, etahc, etaht, etalt,
+                  BPR, OPR, mburner,
                   Lconv
             end
 
@@ -3056,6 +3061,10 @@ function tfoper!(gee, M0, T0, p0, a0, Tref, pref,
                   mcore = ml * sqrt(Tref / Tt19c) * pt19c / pref
                   BPR = mf / ml * sqrt(Tt19c / Tt2) * pt2 / pt19c
 
+                  OPR = pt3/pt19 #For output purpose only
+
+                  mburner = mcore * (1.0 - fo - fc) #For output purpose only
+
                   #---- offtake mass ratio
                   fo = mofft / mcore
 
@@ -3235,6 +3244,7 @@ function tfoper!(gee, M0, T0, p0, a0, Tref, pref,
                   u9, A9,
                   epf, eplc, ephc, epht, eplt,
                   etaf, etalc, etahc, etaht, etalt,
+                  BPR, OPR, mburner,
                   Lconv
 
             end

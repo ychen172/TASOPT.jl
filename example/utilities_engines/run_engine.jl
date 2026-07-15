@@ -181,6 +181,10 @@ mutable struct TFOperRes{T<:AbstractFloat}
     etaht::T
     etalt::T
 
+    BPR::T
+    OPR::T
+    mburner::T
+
     Lconv::Bool
 end
 

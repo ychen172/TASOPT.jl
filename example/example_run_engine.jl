@@ -49,10 +49,10 @@ for (idx,Fn_cur) in enumerate(Fn_run)
     Pt3_psi[idx] = res_cur.pt3 * 0.000145038 #[psi]
     Tt3_R[idx] = res_cur.Tt3 * 9.0/5.0 #[R]
     Wf_lbms[idx] = res_cur.mcore * res_cur.ff * 2.20462 #[lbm/s]
-    BPR[idx]  = res_cur.Fe / res_cur.Fsp / res_cur.u0 / res_cur.mcore - 1.0
-    W3_lbms[idx] = 2.20462 * (res_cur.Fe + res_cur.u0 * res_cur.mcore - BPR[idx] * (res_cur.u8 - res_cur.u0) * res_cur.mcore)/res_cur.u6 #[lbm/s]
+    BPR[idx]  = res_cur.BPR
+    W3_lbms[idx] = res_cur.mburner * 2.20462 #[lbm/s]
     T04_R[idx] = res_cur.Tt4 * 9.0/5.0 #[R]
-    OPR[idx] = res_cur.pilc * res_cur.pihc
+    OPR[idx] = res_cur.OPR
 end
 W4_lbms = W3_lbms .+ Wf_lbms
 

@@ -418,6 +418,7 @@ function tfcalc!(wing, engine, parg::Vector{Float64}, para, pare, ip::Int64, ifu
                 u9, A9,
                 epf, eplc, ephc, epht, eplt,
                 etaf, etalc, etahc, etaht, etalt,
+                _, _, _,
                 Lconv = tfoper!(gee, M0, T0, p0, a0, Tref, pref,
                         Phiinl, Kinl, eng_has_BLI_cores,
                         pid, pib, pifn, pitn,
