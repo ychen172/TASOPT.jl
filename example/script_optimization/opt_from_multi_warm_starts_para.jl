@@ -132,10 +132,10 @@ for i in task_id:num_tasks:length(ranges_opti_nmi)
     #### Setup the warm start initial parameters (Assume to miss out the x-engine term(last term))
     par_opt_cur = load_csv_parameters(par_path_base_prefix*"$(round(Int,ranges_opti_nmi[i]))_optimized_parameters.csv")
     push!(par_opt_cur, Parameter(:(parg[igxeng]), (ac.wing.layout.box_x-fuse_radius), (ac.wing.layout.box_x-0.5*fuse_radius), (ac.wing.layout.box_x-1.5*fuse_radius), (fuse_radius * 0.2))) #Add the new parameter
-    par_opt_cur[7].val = fuse_radius * 2.5
-    par_opt_cur[7].bon_lo = fuse_radius * 2.0
-    par_opt_cur[7].bon_up = fuse_radius * 3.0
-    par_opt_cur[7].d_val = fuse_radius * 0.2
+    par_opt_cur[7].val = clamp(ac.parg[igyeng], bound_glob_cur[7].bon_lo+0.001*bound_glob_cur[7].d_val, bound_glob_cur[7].bon_up-0.001*bound_glob_cur[7].d_val)
+    par_opt_cur[7].bon_lo = par_opt_cur[7].val - bound_glob_cur[7].d_val
+    par_opt_cur[7].bon_up = par_opt_cur[7].val + bound_glob_cur[7].d_val
+    par_opt_cur[7].d_val = bound_glob_cur[7].d_val
     @assert (length(par_opt_cur)==length(bound_glob_cur))
     for (idx_cur, par_cur) in enumerate(par_opt_cur) #Update the initial step size used with that from the global bound
         par_cur.d_val = bound_glob_cur[idx_cur].d_val
