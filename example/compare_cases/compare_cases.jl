@@ -11,13 +11,13 @@ using .Extract: extract_acModel, init_results_2Layers, fill_results!, plot_cases
 #### Setup IO
 # Input case names - Retrofit
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Jet_NoACT_",   "Opti_Eth_NoACT_",  "Opti_Eth_NoACT_NoWSpan_", "Opti_Jet_NoACT_NoWSpan_", "Opti_Eth_ACT_NoComp_UniEta_NoWSpan_"]
-caseNames  = ["Jet Fuel Baseline", "Ethanol Baseline", "Ethanol Extended Wing",   "Jet Fuel Extended Wing", "Ethanol Extended Wing Ideal ACT"]
-idxMiss    = [1,1,1,1,1]
+caseKeys   = ["Opti_Jet_NoACT_",   "Opti_Jet_NoACT_V2_",  "Opti_Jet_NoACT_V3_", "Opti_Eth_NoACT_", "Opti_Eth_NoACT_V2_", "Opti_Eth_NoACT_V3_"]
+caseNames  = ["Jet Fuel V1",       "Jet Fuel V2",         "Jet Fuel V3",        "Ethanol V1",      "Ethanol V2"        , "Ethanol V3" ]
+idxMiss    = [1,1,1,1,1,1]
 ranges     = collect(300:100:3000) 
 # Output directory
 save_dir      = "../ModelProcessed"
-save_name     = "Wing_span_effects" #sub_folder will be created
+save_name     = "baseline_compare" #sub_folder will be created
 # Fields to read out
 const fields = (:range_nmi,:PFEI_JJ,:lenFuseCyl_m,:FuelVolumeFractionACT,:lenACT_m,:volFuelTot_m3,:massEmpty_Ton,
                 :massFuelTot_Ton,:massPayload_Ton,:ene_fli_J,:volFuelMax_m3,:FuelVolumeFraction,:massTO_Ton,:span_wing_m,
