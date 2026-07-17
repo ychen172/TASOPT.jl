@@ -39,7 +39,7 @@ for i in task_id:num_tasks:length(ranges_des_nmi)
     ac = quickload_aircraft(load_dir*"$(round(Int , ranges_des_nmi[i])).jld2")
     
     #### Setup sub-directory for saving
-    name_save_cur = name_save*$(round(Int , ranges_des_nmi[i]))*"_"
+    name_save_cur = name_save*"$(round(Int , ranges_des_nmi[i]))_"
     save_dir_cur = joinpath(save_dir,name_save_cur)
     mkpath(save_dir_cur)
     
