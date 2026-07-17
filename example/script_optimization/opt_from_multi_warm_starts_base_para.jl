@@ -19,7 +19,7 @@ const success_statuses = ObjectiveFactory.success_statuses
 par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V2_/Opti_Jet_NoACT_V2_") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_V2_5"
+save_key = "Opti_Jet_NoACT_V2_1"
 # 1.1) Optimization configuration parameters
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
 optimizers = [:GN_CRS2_LM, :LN_NELDERMEAD] # Optimizer choice. [Global,Local]
@@ -48,7 +48,7 @@ push!(mis_opt, Requirement(:(vtail.opt_sizing), TailSizing.OEI)) # Vertical tail
 push!(mis_opt, Requirement(:(parg[igCLveout]), 0.5)) # Vertical tail CL at engine out condition
 push!(mis_opt, Requirement(:(htail.opt_sizing), TailSizing.CLmaxFwdCG)) # Horizontal tail sizing mode (Forward CG or fixed volume)
 push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7)) # Horizontal tail CL at forward CG condition
-push!(mis_opt, Requirement(:(parg[igxeng], 1e10))) # To be updated later
+push!(mis_opt, Requirement(:(parg[igxeng]), 1e10)) # To be updated later
 # 3) Constraints for this optimization
 con_opt = Constraint[]
 push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1e4, lim_up=35.814)) # [m] Type C wing span constraint
@@ -132,9 +132,16 @@ for i in task_id:num_tasks:length(ranges_opti_nmi)
         par_cur.d_val = bound_glob_cur[idx_cur].d_val
     end
     par_opt_cur[7].val = clamp(ac.parg[igyeng], bound_glob_cur[7].bon_lo+0.001*bound_glob_cur[7].d_val, bound_glob_cur[7].bon_up-0.001*bound_glob_cur[7].d_val)
-    par_opt_cur[7].bon_lo = par_opt_cur[7].val - bound_glob_cur[7].d_val
-    par_opt_cur[7].bon_up = par_opt_cur[7].val + bound_glob_cur[7].d_val
+    par_opt_cur[7].bon_lo = par_opt_cur[7].val - 2.0*bound_glob_cur[7].d_val
+    par_opt_cur[7].bon_up = par_opt_cur[7].val + 2.0*bound_glob_cur[7].d_val
     par_opt_cur[7].d_val = bound_glob_cur[7].d_val
+    if par_opt_cur[7].bon_lo < bound_glob_cur[7].bon_lo
+        par_opt_cur[7].bon_lo = bound_glob_cur[7].bon_lo
+        par_opt_cur[7].bon_up = par_opt_cur[7].bon_lo + 4.0*bound_glob_cur[7].d_val
+    elseif par_opt_cur[7].bon_up > bound_glob_cur[7].bon_up
+        par_opt_cur[7].bon_up = bound_glob_cur[7].bon_up
+        par_opt_cur[7].bon_lo = par_opt_cur[7].bon_up - 4.0*bound_glob_cur[7].d_val
+    end
 
     #### Save the mission requirement
     save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i]))_mission_requirements.csv"), mis_opt_cur)
