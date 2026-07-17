@@ -4,7 +4,7 @@
 
 Transport Aircraft and the Environment System OPTimization (TASOPT) implemented in Julia. Originally based on Mark Drela's [FORTRAN code](https://web.mit.edu/drela/Public/web/tasopt/) of the same name. 
 
-## Getting started
+## Getting started 
 
 ### Simple install
 
