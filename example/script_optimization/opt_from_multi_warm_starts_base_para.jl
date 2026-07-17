@@ -48,6 +48,7 @@ push!(mis_opt, Requirement(:(vtail.opt_sizing), TailSizing.OEI)) # Vertical tail
 push!(mis_opt, Requirement(:(parg[igCLveout]), 0.5)) # Vertical tail CL at engine out condition
 push!(mis_opt, Requirement(:(htail.opt_sizing), TailSizing.CLmaxFwdCG)) # Horizontal tail sizing mode (Forward CG or fixed volume)
 push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7)) # Horizontal tail CL at forward CG condition
+push!(mis_opt, Requirement(:(parg[igxeng], 1e10))) # To be updated later
 # 3) Constraints for this optimization
 con_opt = Constraint[]
 push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1e4, lim_up=35.814)) # [m] Type C wing span constraint
@@ -76,7 +77,6 @@ push!(bound_glob, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 
 push!(bound_glob, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2.0)) # Fan BPR at cruise
 push!(bound_glob, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0)) #[K] Turbine inlet temperature  at cruise
 push!(bound_glob, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.2)) #Vertical tail aspec ratio 
-push!(bound_glob, Parameter(:(parg[igxeng]), -1e10, -1e10, -1e10, 1e10)) # [m] Engine axial location
 
 #### Setup job-array for ORCD cluster run
 @assert length(ARGS) >= 2 "Usage: julia xxx.jl task_id num_tasks"
@@ -117,17 +117,13 @@ for i in task_id:num_tasks:length(ranges_opti_nmi)
     #### Update mission requirements
     mis_opt_cur[1].val = ranges_opti_nmi[i]*1852.0 #[m]
     mis_opt_cur[2].val = Wpay_N #[N]
+    mis_opt_cur[18].val = ac.wing.layout.box_x - fuse_radius #[m] #Engine axial location
 
     #### Update the global bounds with suitable value for the warm start aircraft
-    bound_glob_cur[7].val = fuse_radius * 2.5
+    bound_glob_cur[7].val = fuse_radius * 3.0
     bound_glob_cur[7].bon_up = fuse_radius * 4.0
-    bound_glob_cur[7].bon_lo = fuse_radius * 1.5
+    bound_glob_cur[7].bon_lo = fuse_radius * 2.0
     bound_glob_cur[7].d_val = fuse_radius * 0.2
-
-    bound_glob_cur[17].val = ac.wing.layout.box_x - fuse_radius
-    bound_glob_cur[17].bon_up = ac.wing.layout.box_x + 1.5*fuse_radius
-    bound_glob_cur[17].bon_lo = ac.wing.layout.box_x - 3*fuse_radius
-    bound_glob_cur[17].d_val = fuse_radius * 0.2
 
     #### Setup the warm start initial parameters
     par_opt_cur = load_csv_parameters(par_path_base_prefix*"$(round(Int,ranges_opti_nmi[i]))_optimized_parameters.csv")
@@ -135,6 +131,10 @@ for i in task_id:num_tasks:length(ranges_opti_nmi)
     for (idx_cur, par_cur) in enumerate(par_opt_cur) #Update the initial step size used with that from the global bound
         par_cur.d_val = bound_glob_cur[idx_cur].d_val
     end
+    par_opt_cur[7].val = clamp(ac.parg[igyeng], bound_glob_cur[7].bon_lo+0.001*bound_glob_cur[7].d_val, bound_glob_cur[7].bon_up-0.001*bound_glob_cur[7].d_val)
+    par_opt_cur[7].bon_lo = par_opt_cur[7].val - bound_glob_cur[7].d_val
+    par_opt_cur[7].bon_up = par_opt_cur[7].val + bound_glob_cur[7].d_val
+    par_opt_cur[7].d_val = bound_glob_cur[7].d_val
 
     #### Save the mission requirement
     save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i]))_mission_requirements.csv"), mis_opt_cur)
