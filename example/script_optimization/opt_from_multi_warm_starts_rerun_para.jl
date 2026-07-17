@@ -1,6 +1,6 @@
 """
 This script performs further optimization from multiple warm starting points
--> Take in starting solution that does not optimize xeng -> Add xeng as new optimization parameters -> optimize new solution with xeng
+-> As a rerun, this script asssume the starting solution already optimize for xeng and will not add it
 Use job array from orcd cluster to process multiple cases at the same time
 Assume taskID starts from 1 instead of 0
 """
@@ -16,10 +16,10 @@ const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
 # Prefix to read warm start data files
-par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V2_/Opti_Jet_NoACT_V2_") #Also the prefixed for aircraft model
+par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V3_/Opti_Jet_NoACT_V3_") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_V3"
+save_key = "Opti_Jet_NoACT_V4"
 # 1.1) Optimization configuration parameters
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
 optimizers = [:GN_CRS2_LM, :LN_NELDERMEAD] # Optimizer choice. [Global,Local]
@@ -129,13 +129,8 @@ for i in task_id:num_tasks:length(ranges_opti_nmi)
     bound_glob_cur[17].bon_lo = ac.wing.layout.box_x - 3*fuse_radius
     bound_glob_cur[17].d_val = fuse_radius * 0.2
 
-    #### Setup the warm start initial parameters (Assume to miss out the x-engine term(last term))
+    #### Setup the warm start initial parameters
     par_opt_cur = load_csv_parameters(par_path_base_prefix*"$(round(Int,ranges_opti_nmi[i]))_optimized_parameters.csv")
-    push!(par_opt_cur, Parameter(:(parg[igxeng]), (ac.wing.layout.box_x-fuse_radius), (ac.wing.layout.box_x-0.5*fuse_radius), (ac.wing.layout.box_x-1.5*fuse_radius), (fuse_radius * 0.2))) #Add the new parameter
-    par_opt_cur[7].val = clamp(ac.parg[igyeng], bound_glob_cur[7].bon_lo+0.001*bound_glob_cur[7].d_val, bound_glob_cur[7].bon_up-0.001*bound_glob_cur[7].d_val)
-    par_opt_cur[7].bon_lo = par_opt_cur[7].val - bound_glob_cur[7].d_val
-    par_opt_cur[7].bon_up = par_opt_cur[7].val + bound_glob_cur[7].d_val
-    par_opt_cur[7].d_val = bound_glob_cur[7].d_val
     @assert (length(par_opt_cur)==length(bound_glob_cur))
     for (idx_cur, par_cur) in enumerate(par_opt_cur) #Update the initial step size used with that from the global bound
         par_cur.d_val = bound_glob_cur[idx_cur].d_val
