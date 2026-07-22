@@ -17,10 +17,10 @@ const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
 # Baseline aircraft model path (already sized)
-read_ac = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Eth_NoACT_V2_/Opti_Eth_NoACT_V2_3000.jld2")
+read_ac = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V2_/Opti_Jet_NoACT_V2_3000.jld2")
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Eth_NoACT_V2_1_NoxEng" # Optimized results saved under folder save_dir/save_key/save_key*range.xxx
+save_key = "Opti_Jet_NoACT_V2_1_ULByEng_Aft" # Optimized results saved under folder save_dir/save_key/save_key*range.xxx
 # First load the aircraft as some parameters depends on aircraft updated dimension
 ac = quickload_aircraft(read_ac)
 @assert ac.is_sized[1] #Ensure the design mission is sized for this baseline aircraft model
@@ -39,23 +39,22 @@ max_num_iter_opt = [30000, 800, 10000] # Maximum number of optimization steps [G
 max_num_round_loc = [120, 30] #Maximum number of adaptive bounds refinements rounds for local search [Local Coarse, Local Fine]
 span_glo_to_loc = 0.25 # span_local_search/span_global_search
 # 1.2) Setup an entry (value does not matter) for test ratio to be sweep later in optimization loop
-ranges_opti_nmi = collect(500:-100:300) #collect(300:100:3000) #[nmi] ranges to optimize the current aircraft !!! Will be converted to meter later !!!
+ranges_opti_nmi = collect(3000:-100:3000) #collect(300:100:3000) #[nmi] ranges to optimize the current aircraft !!! Will be converted to meter later !!!
 mis_opt = Requirement[]
 push!(mis_opt, Requirement(:(parm[imRange,1]), 1e10)) #[m] Sizing range (Different for each mission)
 push!(mis_opt, Requirement(:(parm[imWpay, 1]), 172146.1914)) #[N] Weight load weight. Assume 180 PAX
-push!(mis_opt, Requirement(:(options.ifuel), Int(32))) # Fuel type.                   Ex. Jet Fuel(24),       Ethanol(32)
-push!(mis_opt, Requirement(:(parg[igrhofuel]), 789.0)) # [kg/m3] Fuel Density.        Ex. Jet Fuel(817.0),    Ethanol(789.0)
-push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 918187.9)) # [J/kg] Fuel LHV_vapor. Ex. Jet Fuel(358694.0), Ethanol(918187.9)
-push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 918187.9)) # Duplicated just in case. Only use if heat exchanger.
+push!(mis_opt, Requirement(:(options.ifuel), Int(24))) # Fuel type.                   Ex. Jet Fuel(24),       Ethanol(32)
+push!(mis_opt, Requirement(:(parg[igrhofuel]), 817.0)) # [kg/m3] Fuel Density.        Ex. Jet Fuel(817.0),    Ethanol(789.0)
+push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 358694.0)) # [J/kg] Fuel LHV_vapor. Ex. Jet Fuel(358694.0), Ethanol(918187.9)
+push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 358694.0)) # Duplicated just in case. Only use if heat exchanger.
 push!(mis_opt, Requirement(:(options.has_ACT_fuel), false))  # Whether to allow additional center fuel tank (ACT)
 push!(mis_opt, Requirement(:(options.compensate_ACT), false)) # Whether to increase the aircraft length to accmondate for the cargo space taken by ACT
 push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_vol), 1.00))  # Volumetric efficiency of ACT fuel tank
 push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_wei), 1.00))  # Gravimetric efficiency of ACT fuel tank
 push!(mis_opt, Requirement(:(para[iaMach, ipclimbn:ipdescent1, 1]), 0.8)) # Cruise Mach number
-push!(mis_opt, Requirement(:(para[iarcls, ipclimb2:ipdescent4, 1]), 1.08)) # Wing cl ratio span break to root
 push!(mis_opt, Requirement(:(pare[iepilc, ipclimb2:ipdescent4, 1]), 3.0)) # Engine LPC pressure ratio at cruise
 push!(mis_opt, Requirement(:(vtail.opt_sizing), TailSizing.OEI)) # Vertical tail sizing mode (Engine out or fixed volume)
-push!(mis_opt, Requirement(:(parg[igCLveout]), 0.5)) # Vertical tail CL at engine out condition
+push!(mis_opt, Requirement(:(parg[igCLveout]), 0.47)) # Vertical tail CL at engine out condition
 push!(mis_opt, Requirement(:(htail.opt_sizing), TailSizing.CLmaxFwdCG)) # Horizontal tail sizing mode (Forward CG or fixed volume)
 push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7)) # Horizontal tail CL at forward CG condition
 push!(mis_opt, Requirement(:(parg[igxeng]), ac.wing.layout.box_x - fuse_radius)) # [m] Engine axial location (Fixed value)
@@ -78,8 +77,9 @@ push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.2, 
 push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
 push!(par_opt, Parameter(:(wing.inboard.λ), 0.7, 1.0, 0.1, 0.1)) # Wing inner taper ratio
 push!(par_opt, Parameter(:(wing.outboard.λ), 0.3, 1.0, 0.1, 0.1))
-push!(par_opt, Parameter(:(parg[igyeng]), fuse_radius*3.0, fuse_radius*4.615, fuse_radius*2.0, fuse_radius*0.2615)) # [m] Span wise engine location
-push!(par_opt, Parameter(:(wing.layout.ηs), 0.3, 0.5, 0.216, 0.028)) # Wing span break location over half span
+push!(par_opt, Parameter(:(parg[igyeng]), fuse_radius*3.0, fuse_radius*4.615, fuse_radius*2.0*0.0, fuse_radius*0.2615)) # [m] Span wise engine location
+push!(par_opt, Parameter(:(wing.layout.ηs), 0.3, 0.99, 0.216, 0.028)) # Wing span break location over half span
+push!(par_opt, Parameter(:(para[iarcls, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15)) # Wing cl ratio span break to root 
 push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15)) # Wing cl ratio of tip to root at cruise
 push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07)) # Wing CL at cruise
 push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0)) # [m] Cruise altitude

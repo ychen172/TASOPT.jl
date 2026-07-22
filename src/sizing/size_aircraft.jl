@@ -517,7 +517,11 @@ function _size_aircraft!(ac; itermax=35,
             parg[igCLveout] = Me / (qstall * Sv * lvtail)
         elseif vtail.opt_sizing == TailSizing.OEI
             lvtail = xvtail - xwing
+            lvtail_cg = xvtail - ac.para[iaxCG,iptakeoff,1] #aircraft cg loading condition during emergency landing immediately right after takeoff [m]
             CLveout = parg[igCLveout]
+            (CLveout > 0) || error("CLveout specified $(CLveout) needs to be positive")
+            (lvtail_cg > 0) || @warn ("Negative or zero lvtail_cg detected: $(lvtail_cg)")
+            #### (Criterion #1) Vertical tail sizing via engine-out yaw power
             # Add aspect ratio correction for limiting tail lift coefficient under OEI (assuming the reference CLveout input is for typical aircraft with AR = 1.93)
             slope0 = 2*pi #thin airfoil lift slope assumption
             effVTail = 0.9 #trapozoidal wing efficiency (between 0.8->0.9), lower give more AR dependency
@@ -526,7 +530,15 @@ function _size_aircraft!(ac; itermax=35,
             CL_AR_scaling = (1.0+slope0/(pi*effVTail*AR_ref))/(1.0+slope0/(pi*effVTail*vtail.layout.AR)) #CLact/CLref = (1+a0/pi/e/ARref)/(1+a0/pi/e/ARact)
             CLveout_act = CLveout * (1.0 + OEI_AR_sensitivity*(CL_AR_scaling-1.0)) #From finite wing lift slope scaling due to induced downwash
             # Size the vertical tail
-            Sv = Me / (qstall * CLveout_act * lvtail)
+            Sv_OEI = Me / (qstall * CLveout_act * lvtail_cg)
+            (Sv_OEI > 0) || @warn "Negative or zero Sv_OEI detected: $(Sv_OEI)"
+            #### (Criterion #2) Vertical tail sizing via yaw acceleration authority
+            Izz = calculate_Izz(ac) #aircraft yaw moment of inertial around cg (kgm2)
+            omega_dot_req = 0.06 #maximum yawing angular acceleration required near stalling or landing with strong crosswind (1/s2)
+            Sv_YA = (omega_dot_req*Izz)/CLveout_act/lvtail_cg/qstall
+            (Sv_YA > 0) || @warn "Negative or zero Sv_YA detected: $(Sv_YA)"
+            #### Compute derived variables
+            Sv = max(Sv_OEI,Sv_YA)
             vtail.layout.S = Sv
             vtail.volume = Sv * lvtail / (wing.layout.S * wing.layout.span)
         end
