@@ -1,12 +1,13 @@
 """
-This script performs further optimization from multiple warm starting points
-this script asssume the fixed xeng location which is not being optimized. It takes also warm start with no xeng optimization.
-Use job array from orcd cluster to process multiple cases at the same time
-Assume taskID starts from 1 instead of 0
+This script performs further optimization from a single warm starting point, but in seriesly use previous step optimized solution as the starting point for the next one.
+This script is not parallelrized due to successively warm start utilization
+It is discovered that wingbox location is actually not being sized and thus xeng location is no needed to be optimized. and also the dxengwingbox distance either
+This script is itended to work with the case where yengine is setup for both vtail sizing root bending relief.
 """
 
 using TASOPT
 include(__TASOPTindices__)
+include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
 include(joinpath(__TASOPTroot__, "../example/utilities_for_optimization/objective_factory.jl"))
 using .ObjectiveFactory: Constraint, Parameter, OptHistory, Requirement, optimize_singlePt_PFEI!, optimizer_wrapper_global_local, size_aircraft_w_param!,
                          save_vec_struct_csv, load_csv_constraints, load_csv_parameters, load_csv_requirements, save_jld2, load_jld2, OffDesMission
@@ -15,32 +16,41 @@ const upd_fuse_pax! = TASOPT.structures.update_fuse_for_pax!
 const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
-# Prefix to read warm start data files
-par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V2_/Opti_Jet_NoACT_V2_") #Also the prefixed for aircraft model
+# Baseline aircraft model path (already sized)
+read_ac = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Eth_NoACT_V2_/Opti_Eth_NoACT_V2_3000.jld2")
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_V2_1"
+save_key = "Opti_Eth_NoACT_V2_1_NoxEng" # Optimized results saved under folder save_dir/save_key/save_key*range.xxx
+# First load the aircraft as some parameters depends on aircraft updated dimension
+ac = quickload_aircraft(read_ac)
+@assert ac.is_sized[1] #Ensure the design mission is sized for this baseline aircraft model
+# 1) Fuselage geometry setup that require pre-processing
+num_pass_row = Int(6) # Numebr of passengers per row
+fuse_radius = min_fuse_radius(num_pass_row, ac) #Minimum fueslage radius given the number of seats per row
+ac.fuselage.layout.cross_section.radius = fuse_radius
+ac.fuselage.cabin.front_seat_offset = 0.0  # [m] Front seat offset from the front of cylinder
+ac.fuselage.cabin.rear_seat_offset = 0.0 # [m] Back seat offset from the back of cylinder
+upd_fuse_pax!(ac) #Activate carbin geometry
 # 1.1) Optimization configuration parameters
+flag_skip_global = true #Switch to skip the global round for first iteration and !!!Use the read in parameters as starting bounds!!!
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
 optimizers = [:GN_CRS2_LM, :LN_NELDERMEAD] # Optimizer choice. [Global,Local]
 max_num_iter_opt = [30000, 800, 10000] # Maximum number of optimization steps [Global, Local Coarse, Local Fine]
 max_num_round_loc = [120, 30] #Maximum number of adaptive bounds refinements rounds for local search [Local Coarse, Local Fine]
 span_glo_to_loc = 0.25 # span_local_search/span_global_search
-# 1.2) Setup optimization ranges
-ranges_opti_nmi = collect(300.0:100.0:3000.0) #warm start should be available for these ranges
-Wpay_N = 172146.1914 #[N] Corresponding to 180 passengers with 956.36N per passenger
-# 1.3) Setup an entry (value does not matter) for test ratio to be sweep later in optimization loop
+# 1.2) Setup an entry (value does not matter) for test ratio to be sweep later in optimization loop
+ranges_opti_nmi = collect(500:-100:300) #collect(300:100:3000) #[nmi] ranges to optimize the current aircraft !!! Will be converted to meter later !!!
 mis_opt = Requirement[]
-push!(mis_opt, Requirement(:(parm[imRange,1]), 1e10)) #[m] different for each mission (overwritten)
-push!(mis_opt, Requirement(:(parm[imWpay, 1]), 1e10)) #[N] different for each mission (overwritten)
-push!(mis_opt, Requirement(:(options.ifuel), Int(24)))                
-push!(mis_opt, Requirement(:(parg[igrhofuel]), 817.0))                
-push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 358694.0))       
-push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 358694.0)) 
-push!(mis_opt, Requirement(:(options.has_ACT_fuel), false)) # Whether to allow additional center fuel tank (ACT)
+push!(mis_opt, Requirement(:(parm[imRange,1]), 1e10)) #[m] Sizing range (Different for each mission)
+push!(mis_opt, Requirement(:(parm[imWpay, 1]), 172146.1914)) #[N] Weight load weight. Assume 180 PAX
+push!(mis_opt, Requirement(:(options.ifuel), Int(32))) # Fuel type.                   Ex. Jet Fuel(24),       Ethanol(32)
+push!(mis_opt, Requirement(:(parg[igrhofuel]), 789.0)) # [kg/m3] Fuel Density.        Ex. Jet Fuel(817.0),    Ethanol(789.0)
+push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), 918187.9)) # [J/kg] Fuel LHV_vapor. Ex. Jet Fuel(358694.0), Ethanol(918187.9)
+push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), 918187.9)) # Duplicated just in case. Only use if heat exchanger.
+push!(mis_opt, Requirement(:(options.has_ACT_fuel), false))  # Whether to allow additional center fuel tank (ACT)
 push!(mis_opt, Requirement(:(options.compensate_ACT), false)) # Whether to increase the aircraft length to accmondate for the cargo space taken by ACT
-push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_vol), 1.00)) # Volumetric efficiency of ACT fuel tank
-push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_wei), 1.00)) # Gravimetric efficiency of ACT fuel tank
+push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_vol), 1.00))  # Volumetric efficiency of ACT fuel tank
+push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_wei), 1.00))  # Gravimetric efficiency of ACT fuel tank
 push!(mis_opt, Requirement(:(para[iaMach, ipclimbn:ipdescent1, 1]), 0.8)) # Cruise Mach number
 push!(mis_opt, Requirement(:(para[iarcls, ipclimb2:ipdescent4, 1]), 1.08)) # Wing cl ratio span break to root
 push!(mis_opt, Requirement(:(pare[iepilc, ipclimb2:ipdescent4, 1]), 3.0)) # Engine LPC pressure ratio at cruise
@@ -48,7 +58,8 @@ push!(mis_opt, Requirement(:(vtail.opt_sizing), TailSizing.OEI)) # Vertical tail
 push!(mis_opt, Requirement(:(parg[igCLveout]), 0.5)) # Vertical tail CL at engine out condition
 push!(mis_opt, Requirement(:(htail.opt_sizing), TailSizing.CLmaxFwdCG)) # Horizontal tail sizing mode (Forward CG or fixed volume)
 push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7)) # Horizontal tail CL at forward CG condition
-push!(mis_opt, Requirement(:(parg[igxeng]), 1e10)) # To be updated later
+push!(mis_opt, Requirement(:(parg[igxeng]), ac.wing.layout.box_x - fuse_radius)) # [m] Engine axial location (Fixed value)
+push!(mis_opt, Requirement(:(parg[igdxeng2wbox]), fuse_radius)) # [m] Same as above
 # 3) Constraints for this optimization
 con_opt = Constraint[]
 push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1e4, lim_up=35.814)) # [m] Type C wing span constraint
@@ -56,122 +67,104 @@ push!(con_opt, Constraint(:(parm[imlBF, 1]); pen_sca=1e4, lim_up=2400.0)) # [m] 
 push!(con_opt, Constraint(:(para[iagamV, ipclimbn, 1]); pen_sca=1e4, lim_lo=0.015)) # [rad] Minimum cruise climb angle at TOC
 push!(con_opt, Constraint(:(pare[ieTt3, :, 1]); pen_sca=1e4, lim_up=900.0)) # [K] Maximum compressor outlet temperature
 push!(con_opt, Constraint(:(pare[ieTmet1, :, 1]); pen_sca=1e4, lim_up=1333.33)) # [K] Maximum turbine metal temperature
-push!(con_opt, Constraint(:(parg[igdfan]); pen_sca=1e4, lim_up=2.0)) # [m] Maximum fan diameter
+push!(con_opt, Constraint(:(parg[igdfan]); pen_sca=1e4, lim_up=2.5)) # [m] Maximum fan diameter
 push!(con_opt, Constraint(:(parm[imWTO, 1]); pen_sca=1e4, lim_up=:(parg[igWMTO]), eps_buff=1e-4)) # [N] Maximum takeoff weight
 push!(con_opt, Constraint(:(parm[imVfuel, 1]); pen_sca=1e4, lim_up=:(parg[igVfmax]), eps_buff=1e-4)) # [m3] Maximum fuel volume
 # 4) Parameters to be optimized (Initial guess(Only for local search), Upper bound, Lower bound, Initial Step Size(Only for local search))
-bound_glob = Parameter[] #Step size = 1/5 of local search span = 1/5 * 1/4 * global search span specified below
-push!(bound_glob, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 5.0)) # [deg] Wing sweep angle 
-push!(bound_glob, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 1.5)) # Wing aspect ratio
-push!(bound_glob, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05)) # Wing inner thickness to chord
-push!(bound_glob, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
-push!(bound_glob, Parameter(:(wing.inboard.λ), 0.7, 1.0, 0.1, 0.1)) # Wing inner taper ratio
-push!(bound_glob, Parameter(:(wing.outboard.λ), 0.3, 1.0, 0.1, 0.1))
-push!(bound_glob, Parameter(:(parg[igyeng]), -1e10, -1e10, -1e10, 1e10)) # [m] Span wise engine location (Placeholder value here)
-push!(bound_glob, Parameter(:(wing.layout.ηs), 0.3, 0.4, 0.2, 0.02)) # Wing span break location over half span
-push!(bound_glob, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15)) # Wing cl ratio of tip to root at cruise
-push!(bound_glob, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07)) # Wing CL at cruise
-push!(bound_glob, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0)) # [m] Cruise altitude
-push!(bound_glob, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2)) # Fan PR at cruise 
-push!(bound_glob, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 1.0)) # HPC PR at cruise
-push!(bound_glob, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2.0)) # Fan BPR at cruise
-push!(bound_glob, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0)) #[K] Turbine inlet temperature  at cruise
-push!(bound_glob, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.2)) #Vertical tail aspec ratio 
-
-#### Setup job-array for ORCD cluster run
-@assert length(ARGS) >= 2 "Usage: julia xxx.jl task_id num_tasks"
-task_id = parse(Int,ARGS[1]) #Current task id
-num_tasks = parse(Int,ARGS[2]) #Total number of tasks
-@assert 1 <= task_id <= num_tasks
-
-#### Setup the total save directory
+par_opt = Parameter[] #Step size = 1/5 of local search span = 1/5 * 1/4 * global search span specified below
+push!(par_opt, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 5.0)) # [deg] Wing sweep angle 
+push!(par_opt, Parameter(:(wing.layout.AR), 10.0, 20.0, 5.0, 1.5)) # Wing aspect ratio
+push!(par_opt, Parameter(:(wing.inboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05)) # Wing inner thickness to chord
+push!(par_opt, Parameter(:(wing.outboard.cross_section.thickness_to_chord), 0.2, 0.6, 0.04, 0.05))
+push!(par_opt, Parameter(:(wing.inboard.λ), 0.7, 1.0, 0.1, 0.1)) # Wing inner taper ratio
+push!(par_opt, Parameter(:(wing.outboard.λ), 0.3, 1.0, 0.1, 0.1))
+push!(par_opt, Parameter(:(parg[igyeng]), fuse_radius*3.0, fuse_radius*4.615, fuse_radius*2.0, fuse_radius*0.2615)) # [m] Span wise engine location
+push!(par_opt, Parameter(:(wing.layout.ηs), 0.3, 0.5, 0.216, 0.028)) # Wing span break location over half span
+push!(par_opt, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15)) # Wing cl ratio of tip to root at cruise
+push!(par_opt, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07)) # Wing CL at cruise
+push!(par_opt, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0)) # [m] Cruise altitude
+push!(par_opt, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2)) # Fan PR at cruise 
+push!(par_opt, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 1.0)) # HPC PR at cruise
+push!(par_opt, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2.0)) # Fan BPR at cruise
+push!(par_opt, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0)) #[K] Turbine inlet temperature  at cruise
+push!(par_opt, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.2)) #Vertical tail aspec ratio 
+bound_glob = deepcopy(par_opt)
+#### Save the directory to save the optimized solution
 save_dir_actual = joinpath(save_dir,save_key*"_") #Actual directory to save data
 mkpath(save_dir_actual)
-
+#### Initialize and save fixed configuration parameters for the optimization
+status_log = joinpath(save_dir_actual, "$(save_key)_OptLog.txt") # Status log initialization
+open(status_log, "w") do io
+    println(io, "Range_nmi,Status")
+end
+#### Setup special initial optimization parameters if choose to not run global search by use a warm start
+if flag_skip_global
+    for (i,para_cur) in enumerate(par_opt)
+        # Get starting value from the warm start aircraft model (Always taking the first phase point from slice might not be ideal)
+        try
+            para_cur.val = getNestedProp_fromExpr(ac; parm_sym=para_cur.name)[5] #hopefully works for both vector and number.
+        catch
+            para_cur.val = getNestedProp_fromExpr(ac; parm_sym=para_cur.name)[1]
+        end
+        # Correct the local bounds
+        bon_up = para_cur.bon_up
+        bon_lo = para_cur.bon_lo
+        para_cur.val = clamp(para_cur.val, bon_lo, bon_up)
+        dx = (bon_up - bon_lo)*span_glo_to_loc
+        para_cur.bon_up = para_cur.val+0.5*dx
+        para_cur.bon_lo = para_cur.val-0.5*dx
+        if para_cur.bon_up>bon_up
+            para_cur.bon_up = bon_up
+            para_cur.bon_lo = bon_up - dx
+        elseif para_cur.bon_lo<bon_lo
+            para_cur.bon_lo = bon_lo
+            para_cur.bon_up = bon_lo + dx
+        end
+    end
+end
 #### Optimization
-for i in task_id:num_tasks:length(ranges_opti_nmi)
+for (i,ran_cur) in enumerate(ranges_opti_nmi)
+    #### Assign mission range
+    mis_opt[1].val = ran_cur*1852.0 #[m]
 
-    #### Create inidividual log file for each task
-    status_log = joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i]))_OptLog.txt")
-    open(status_log, "w") do io
-        println(io, "Range_nmi,Status")
-    end
+    #### Save
+    save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ran_cur))_mission_requirements.csv"), mis_opt)
+    save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ran_cur))_design_constraints.csv"), con_opt)
+    save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ran_cur))_global_bounds.csv"), bound_glob)
 
-    #### Make copies for each task
-    mis_opt_cur = deepcopy(mis_opt)
-    con_opt_cur = deepcopy(con_opt)
-    bound_glob_cur = deepcopy(bound_glob)
-    
-    #### Load the corresponding warm start aircraft model
-    ac = quickload_aircraft(par_path_base_prefix*"$(round(Int,ranges_opti_nmi[i])).jld2")
-    @assert ac.is_sized[1] #Make sure mission 1 is sized
+    #### Choose whether to run global
+    run_global = ((i==1) && (!flag_skip_global)) #only run global for the first case if turned on
 
-    #### Setup the optimal fuselage configuration
-    num_pass_row = Int(6) # Numebr of passengers per row
-    fuse_radius = min_fuse_radius(num_pass_row, ac) #Minimum fueslage radius given the number of seats per row
-    ac.fuselage.layout.cross_section.radius = fuse_radius
-    ac.fuselage.cabin.front_seat_offset = 0.0  # [m] Front seat offset from the front of cylinder
-    ac.fuselage.cabin.rear_seat_offset = 0.0 # [m] Back seat offset from the back of cylinder
-    upd_fuse_pax!(ac) #Activate carbin geometry
-
-    #### Update mission requirements
-    mis_opt_cur[1].val = ranges_opti_nmi[i]*1852.0 #[m]
-    mis_opt_cur[2].val = Wpay_N #[N]
-    mis_opt_cur[18].val = ac.wing.layout.box_x - fuse_radius #[m] #Engine axial location
-
-    #### Update the global bounds with suitable value for the warm start aircraft
-    bound_glob_cur[7].val = fuse_radius * 3.0
-    bound_glob_cur[7].bon_up = fuse_radius * 4.0
-    bound_glob_cur[7].bon_lo = fuse_radius * 2.0
-    bound_glob_cur[7].d_val = fuse_radius * 0.2
-
-    #### Setup the warm start initial parameters
-    par_opt_cur = load_csv_parameters(par_path_base_prefix*"$(round(Int,ranges_opti_nmi[i]))_optimized_parameters.csv")
-    @assert (length(par_opt_cur)==length(bound_glob_cur))
-    for (idx_cur, par_cur) in enumerate(par_opt_cur) #Update the initial step size used with that from the global bound
-        par_cur.d_val = bound_glob_cur[idx_cur].d_val
-    end
-    par_opt_cur[7].val = clamp(ac.parg[igyeng], bound_glob_cur[7].bon_lo+0.001*bound_glob_cur[7].d_val, bound_glob_cur[7].bon_up-0.001*bound_glob_cur[7].d_val)
-    par_opt_cur[7].bon_lo = par_opt_cur[7].val - 2.0*bound_glob_cur[7].d_val
-    par_opt_cur[7].bon_up = par_opt_cur[7].val + 2.0*bound_glob_cur[7].d_val
-    par_opt_cur[7].d_val = bound_glob_cur[7].d_val
-    if par_opt_cur[7].bon_lo < bound_glob_cur[7].bon_lo
-        par_opt_cur[7].bon_lo = bound_glob_cur[7].bon_lo
-        par_opt_cur[7].bon_up = par_opt_cur[7].bon_lo + 4.0*bound_glob_cur[7].d_val
-    elseif par_opt_cur[7].bon_up > bound_glob_cur[7].bon_up
-        par_opt_cur[7].bon_up = bound_glob_cur[7].bon_up
-        par_opt_cur[7].bon_lo = par_opt_cur[7].bon_up - 4.0*bound_glob_cur[7].d_val
-    end
-
-    #### Save the mission requirement
-    save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i]))_mission_requirements.csv"), mis_opt_cur)
-    save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i]))_design_constraints.csv"), con_opt_cur)
-    save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i]))_global_bounds.csv"), bound_glob_cur)
-
-    # Run the global local optimization process
+    #### Run the global local optimization process
     par_opt_found, status_found, hist_found = 
-    optimizer_wrapper_global_local(ac, par_opt_cur, bound_glob_cur; miss_req=mis_opt_cur, constraints=con_opt_cur, max_iter_sizing=max_iter_sizing,
-                                   optimizer_global=optimizers[1], max_iter_glo=max_num_iter_opt[1],   span_glo_to_loc=span_glo_to_loc, run_global=false,
+    optimizer_wrapper_global_local(ac, par_opt, bound_glob; miss_req=mis_opt, constraints=con_opt, max_iter_sizing=max_iter_sizing,
+                                   optimizer_global=optimizers[1], max_iter_glo=max_num_iter_opt[1],   span_glo_to_loc=span_glo_to_loc, run_global=run_global,
                                    optimizer_local =optimizers[2], max_iter_loc_C=max_num_iter_opt[2], max_round_loc_C=max_num_round_loc[1],
                                                                    max_iter_loc_F=max_num_iter_opt[3], max_round_loc_F=max_num_round_loc[2])
-    
-    # Post-process the optimization results
+
+    #### Post-process the optimization results
     if status_found in success_statuses
         # attempt to update an aircraft model to save
         ac_copy = deepcopy(ac)
-        sized_succeeded = size_aircraft_w_param!(ac_copy; mission_req=mis_opt_cur, parameters=par_opt_found, max_iter_sizing=max_iter_sizing)
+        sized_succeeded = size_aircraft_w_param!(ac_copy; mission_req=mis_opt, parameters=par_opt_found, max_iter_sizing=max_iter_sizing)
         # correct the status
         status_found = sized_succeeded ? status_found : (:FAILED_TO_REPRODUCE)
         # Only save the new model if successfuly sized
         if sized_succeeded
-            quicksave_aircraft(ac_copy, joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i])).jld2"))
+            quicksave_aircraft(ac_copy, joinpath(save_dir_actual, "$(save_key)_$(round(Int,ran_cur)).jld2"))
         end
     end
     
-    # save the results
+    #### save the results
     open(status_log, "a") do io
-        println(io, "$(ranges_opti_nmi[i]),$(string(status_found))")
+        println(io, "$(round(Int,ran_cur)),$(string(status_found))")
     end
-    save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i]))_optimized_parameters.csv"), par_opt_found)
-    save_jld2(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ranges_opti_nmi[i]))_optimization_history.jld2"), hist_found)
+    save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ran_cur))_optimized_parameters.csv"), par_opt_found)
+    save_jld2(joinpath(save_dir_actual, "$(save_key)_$(round(Int,ran_cur))_optimization_history.jld2"), hist_found)
+    
+    #### select whether to update the initial guess for the next round
+    if status_found in success_statuses
+        global par_opt = par_opt_found #rebind, or else keep the unchanged initial inputs
+    end
+
 end
