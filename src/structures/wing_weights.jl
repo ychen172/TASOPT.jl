@@ -107,6 +107,38 @@ function wing_weights!(wing, po, gammat, gammas,
     etao = wing.layout.ηo
     etas = wing.layout.ηs
 
+    # Correct mis-classification for engine placement
+    ys = 0.5*wing.layout.span*etas #[m] span break from the centerline
+    yo = 0.5*wing.layout.span*etao #[m] wing root from the centerline
+    dyeout_cen = dyeout + ys #[m] outer engine from the centerline
+    dyeinn_cen = dyeinn + yo #[m] inner engine from the centerline
+    eps_span = wing.layout.span*1e-8 #[m] small tolerance for span
+    neout = max(0,neout)
+    neinn = max(0,neinn)
+    netot = neout + neinn
+    if (netot<=0)
+        dyeout = 0.0
+        dyeinn = 0.0
+        neout = 0
+        neinn = 0
+    elseif (dyeout_cen>(ys+eps_span)) && (dyeinn_cen>(ys+eps_span)) #Both set of engines are outside wing span break
+        dyeout = (dyeout_cen*neout + dyeinn_cen*neinn)/(netot) - ys # Assume all engines have the same unit weight
+        neout = netot
+        dyeinn = 0.0
+        neinn = 0
+    elseif (dyeout_cen<=(ys+eps_span)) && (dyeinn_cen>(ys+eps_span)) #Outer ones inside but inner ones outside
+        dyeout = dyeinn_cen - ys
+        dyeinn = dyeout_cen - yo
+        neout_dum = neout
+        neout = neinn
+        neinn = neout_dum
+    elseif (dyeout_cen<=(ys+eps_span)) && (dyeinn_cen<=(ys+eps_span)) #Both set of engines are inside
+        dyeinn = (dyeout_cen*neout + dyeinn_cen*neinn)/(netot) - yo
+        neinn = netot
+        dyeout = 0.0
+        neout = 0
+    end #Normal cases stay unchanged
+
     # Tip roll off Lift (modeled as a point load) and it's moment about ηs
     dLt = wing.tip_lift_loss * po * wing.layout.root_chord * gammat * wing.outboard.λ
     dMt = dLt * 0.5 * wing.layout.span * (1.0 - etas)
