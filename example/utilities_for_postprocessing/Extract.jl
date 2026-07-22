@@ -1,19 +1,55 @@
 module Extract
-export init_results_2Layers,extract_acModel,fill_results!,plot_cases,extract_combustion_inputs
+export init_results_2Layers,extract_acModel,extract_acModel_compact!,fill_results!,plot_cases,plot_cases_specified,extract_combustion_inputs
 using Plots
 using DataFrames, CSV
 using TASOPT
 include(__TASOPTindices__)
+include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
 using Statistics
 
-function init_results_2Layers(num_cases::Int, fields::Tuple{Vararg{Symbol}})
-    """
-    This function create a two layer dictionary
-    # num_cases: Int: number of cases for the current field
-    # fields: tuple of symbols    
-    """
-    makevec() = fill!(Vector{Union{Missing,Float64}}(undef, num_cases), missing)
-    return Dict{Symbol,Vector{Union{Missing,Float64}}}(f => makevec() for f in fields)
+"""
+    init_results_2Layers(numPts::Int, fields::AbstractVector{Expr})
+
+Preallocate a 2d dictionary for number saving: dataset[Expr][:]
+
+    **inputs**
+        - numPts: number of data point for each field
+        - fields: vector of field that return number but not array or vector
+    **outputs**
+        - dataset: Dict{nfiels, npts}, indexed by dataset[Expr][:] to read out or set the 1d vector for a field (initialized to missing)
+    **behavior**
+        - Assume all fiels have the same number of data points
+
+"""
+function init_results_2Layers(numPts::Int, fields::AbstractVector{Expr})
+    makevec() = fill!(Vector{Union{Missing,Real}}(undef, numPts), missing) #constructor to create 1D vector for a field
+    return Dict{Expr,Vector{Union{Missing,Real}}}(f => makevec() for f in fields)
+end
+
+"""
+    extract_acModel_compact!(ac, dataset::Dict{Expr,Vector{Union{Missing,Real}}}, idx_store::Int)
+
+Attempt to extract all fields(numbers) requested by dataset from an aircraft model, and store the value into a certain datapoint slot within the dataset.
+
+    **inputs**
+        - ac: aircraft model
+        - dataset: modified inplace to store data. contains fields(Expr) to be read of the aircraft model
+        - idx_store: which index within the dataset to store the read out value. (preallocated slot)
+    **updated**
+        - idx_store: inplace update
+    **behavior**
+        - Skip a field if ac fail to extract due to either field does not exist or contain array with size > 1
+"""
+function extract_acModel_compact!(ac, dataset::Dict{Expr,Vector{Union{Missing,Real}}}, idx_store::Int)
+    for key_cur in keys(dataset)
+        try
+            res = getNestedProp_fromExpr(ac; parm_sym=key_cur)
+            (length(res)==1) || error("length of the field extracted $(length(res)) is not a number")
+            dataset[key_cur][idx_store] = res[1]
+        catch e #field no exist or length >1
+            @warn "Failed to extract $(key_cur)" exception=(e)
+        end
+    end
 end
 
 function fill_results!(results::Dict{Symbol,Vector{Union{Missing,Float64}}},
@@ -195,9 +231,8 @@ function extract_acModel(ac_cur,idx_miss)
 end
 
 const LINESTYLES = [:solid, :dash, :dot, :dashdot, :dashdotdot]
-const LINECOLORS = [:blue, :red, :green, :orange, :purple, :brown, :pink, :gray, :black, :cyan,
-                     :magenta, :teal, :navy, :maroon, :olive, :gold, :coral, :turquoise, :lime, :indigo]
-const MARKERS = [:rect, :circle, :diamond, :utriangle, :dtriangle]
+const LINECOLORS = [:blue, :red, :green, :orange, :purple, :brown, :black, :magenta, :cyan, :olive]
+const MARKERS    = [:rect, :circle, :diamond, :utriangle, :dtriangle]
 function plot_cases(xlab::String,ylab::String,cases::AbstractVector{<:AbstractDict},xSym::Symbol,ySym::Symbol,datalab::AbstractVector{<:AbstractString},save_name::String,;dpi=800,lw=2,legend::Symbol=:best)
     @assert length(cases) == length(datalab) "cases and datalab length mismatch"
     p = plot(xlabel=xlab, ylabel=ylab, dpi=dpi, legend=legend)
@@ -207,6 +242,43 @@ function plot_cases(xlab::String,ylab::String,cases::AbstractVector{<:AbstractDi
     end
     savefig(p,save_name)
     return p
+end
+
+
+"""
+    plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata::AbstractVector{<:AbstractVector{<:Real}}, 
+                              ydata::AbstractVector{<:AbstractVector{<:Real}}, datalab::AbstractVector{<:Union{Nothing,AbstractString}}, 
+                              savename::AbstractString;
+                              dpi::Real=800, lw::Real=2, legend::Symbol=:best)
+
+This function compare 1D data from various cases.
+    
+    **Inputs**
+        - xlab,ylab: x and y labels
+        - xdata,ydata: x and y data [ncases, npts]
+        - datalab: case labels [ncases], `nothing` to skip a label, all `nothing` leads to no label at all
+        - savename: name for plot saving, full path + name plot + extension
+        - dpi, lw, legend
+"""
+function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}}, 
+                              ydata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}}, datalab::AbstractVector{<:Union{Nothing,AbstractString}}, 
+                              savename::AbstractString;
+                              dpi::Real=800, lw::Real=2, legend::Symbol=:best)
+    # size check
+    ((length(xdata) == length(ydata)) && (length(ydata) == length(datalab))) || error("Length for xy data $(length(xdata)),$(length(ydata)) and data labels $(length(datalab)) should all equal")
+    # set legend
+    if all(isnothing, datalab)
+        legend = false
+    end
+    p = plot(xlabel=xlab, ylabel=ylab, dpi=dpi, legend=legend)
+    for i in eachindex(xdata)
+        length(xdata[i])==length(ydata[i]) || error("xy data for case $(i) dont have the same number of data points $(length(xdata[i])),$(length(ydata[i]))")
+        color = LINECOLORS[mod1(i, length(LINECOLORS))]
+        marker = MARKERS[mod1(cld(i, length(LINECOLORS)), length(MARKERS))]
+        linestyle = LINESTYLES[mod1(cld(i, length(LINECOLORS) * length(MARKERS)), length(LINESTYLES))]
+        plot!(p, xdata[i], ydata[i], marker=marker, mc=color, msc=color, color=color, lw=lw, linestyle=linestyle, label=datalab[i])
+    end
+    savefig(p,savename)
 end
 
 """
