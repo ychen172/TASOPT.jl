@@ -534,7 +534,7 @@ function _size_aircraft!(ac; itermax=35,
             (Sv_OEI > 0) || @warn "Negative or zero Sv_OEI detected: $(Sv_OEI)"
             #### (Criterion #2) Vertical tail sizing via yaw acceleration authority
             Izz = calculate_Izz(ac) #aircraft yaw moment of inertial around cg (kgm2)
-            omega_dot_req = 0.06 #maximum yawing angular acceleration required near stalling or landing with strong crosswind (1/s2)
+            omega_dot_req = 0.055 #maximum yawing angular acceleration required near stalling or landing with strong crosswind (1/s2)
             Sv_YA = (omega_dot_req*Izz)/CLveout_act/lvtail_cg/qstall
             (Sv_YA > 0) || @warn "Negative or zero Sv_YA detected: $(Sv_YA)"
             #### Compute derived variables
