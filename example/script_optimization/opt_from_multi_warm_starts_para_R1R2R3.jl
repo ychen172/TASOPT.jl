@@ -37,7 +37,7 @@ max_num_iter_opt = [30000, 800, 10000] # Maximum number of optimization steps [G
 max_num_round_loc = [120, 30] #Maximum number of adaptive bounds refinements rounds for local search [Local Coarse, Local Fine]
 span_glo_to_loc = 0.25 # span_local_search/span_global_search
 # Setup optimization ranges
-ranges_opti_nmi = [300]#collect(300.0:100.0:3000.0) #warm start reservoir to be selected from
+ranges_opti_nmi = collect(300.0:100.0:3000.0) #warm start reservoir to be selected from
 # Setup an entry (value does not matter) for test ratio to be sweep later in optimization loop
 mis_opt = Requirement[]
 push!(mis_opt, Requirement(:(options.ifuel), Int(32)))                #Eth: 32       , Jet: 24
