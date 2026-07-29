@@ -1,5 +1,5 @@
 """
-This script performs further optimization from multiple/single warm-start model(s), but using parallel computing
+This script performs further optimization from multiple & adjacent cross warm-start model(s), but using parallel computing
 Can create or remove optimization parameters. Will automatically extract initial guesses from warm start models.
 multi-start means non-sequential optimization, case 1 result is not used as initial guess for case 2, because they are all started at the same time.
 Use job array from orcd cluster to process multiple cases at the same time
@@ -18,10 +18,10 @@ const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
 # Prefix to read warm start data files
-par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V2_1_ULByEng_Aft3_/Opti_Jet_NoACT_V2_1_ULByEng_Aft3_3000.jld2") #Also the prefixed for aircraft model
+par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V3_R1Size_/Opti_Jet_NoACT_V3_R1Size_") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_V3_R1Size"
+save_key = "Opti_Jet_NoACT_V3_1_R1Size"
 # Optimization configuration parameters
 flag_skip_global = true #Switch on to skip the global search if confident that warm start model can converge
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
@@ -106,8 +106,13 @@ for i in task_id:num_tasks:length(ranges_opti_nmi)
     bound_glob_cur = deepcopy(bound_glob)
 
     #### Load a sized default model regardless warm start or not
+    if mod(i,2)==0 #Assume the total number of cases available for reading is even number
+        ac = quickload_aircraft(par_path_base_prefix*"$(round(Int,ranges_opti_nmi[i-1])).jld2") #Even number iteration uses one case lower
+    else
+        ac = quickload_aircraft(par_path_base_prefix*"$(round(Int,ranges_opti_nmi[i+1])).jld2") #Odd number iteration uses one case higher
+    end
     # ac = quickload_aircraft(par_path_base_prefix*"$(round(Int,ranges_opti_nmi[i])).jld2") #Multiple start
-    ac = quickload_aircraft(par_path_base_prefix) #Single start
+    # ac = quickload_aircraft(par_path_base_prefix) #Single start
     @assert ac.is_sized[1] #Make sure mission 1 is sized
 
     #### Update the fueselage radius and layout
