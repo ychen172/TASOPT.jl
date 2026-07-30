@@ -1,145 +1,169 @@
 """
-This script compare the payload range envelop aross different design cases
+This script compares R1, R2, R3 performance between retrofitted case and specially design case
 """
 
+using Glob
 using TASOPT
 include(__TASOPTindices__)
 using Plots
 include(joinpath(@__DIR__,"../utilities_for_postprocessing/Extract.jl"))
-using .Extract: extract_acModel, init_results_2Layers, fill_results!, plot_cases
-using Glob
+using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_specified
 
 #### Setup IO
-read_dir = "../ModelSaved" 
-ran_design = 3000
-key_names = ["Opti_Jet_NoACT_to_Eth_OffDes_",      "Opti_Jet_NoACT_to_Eth_for_Eth_OffDes_",   "Opti_Eth_NoACT_Mat_Jet_NoACT_to_Eth_OffDes_"]
-R1R2R3_names = ["Opti_Jet_NoACT_to_Eth_MatR1R2R3_","Opti_Jet_NoACT_to_Eth_for_Eth_MatR1R2R3_","Opti_Eth_NoACT_Mat_Jet_NoACT_to_Eth_MatR1R2R3_"]
-lables    = ["Retrofit","Optimized through Retrofitting", "Optimized Directly"]
-rans_offdes = collect(300:100:4000)
-
+# Input case names - Retrofit
+model_dir  = "../ModelSaved"
+caseKeys   = ["Opti_Jet_NoACT_V2_1_ULByEng_Eth_PRD_", "Opti_Eth_NoACT_V2_2_OffdesR1R2R3_"]
+caseNames  = ["Retrofitted",                          "Optimized"                        ]
+ranges     = collect(300:100:3000) 
 # Output directory
-save_dir = "../ModelProcessed"
-save_name = "Compare_Retrofit_Design_PRD"
+save_dir      = "../ModelProcessed"
+save_name     = "retrofitted_specially_sized" #sub_folder will be created
 # Fields to read out
-const fields = (:range_nmi,:massPayload_Ton,:PFEI_JJ)
+const fields = [:(parm[imRange,2]),:(parm[imWpay,2]),:(parm[imPFEI,2]),
+                :(parg[igWpaymax]),:(parm[imVfuel,2]),:(parg[igVfmax]),
+                :(parm[imWTO,2]),:(parg[igWMTO])]
 
 #### Create save directory
 save_dir_sub  = joinpath(save_dir,save_name)
 mkpath(save_dir_sub)
 
 #### Initialization
-results = [init_results_2Layers(length(rans_offdes), fields) for _ in key_names]
-R1R2R3Restuls = [init_results_2Layers(length(rans_offdes), fields) for _ in [1,2,3]]
-#### Extract data for the design mission
-for (i, key_cur) in enumerate(key_names)
-    j_last = 0
-    for (j, ran_cur) in enumerate(rans_offdes)
-        try
-            # Read in aircraft model
-            ac_dir = joinpath(read_dir,key_cur,key_cur*"$(ran_design)_",key_cur*"$(ran_design)_$(ran_cur).jld2")
-            ac = quickload_aircraft(ac_dir)
-            # Extract parameters
-            results[i][:range_nmi][j] = ac.parm[imRange, 2] / 1852.0 #[nmi]
-            results[i][:massPayload_Ton][j] = ac.parm[imWpay, 2] / gee / 1000.0 #[Ton]
-            results[i][:PFEI_JJ][j] = ac.parm[imPFEI, 2]
-            j_last = j
-            println("File, $(ac_dir), read successfully")
-        catch e
-            continue
-        end
-    end
-    
-    # Read in aircraft models for the specified common R1 R2 R3 Requirements
-    try
-        # R1
-        R1R2R3_dir = joinpath(read_dir,R1R2R3_names[i],R1R2R3_names[i]*"$(ran_design)_")
-        files = glob(R1R2R3_names[i]*"$(ran_design)_R1Mat_*.jld2", R1R2R3_dir)
-        @assert length(files) == 1 "Expected exactly one matching file."
-        ac_dir = files[1]
-        ac = quickload_aircraft(ac_dir)
-        R1R2R3Restuls[i][:range_nmi][1] = ac.parm[imRange, 2] / 1852.0 #[nmi]
-        R1R2R3Restuls[i][:massPayload_Ton][1] = ac.parm[imWpay, 2] / gee / 1000.0 #[Ton]
-        R1R2R3Restuls[i][:PFEI_JJ][1] = ac.parm[imPFEI, 2]
-        # R2
-        R1R2R3_dir = joinpath(read_dir,R1R2R3_names[i],R1R2R3_names[i]*"$(ran_design)_")
-        files = glob(R1R2R3_names[i]*"$(ran_design)_R2Mat_*.jld2", R1R2R3_dir)
-        @assert length(files) == 1 "Expected exactly one matching file."
-        ac_dir = files[1]
-        ac = quickload_aircraft(ac_dir)
-        R1R2R3Restuls[i][:range_nmi][2] = ac.parm[imRange, 2] / 1852.0 #[nmi]
-        R1R2R3Restuls[i][:massPayload_Ton][2] = ac.parm[imWpay, 2] / gee / 1000.0 #[Ton]
-        R1R2R3Restuls[i][:PFEI_JJ][2] = ac.parm[imPFEI, 2]
-        # R3
-        R1R2R3_dir = joinpath(read_dir,R1R2R3_names[i],R1R2R3_names[i]*"$(ran_design)_")
-        files = glob(R1R2R3_names[i]*"$(ran_design)_R3Mat_*.jld2", R1R2R3_dir)
-        @assert length(files) == 1 "Expected exactly one matching file."
-        ac_dir = files[1]
-        ac = quickload_aircraft(ac_dir)
-        R1R2R3Restuls[i][:range_nmi][3] = ac.parm[imRange, 2] / 1852.0 #[nmi]
-        R1R2R3Restuls[i][:massPayload_Ton][3] = ac.parm[imWpay, 2] / gee / 1000.0 #[Ton]
-        R1R2R3Restuls[i][:PFEI_JJ][3] = ac.parm[imPFEI, 2]
-        println("Read in specified R1 R2 R3 successfully")
-    catch e
-        continue
-    end
-    # Read in the exact R1 R2 R3 values
-    try
-        # R1
-        R1R2R3_dir = joinpath(read_dir,key_cur,key_cur*"$(ran_design)_")
-        files = glob(key_cur*"$(ran_design)_R1_*.jld2", R1R2R3_dir)
-        @assert length(files) == 1 "Expected exactly one matching file."
-        ac = quickload_aircraft(files[1])
-        results[i][:range_nmi][j_last+1] = ac.parm[imRange, 2] / 1852.0 #[nmi]
-        results[i][:massPayload_Ton][j_last+1] = ac.parm[imWpay, 2] / gee / 1000.0 #[Ton]
-        results[i][:PFEI_JJ][j_last+1] = ac.parm[imPFEI, 2]
-        # R2
-        files = glob(key_cur*"$(ran_design)_R2_*.jld2", R1R2R3_dir)
-        @assert length(files) == 1 "Expected exactly one matching file."
-        ac = quickload_aircraft(files[1])
-        results[i][:range_nmi][j_last+2] = ac.parm[imRange, 2] / 1852.0 #[nmi]
-        results[i][:massPayload_Ton][j_last+2] = ac.parm[imWpay, 2] / gee / 1000.0 #[Ton]
-        results[i][:PFEI_JJ][j_last+2] = ac.parm[imPFEI, 2]
-        # R3
-        files = glob(key_cur*"$(ran_design)_R3_*.jld2", R1R2R3_dir)
-        @assert length(files) == 1 "Expected exactly one matching file."
-        ac = quickload_aircraft(files[1])
-        results[i][:range_nmi][j_last+3] = ac.parm[imRange, 2] / 1852.0 #[nmi]
-        results[i][:massPayload_Ton][j_last+3] = ac.parm[imWpay, 2] / gee / 1000.0 #[Ton]
-        results[i][:PFEI_JJ][j_last+3] = ac.parm[imPFEI, 2]
-        j_last = j_last+3
-        println("Read exact R1 R2 R3 successfully")
-    catch e
-        continue
-    end
-    for field in keys(results[i])
-        resize!(results[i][field], j_last)
-    end
-    perm = sortperm(results[i][:range_nmi])
-    for field in keys(results[i])
-        results[i][field] = results[i][field][perm]
+dataset_R1 = [init_results_2Layers(length(ranges), fields) for _ in caseKeys] #[dataset[Expr][:],...]
+dataset_R2 = [init_results_2Layers(length(ranges), fields) for _ in caseKeys] #[dataset[Expr][:],...]
+dataset_R3 = [init_results_2Layers(length(ranges), fields) for _ in caseKeys] #[dataset[Expr][:],...]
+
+#### Extract data for the sized missions
+for (j, caseKey) in enumerate(caseKeys)
+    for (i, ran) in enumerate(ranges)
+        # Read in the case
+        ac_dir = joinpath(model_dir,caseKey,caseKey*"$(round(Int,ran))_")
+        #
+        R1_file = caseKey*"$(round(Int,ran))_R1_*.jld2"
+        R1_file = only(glob(R1_file, ac_dir)) #Find the only matched file
+        ac = quickload_aircraft(R1_file)
+        extract_acModel_compact!(ac, dataset_R1[j], i)
+        #
+        R2_file = caseKey*"$(round(Int,ran))_R2_*.jld2"
+        R2_file = only(glob(R2_file, ac_dir)) #Find the only matched file
+        ac = quickload_aircraft(R2_file)
+        extract_acModel_compact!(ac, dataset_R2[j], i)
+        #
+        R3_file = caseKey*"$(round(Int,ran))_R3_*.jld2"
+        R3_file = only(glob(R3_file, ac_dir)) #Find the only matched file
+        ac = quickload_aircraft(R3_file)
+        extract_acModel_compact!(ac, dataset_R3[j], i)
+        #
+        println("File, $(ac_dir), read successfully")
+        println("Data case $(j) at range $(ran) collected successfully")
     end
 end
 
-#### Compare the PRD
-markers = [:square, :circle, :diamond, :pentagon]
-linestyles = [:solid, :dash, :dot, :dashdot]
-markercolor = [:red, :black, :purple]
-p = plot(xlabel="Off-design Range (nmi)", ylabel="Payload Weight (Ton)", dpi=800, ylims=(0,35))
-for (i, key_cur) in enumerate(key_names)
-    plot!(p, results[i][:range_nmi], results[i][:massPayload_Ton], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=lables[i])
-end
-for i in eachindex(key_names)
-    scatter!(p, R1R2R3Restuls[i][:range_nmi], R1R2R3Restuls[i][:massPayload_Ton], marker=markers[i], markercolor=markercolor[i], markerstrokewidth=0, label=lables[i]*" - Common")
-end
-savefig(p, joinpath(save_dir_sub, "PRD_$(ran_design).png"))
-
-markers = [:circle, :square, :diamond, :utriangle, :dtriangle, :star5]
-linestyles = [:solid, :dash, :dot, :dashdot]
-p = plot(xlabel="Off-design Range (nmi)", ylabel="PFEI (J/J)", dpi=800, ylims=(0.6,2.0), legend = :topleft)
-for (i, key_cur) in enumerate(key_names)
-    plot!(p, results[i][:range_nmi], results[i][:PFEI_JJ], marker=markers[i], linestyle=linestyles[i], lw=2, markerstrokewidth=0, label=lables[i])
-end
-for i in eachindex(key_names)
-    scatter!(p, R1R2R3Restuls[i][:range_nmi], R1R2R3Restuls[i][:PFEI_JJ], marker=markers[i], markercolor=markercolor[i], markerstrokewidth=0, label=lables[i]*" - Common")
-end
-savefig(p, joinpath(save_dir_sub, "PFEI_$(ran_design).png"))
+#### Plotting
+# PFEI
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R1 PFEI [J/J]", 
+                     [ranges for _ in dataset_R1],
+                     [d[:(parm[imPFEI,2])] for d in dataset_R1],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R1_PFEI.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R2 PFEI [J/J]", 
+                     [ranges for _ in dataset_R2],
+                     [d[:(parm[imPFEI,2])] for d in dataset_R2],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R2_PFEI.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R3 PFEI [J/J]", 
+                     [ranges for _ in dataset_R3],
+                     [d[:(parm[imPFEI,2])] for d in dataset_R3],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R3_PFEI.png"))
+# Range
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R1 Range [nmi]", 
+                     [ranges for _ in dataset_R1],
+                     [d[:(parm[imRange,2])] for d in dataset_R1] ./ 1852,
+                     caseNames, 
+                     joinpath(save_dir_sub,"R1_Range.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R2 Range [nmi]", 
+                     [ranges for _ in dataset_R2],
+                     [d[:(parm[imRange,2])] for d in dataset_R2] ./ 1852,
+                     caseNames, 
+                     joinpath(save_dir_sub,"R2_Range.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R3 Range [nmi]", 
+                     [ranges for _ in dataset_R3],
+                     [d[:(parm[imRange,2])] for d in dataset_R3] ./ 1852,
+                     caseNames, 
+                     joinpath(save_dir_sub,"R3_Range.png"))
+# Payload Weight
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R1 Payload Weight [Ton]", 
+                     [ranges for _ in dataset_R1],
+                     [d[:(parm[imWpay,2])] for d in dataset_R1] ./ 9.81 ./ 1000.0,
+                     caseNames, 
+                     joinpath(save_dir_sub,"R1_Wpay.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R2 Payload Weight [Ton]", 
+                     [ranges for _ in dataset_R2],
+                     [d[:(parm[imWpay,2])] for d in dataset_R2] ./ 9.81 ./ 1000.0,
+                     caseNames, 
+                     joinpath(save_dir_sub,"R2_Wpay.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R3 Payload Weight [Ton]", 
+                     [ranges for _ in dataset_R3],
+                     [d[:(parm[imWpay,2])] for d in dataset_R3] ./ 9.81 ./ 1000.0,
+                     caseNames, 
+                     joinpath(save_dir_sub,"R3_Wpay.png"))
+# Payload Capacity
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R1 Payload Capacity (%)", 
+                     [ranges for _ in dataset_R1],
+                     [(100.0 .* d[:(parm[imWpay,2])] ./ d[:(parg[igWpaymax])]) for d in dataset_R1],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R1_Wpay_Per.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R2 Payload Capacity (%)", 
+                     [ranges for _ in dataset_R2],
+                     [(100.0 .* d[:(parm[imWpay,2])] ./ d[:(parg[igWpaymax])]) for d in dataset_R2],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R2_Wpay_Per.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R3 Payload Capacity (%)", 
+                     [ranges for _ in dataset_R3],
+                     [(100.0 .* d[:(parm[imWpay,2])] ./ d[:(parg[igWpaymax])]) for d in dataset_R3],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R3_Wpay_Per.png"))
+# Fuel Capacity
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R1 Fuel Volume Capacity (%)", 
+                     [ranges for _ in dataset_R1],
+                     [(100.0 .* d[:(parm[imVfuel,2])] ./ d[:(parg[igVfmax])]) for d in dataset_R1],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R1_VFuel_Per.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R2 Fuel Volume Capacity (%)", 
+                     [ranges for _ in dataset_R2],
+                     [(100.0 .* d[:(parm[imVfuel,2])] ./ d[:(parg[igVfmax])]) for d in dataset_R2],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R2_VFuel_Per.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R3 Fuel Volume Capacity (%)", 
+                     [ranges for _ in dataset_R3],
+                     [(100.0 .* d[:(parm[imVfuel,2])] ./ d[:(parg[igVfmax])]) for d in dataset_R3],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R3_VFuel_Per.png"))
+# WTO Capacity
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R1 Takeoff Weight Capacity (%)", 
+                     [ranges for _ in dataset_R1],
+                     [(100.0 .* d[:(parm[imWTO,2])] ./ d[:(parg[igWMTO])]) for d in dataset_R1],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R1_WTO_Per.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R2 Takeoff Weight Capacity (%)", 
+                     [ranges for _ in dataset_R2],
+                     [(100.0 .* d[:(parm[imWTO,2])] ./ d[:(parg[igWMTO])]) for d in dataset_R2],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R2_WTO_Per.png"))
+#
+plot_cases_specified("Sizing Range of the Baseline Jet Fuel Case [nmi]", "R3 Takeoff Weight Capacity (%)", 
+                     [ranges for _ in dataset_R3],
+                     [(100.0 .* d[:(parm[imWTO,2])] ./ d[:(parg[igWMTO])]) for d in dataset_R3],
+                     caseNames, 
+                     joinpath(save_dir_sub,"R3_WTO_Per.png"))
