@@ -33,7 +33,7 @@ opt_parm = ObjectiveFactory.Parameter[]
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieBPR,    ipclimb2:ipdescent4, 1]), 6.0, 12.0, 1.0, 0.5))
 #
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepif,    ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2))
-push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepilc,   ipclimb2:ipdescent4, 1]), 3.0, 4.0,  2.0, 0.4))
+push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepilc,   ipclimb2:ipdescent4, 1]), 3.0, 10.0,  1.25, 0.4))
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepihc,   ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 1.0))
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepib,    ipclimb2:ipdescent4, 1]), 0.96, 0.98, 0.93, 0.005))
 #
@@ -90,5 +90,15 @@ for (j,para_cur) in enumerate(opt_parm)
     println("New values for $(para_cur.name): $(para_cur.val)")
 end
 
+function save_params_csv(params, filename)
+    df = DataFrame(
+        name = [string(p.name) for p in params],
+        val  = [p.val for p in params],
+    )
+    CSV.write(filename, df)
+    return df
+end
+save_params_csv(opt_parm_ori, "opt_parm_old.csv")
+save_params_csv(opt_parm,     "opt_parm_new.csv")
 
 
