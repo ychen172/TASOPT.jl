@@ -18,10 +18,10 @@ const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
 # Prefix to read warm start data files
-par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V3_R1Size_/Opti_Jet_NoACT_V3_R1Size_") #Also the prefixed for aircraft model
+par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V3_14_R1Size_/Opti_Jet_NoACT_V3_14_R1Size_") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_V3_1_R1Size"
+save_key = "Opti_Jet_NoACT_V3_15P_R1Size"
 # Optimization configuration parameters
 flag_skip_global = true #Switch on to skip the global search if confident that warm start model can converge
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
@@ -51,6 +51,16 @@ push!(mis_opt, Requirement(:(htail.opt_sizing), TailSizing.CLmaxFwdCG)) # Horizo
 push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7)) # Horizontal tail CL at forward CG condition
 push!(mis_opt, Requirement(:(parg[igxeng]), 1e10)) # [m] Engine axial location (Though fixed value for each optimization, to be)
 push!(mis_opt, Requirement(:(parg[igdxeng2wbox]), 1e10)) # [m] Same as above   (set by the default model before each optimization)
+# Calibrated Fixed Design Parameters for Combustor
+# push!(mis_opt, Requirement(:(pare[iepib, :, :]), 0.98)) #Combustor pressure ratio
+# push!(mis_opt, Requirement(:(pare[ieepolf, :, :]), 0.92)) #Fan Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepollc, :, :]), 0.92)) #LPC Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepolhc, :, :]), 0.92)) #HPC Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepolht, :, :]), 0.92)) #HPT Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepollt, :, :]), 0.92)) #LPT Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieetab, :, :]), 0.9989)) #Combustion Eff
+# push!(mis_opt, Requirement(:(parg[igTmetal]), 1280.0)) #Maximum metal temperature
+
 # Constraints for this optimization
 con_opt = Constraint[]
 push!(con_opt, Constraint(:(wing.layout.span); pen_sca=1e4, lim_up=35.814)) # [m] Type C wing span constraint
