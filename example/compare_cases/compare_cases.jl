@@ -13,7 +13,6 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 model_dir  = "../ModelSaved"
 caseKeys   = ["Opti_Jet_NoACT_",   "Opti_Jet_NoACT_V2_",  "Opti_Jet_NoACT_V3_", "Opti_Eth_NoACT_", "Opti_Eth_NoACT_V2_", "Opti_Eth_NoACT_V3_"]
 caseNames  = ["Jet Fuel V1",       "Jet Fuel V2",         "Jet Fuel V3",        "Ethanol V1",      "Ethanol V2"        , "Ethanol V3" ]
-idxMiss    = [1,1,1,1,1,1]
 ranges     = collect(300:100:3000) 
 # Output directory
 save_dir      = "../ModelProcessed"

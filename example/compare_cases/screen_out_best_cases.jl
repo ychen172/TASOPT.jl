@@ -12,7 +12,6 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 # Input case names - Retrofit
 model_dir  = "../ModelSaved"
 caseKeys   = ["Opti_Jet_NoACT_V3_R1Size_","Opti_Jet_NoACT_V3_1_R1Size_","Opti_Jet_NoACT_V3_2_R1Size_","Opti_Jet_NoACT_V3_3_R1Size_","Opti_Jet_NoACT_V3_4_R1Size_","Opti_Jet_NoACT_V3_5_R1Size_","Opti_Jet_NoACT_V3_6_R1Size_","Opti_Jet_NoACT_V3_7_R1Size_"]
-caseNames  = ["Jet Fuel 0",               "Jet Fuel 1",                 "Jet Fuel2",                   "Jet Fuel 3",                "Jet Fuel 4",                 "Jet Fuel 5",                 "Jet Fuel 6",                 "Jet Fuel 7"                 ]
 ranges     = collect(300:100:3000) 
 # Output directory
 save_name  = "Opti_Jet_NoACT_V3_8_R1Size_" #Save the new model to
