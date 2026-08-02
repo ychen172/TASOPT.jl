@@ -346,6 +346,9 @@ function _size_aircraft!(ac; itermax=35,
         # Size the wing area and chords
         set_wing_geometry!(BW, CL, qinf, wing)
 
+        # Update the wing spanbreak location using the engine location (Force collapse)
+        wing.layout.ηs = yeng/(0.5*wing.layout.span) #Force the engine location to overlap with the wing spanbreak location
+
         # Update wing box chord for fuseW in next iteration
         cbox = wing.layout.root_chord * wing.inboard.cross_section.width_to_chord
 
