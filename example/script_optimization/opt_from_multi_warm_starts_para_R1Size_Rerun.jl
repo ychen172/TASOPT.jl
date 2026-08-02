@@ -52,14 +52,14 @@ push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7)) # Horizontal tail CL a
 push!(mis_opt, Requirement(:(parg[igxeng]), 1e10)) # [m] Engine axial location (Though fixed value for each optimization, to be)
 push!(mis_opt, Requirement(:(parg[igdxeng2wbox]), 1e10)) # [m] Same as above   (set by the default model before each optimization)
 # Calibrated Fixed Design Parameters for Combustor
-# push!(mis_opt, Requirement(:(pare[iepib, :, :]), 0.98)) #Combustor pressure ratio
-# push!(mis_opt, Requirement(:(pare[ieepolf, :, :]), 0.92)) #Fan Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepollc, :, :]), 0.92)) #LPC Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepolhc, :, :]), 0.92)) #HPC Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepolht, :, :]), 0.92)) #HPT Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepollt, :, :]), 0.92)) #LPT Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieetab, :, :]), 0.9989)) #Combustion Eff
-# push!(mis_opt, Requirement(:(parg[igTmetal]), 1280.0)) #Maximum metal temperature
+# push!(mis_opt, Requirement(:(pare[iepib, ipclimb2:ipdescent4, 1]), 0.98)) #Combustor pressure ratio
+# push!(mis_opt, Requirement(:(pare[ieepolf, ipclimb2:ipdescent4, 1]), 0.92)) #Fan Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepollc, ipclimb2:ipdescent4, 1]), 0.9194)) #LPC Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepolhc, ipclimb2:ipdescent4, 1]), 0.92)) #HPC Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepolht, ipclimb2:ipdescent4, 1]), 0.92)) #HPT Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepollt, ipclimb2:ipdescent4, 1]), 0.92)) #LPT Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieetab, ipclimb2:ipdescent4, 1]), 0.999)) #Combustion Eff
+# push!(mis_opt, Requirement(:(parg[igTmetal]), 1329.95)) #Maximum metal temperature
 
 # Constraints for this optimization
 con_opt = Constraint[]
@@ -86,9 +86,9 @@ push!(bound_glob, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0
 push!(bound_glob, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07)) # Wing CL at cruise
 push!(bound_glob, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0)) # [m] Cruise altitude
 push!(bound_glob, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2)) # Fan PR at cruise 
-push!(bound_glob, Parameter(:(pare[iepilc, ipclimb2:ipdescent4, 1]), 3.0, 4.0, 2.0, 0.4)) # LPC PR at cruise
-push!(bound_glob, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 1.0)) # HPC PR at cruise
-push!(bound_glob, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2.0)) # Fan BPR at cruise
+push!(bound_glob, Parameter(:(pare[iepilc, ipclimb2:ipdescent4, 1]), 3.0, 10.0, 1.25, 0.4)) # LPC PR at cruise
+push!(bound_glob, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 60.0, 1.25, 1.0)) # HPC PR at cruise
+push!(bound_glob, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 6.0, 12.0, 1.0, 0.5)) # Fan BPR at cruise
 push!(bound_glob, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0)) #[K] Turbine inlet temperature  at cruise
 push!(bound_glob, Parameter(:(vtail.layout.AR), 2.0, 5.0, 1.0, 0.2)) #Vertical tail aspec ratio 
 
