@@ -7,7 +7,7 @@ include(joinpath(__TASOPTroot__, "../example/utilities_engines/calibrate_engine.
 include(joinpath(__TASOPTroot__, "utils/sensitivity.jl"))
 
 ac_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V3_14_R1Size_/Opti_Jet_NoACT_V3_14_R1Size_2400.jld2")
-miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/reference_engine_cycle_CFM5B/Target_EEDB.csv")
+miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/reference_engine_cycle_CFM5B/Target_Leap1B.csv")
 
 ac = quickload_aircraft(ac_dir)
 df = CSV.read(miss_dir, DataFrame)
@@ -20,6 +20,7 @@ M0 = 0.0
 P0 = 101320.0 #Pa
 T0 = 288.2 #K
 a0 = 340.2074661144284 #m/s
+dia_fan_m = 1.76 #m
 
 # for (i,Fn_N_cur) in enumerate(Fn_N)
 #     res = RunEngine.runOffDes(ac,M0,P0,T0,a0,Fn_N_cur)
@@ -34,18 +35,20 @@ push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieBPR,    ipclimb2:ipdescent4, 
 #
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepif,    ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2))
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepilc,   ipclimb2:ipdescent4, 1]), 3.0, 10.0,  1.25, 0.4))
-push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepihc,   ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 1.0))
+push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepihc,   ipclimb2:ipdescent4, 1]), 10.0, 60.0, 1.25, 1.0))
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[iepib,    ipclimb2:ipdescent4, 1]), 0.96, 0.98, 0.93, 0.005))
 #
-push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepolf,  ipclimb2:ipdescent4, 1]), 0.90, 0.95, 0.80, 0.1))
-push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepollc, ipclimb2:ipdescent4, 1]), 0.90, 0.95, 0.80, 0.1))
-push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepolhc, ipclimb2:ipdescent4, 1]), 0.90, 0.95, 0.80, 0.1))
-push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepolht, ipclimb2:ipdescent4, 1]), 0.90, 0.95, 0.80, 0.1))
-push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepollt, ipclimb2:ipdescent4, 1]), 0.90, 0.95, 0.80, 0.1))
+push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepolf,  ipclimb2:ipdescent4, 1]), 0.90, 0.92, 0.87, 0.1))
+push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepollc, ipclimb2:ipdescent4, 1]), 0.90, 0.92, 0.87, 0.1))
+push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepolhc, ipclimb2:ipdescent4, 1]), 0.90, 0.92, 0.87, 0.1))
+push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepolht, ipclimb2:ipdescent4, 1]), 0.90, 0.92, 0.87, 0.1))
+push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieepollt, ipclimb2:ipdescent4, 1]), 0.90, 0.92, 0.87, 0.1))
 #
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieetab,   ipclimb2:ipdescent4, 1]), 0.99, 0.999, 0.975, 0.002))
 #
 push!(opt_parm,ObjectiveFactory.Parameter(:(pare[ieTt4,    ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0))
+#
+push!(opt_parm,ObjectiveFactory.Parameter(:(parg[igTmetal])                        , 1280.0, 1330.0, 1000.0, 100.0))
 
 #### Extract initial guess
 for (j,para_cur) in enumerate(opt_parm)
@@ -68,18 +71,18 @@ opt_parm_ori = deepcopy(opt_parm)
 status, hist, bestSol = CaliEng.optimize_match_EEDB!(ac,opt_parm,
                                                      Fn_N,Wfuel_Ref_kgs, 
                                                      OPR_Ref, BPR_Ref;
-                                                     M0=M0, P0=P0, T0=T0, a0=a0,
+                                                     M0=M0, P0=P0, T0=T0, a0=a0, dia_fan_m=dia_fan_m,
                                                      max_iter_sizing=150,
-                                                     max_iter_optim=1000000,
+                                                     max_iter_optim=2000000,
                                                      optimizer_type=:GN_CRS2_LM)
 
-status, hist, bestSol = CaliEng.optimize_match_EEDB!(ac,opt_parm,
-                                                     Fn_N,Wfuel_Ref_kgs, 
-                                                     OPR_Ref, BPR_Ref;
-                                                     M0=M0, P0=P0, T0=T0, a0=a0,
-                                                     max_iter_sizing=150,
-                                                     max_iter_optim=1000000,
-                                                     optimizer_type=:LN_NELDERMEAD)
+# status, hist, bestSol = CaliEng.optimize_match_EEDB!(ac,opt_parm,
+#                                                      Fn_N,Wfuel_Ref_kgs, 
+#                                                      OPR_Ref, BPR_Ref;
+#                                                      M0=M0, P0=P0, T0=T0, a0=a0, dia_fan_m=dia_fan_m,
+#                                                      max_iter_sizing=150,
+#                                                      max_iter_optim=1000000,
+#                                                      optimizer_type=:LN_NELDERMEAD)
 
 display(bestSol)
 println(status)
@@ -98,7 +101,5 @@ function save_params_csv(params, filename)
     CSV.write(filename, df)
     return df
 end
-save_params_csv(opt_parm_ori, "opt_parm_old.csv")
-save_params_csv(opt_parm,     "opt_parm_new.csv")
-
-
+save_params_csv(opt_parm_ori, "Old_Opt_Parm_Leap1B_Max87_92Eff_Max1330TMetal_DFanCali.csv")
+save_params_csv(opt_parm,     "New_Opt_Parm_Leap1B_Max87_92Eff_Max1330TMetal_DFanCali.csv")

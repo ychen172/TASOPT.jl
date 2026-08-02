@@ -9,7 +9,7 @@ import ..ObjectiveFactory
 """
     make_obj(ac, parameters::AbstractVector{<:ObjectiveFactory.Parameter}, Fn_N::AbstractVector{<:Real},
             WFuel_kgs::AbstractVector{<:Union{Real,Missing}}, OPR::AbstractVector{<:Union{Real,Missing}}, BPR::AbstractVector{<:Union{Real,Missing}};
-            M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, pen_wei::AbstractVector{<:Real}=[1.0/3.0,1.0/3.0,1.0/3.0],
+            M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, dia_fan_m::Real=-1.0, pen_wei::AbstractVector{<:Real}=[1.0/3.0,1.0/3.0,1.0/3.0],
             print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=10000.0, pen_failed_engine::Float64=300.0)
 
 `make_obj` constructs and returns an objective function for engine calibration that will be fed to optimizer
@@ -26,6 +26,7 @@ import ..ObjectiveFactory
         - `P0`: Inlet engine pressure (Pa)
         - `T0`: Inlet engine temperature (K)
         - `a0`: Inlet speed of sound (m/s)
+        - `dia_fan_m`: Reference fan diameter to match (m) set negative to disable this criterion
         - `pen_wei`: [Weight_mdotFuel, Weight_OPR, Weight_BPR]
         - `print_every`: Every number of iterations before print out for the current optimized state (Performed by obj! call)
         - `max_iter_sizing`: Maximum number of iteration used for the sizing loop
@@ -46,7 +47,7 @@ import ..ObjectiveFactory
 """
 function make_obj(ac, parameters::AbstractVector{<:ObjectiveFactory.Parameter}, Fn_N::AbstractVector{<:Real},
                   WFuel_kgs::AbstractVector{<:Union{Real,Missing}}, OPR::AbstractVector{<:Union{Real,Missing}}, BPR::AbstractVector{<:Union{Real,Missing}};
-                  M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, pen_wei::AbstractVector{<:Real}=[1.0/3.0,1.0/3.0,1.0/3.0],
+                  M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, dia_fan_m::Real=-1.0, pen_wei::AbstractVector{<:Real}=[1.0/3.0,1.0/3.0,1.0/3.0],
                   print_every::Int=10, max_iter_sizing::Int=150, pen_failed_sizing::Float64=10000.0, pen_failed_engine::Float64=300.0)
     #### Size check
     isempty(parameters)   && throw(ArgumentError("`parameters` cannot be empty. Provide at least one optimization variable."))
@@ -88,8 +89,12 @@ function make_obj(ac, parameters::AbstractVector{<:ObjectiveFactory.Parameter}, 
 
         #### Test sizing the current case
         flgSuccessed = true
+        penalty = 0.0
         try
             TASOPT.size_aircraft!(ac, iter=max_iter_sizing, printiter=false)
+            if dia_fan_m > 0.0
+                penalty += 100.0*abs((ac.parg[igdfan]-dia_fan_m)/dia_fan_m)
+            end
         catch e
             if e isa InterruptException #Unless user interruption
                 rethrow()
@@ -98,7 +103,7 @@ function make_obj(ac, parameters::AbstractVector{<:ObjectiveFactory.Parameter}, 
         end
 
         #### Primary penalty value
-        penalty = flgSuccessed ? 0.0 : pen_failed_sizing #(J/J)
+        penalty += flgSuccessed ? 0.0 : pen_failed_sizing #(J/J)
         
         #### Run engine mission
         for (idxFn,Fn_N_cur) in enumerate(Fn_N)
@@ -143,7 +148,7 @@ end
     optimize_match_EEDB!(ac,parameters::AbstractVector{<:ObjectiveFactory.Parameter},
                          Fn_N::AbstractVector{<:Real},WFuel_kgs::AbstractVector{<:Union{Real,Missing}}, 
                          OPR::AbstractVector{<:Union{Real,Missing}}, BPR::AbstractVector{<:Union{Real,Missing}};
-                         M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, 
+                         M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, dia_fan_m::Real=-1.0, 
                          pen_wei::AbstractVector{<:Real}=[1.0/3.0,1.0/3.0,1.0/3.0],
                          print_every::Int=10, max_iter_sizing::Int=150, 
                          pen_failed_sizing::Float64=100.0, pen_failed_engine::Float64=3.0,
@@ -164,6 +169,7 @@ end
         - `P0`: Inlet engine pressure (Pa)
         - `T0`: Inlet engine temperature (K)
         - `a0`: Inlet speed of sound (m/s)
+        - `dia_fan_m`: Fan diameter to match (m) Set negative to disable this criterion
         - `pen_wei`: [Weight_mdotFuel, Weight_OPR, Weight_BPR]
         - `print_every`: Every number of iterations before print out for the current optimized state (Performed by obj! call)
         - `max_iter_sizing`: Maximum number of iteration used for the sizing loop
@@ -195,7 +201,7 @@ end
 function optimize_match_EEDB!(ac,parameters::AbstractVector{<:ObjectiveFactory.Parameter},
                               Fn_N::AbstractVector{<:Real},WFuel_kgs::AbstractVector{<:Union{Real,Missing}}, 
                               OPR::AbstractVector{<:Union{Real,Missing}}, BPR::AbstractVector{<:Union{Real,Missing}};
-                              M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, 
+                              M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, dia_fan_m::Real=-1.0,
                               pen_wei::AbstractVector{<:Real}=[1.0/3.0,1.0/3.0,1.0/3.0],
                               print_every::Int=10, max_iter_sizing::Int=150, 
                               pen_failed_sizing::Float64=100.0, pen_failed_engine::Float64=3.0,
@@ -210,7 +216,7 @@ function optimize_match_EEDB!(ac,parameters::AbstractVector{<:ObjectiveFactory.P
     max_iter_optim > 2 || throw(ArgumentError("maximum number of optimization interations must be > 2"))
     
     #### Create an objective function and optimization history container
-    (; obj!, hist) = make_obj(ac, parameters, Fn_N, WFuel_kgs, OPR, BPR; M0=M0, P0=P0, T0=T0, a0=a0, pen_wei=pen_wei,
+    (; obj!, hist) = make_obj(ac, parameters, Fn_N, WFuel_kgs, OPR, BPR; M0=M0, P0=P0, T0=T0, a0=a0, dia_fan_m=dia_fan_m, pen_wei=pen_wei,
                               print_every=print_every, max_iter_sizing=max_iter_sizing, pen_failed_sizing=pen_failed_sizing, pen_failed_engine=pen_failed_engine)
     
     #### Setup the optimized parameters
