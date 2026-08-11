@@ -52,14 +52,14 @@ push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7)) # Horizontal tail CL a
 push!(mis_opt, Requirement(:(parg[igxeng]), 1e10)) # [m] Engine axial location (Though fixed value for each optimization, to be)
 push!(mis_opt, Requirement(:(parg[igdxeng2wbox]), 1e10)) # [m] Same as above   (set by the default model before each optimization)
 # Calibrated Fixed Design Parameters for Combustor
-# push!(mis_opt, Requirement(:(pare[iepib, ipclimb2:ipdescent4, 1]), 0.98)) #Combustor pressure ratio
-# push!(mis_opt, Requirement(:(pare[ieepolf, ipclimb2:ipdescent4, 1]), 0.92)) #Fan Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepollc, ipclimb2:ipdescent4, 1]), 0.9194)) #LPC Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepolhc, ipclimb2:ipdescent4, 1]), 0.92)) #HPC Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepolht, ipclimb2:ipdescent4, 1]), 0.92)) #HPT Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepollt, ipclimb2:ipdescent4, 1]), 0.92)) #LPT Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieetab, ipclimb2:ipdescent4, 1]), 0.999)) #Combustion Eff
-# push!(mis_opt, Requirement(:(parg[igTmetal]), 1329.95)) #Maximum metal temperature
+# push!(mis_opt, Requirement(:(pare[iepib, ipclimb2:ipdescent4, 1]), 0.965)) #Combustor pressure ratio
+# push!(mis_opt, Requirement(:(pare[ieepolf, ipclimb2:ipdescent4, 1]), 0.923)) #Fan Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepollc, ipclimb2:ipdescent4, 1]), 0.912)) #LPC Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepolhc, ipclimb2:ipdescent4, 1]), 0.918)) #HPC Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepolht, ipclimb2:ipdescent4, 1]), 0.903)) #HPT Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieepollt, ipclimb2:ipdescent4, 1]), 0.913)) #LPT Poly Eff
+# push!(mis_opt, Requirement(:(pare[ieetab, ipclimb2:ipdescent4, 1]), 0.9985)) #Combustion Eff
+# push!(mis_opt, Requirement(:(parg[igTmetal]), 1275)) #Maximum metal temperature
 
 # Constraints for this optimization
 con_opt = Constraint[]
@@ -138,7 +138,7 @@ for i in task_id:num_tasks:length(ranges_opti_nmi)
     mis_opt_cur[18].val = fuse_radius
     bound_glob_cur[7].val = fuse_radius * 3.0
     bound_glob_cur[7].bon_up = fuse_radius * 10.0
-    bound_glob_cur[7].bon_lo = fuse_radius * 0.001 #unrealistic but should not have happened
+    bound_glob_cur[7].bon_lo = fuse_radius * 1.75 #unrealistic but should not have happened
     bound_glob_cur[7].d_val = fuse_radius * 0.2
 
     #### Setup special initial optimization parameters if choose to not run global search first but by using a warm start from a default model to directly do local search
