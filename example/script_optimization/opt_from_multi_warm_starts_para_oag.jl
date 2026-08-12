@@ -1,5 +1,5 @@
 """
-This script performs parallel optimization from single/multiple(no yet implemented) warm-start model(s)
+This script performs parallel optimization from single/multiple(not yet implemented) warm-start model(s)
 Can create or remove optimization parameters. Will automatically fetch initial guesses from warm start models.
 Extract the off-design missions from OAG csv data, and optimize for the weighted average fuel consumption for those off-design mission.
 The design-point mission perform is never optimized
@@ -27,7 +27,7 @@ const success_statuses = ObjectiveFactory.success_statuses
 par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_OAG_6Seats"
+save_key = "Opti_Jet_NoACT_OAG_6Seats_TypeC"
 # Mission extraction directory
 miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
 # Optimization configuration parameters
@@ -162,7 +162,7 @@ for i in task_id:num_tasks:length(seat_cap_keys)
     range_min_off_nmi = minimum(ranges_off_nmi)
     (range_max_off_nmi>10.0 && range_min_off_nmi>10.0 && range_max_off_nmi>range_min_off_nmi) || error("OAG minimum input range is required to be larger than 10 nmi")
     range_span_off_nmi = range_max_off_nmi-range_min_off_nmi
-    push!(bound_glob_cur, Parameter(:(parm[imRange,1]), range_max_off_nmi*1852.0, (range_max_off_nmi+0.4*range_span_off_nmi)*1852.0, max(10.0,(range_min_off_nmi-0.2*range_span_off_nmi))*1852.0, 0.1*range_span_off_nmi*1852.0)) #[m] To be optimized from the given R2 range
+    push!(bound_glob_cur, Parameter(:(parm[imRange,1]), range_max_off_nmi*1852.0, (range_max_off_nmi+0.4*range_span_off_nmi)*1852.0, max(10.0,(range_min_off_nmi-0.2*range_span_off_nmi))*1852.0, 0.1*range_span_off_nmi*1852.0)) #[m]
     ac.parm[imRange,:] .= range_max_off_nmi*1852.0 # This is setup so that if use warm start, the sizing mission still stay with the sepecified starting point above
 
     #### If not running global search, then fetch the warm start variables from the initial aircraft model
@@ -199,7 +199,7 @@ for i in task_id:num_tasks:length(seat_cap_keys)
     save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,seat_cap_keys[i]))_design_constraints.csv"), con_opt_cur)
     save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,seat_cap_keys[i]))_global_bounds.csv"), bound_glob_cur)
 
-    #### Prepare off-design mission for optimize at R2
+    #### Prepare off-design missions
     num_miss_off = length(ranges_off_nmi)
     range_off_des_nmi = ranges_off_nmi #[nmi]
     wei_pay_off_des_N = fill(ac.parg[igWpaymax]*pass_load_frac_off, num_miss_off) #[N]
