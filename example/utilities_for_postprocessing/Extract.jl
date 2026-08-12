@@ -1,11 +1,38 @@
 module Extract
-export init_results_2Layers,extract_acModel,extract_acModel_compact!,fill_results!,plot_cases,plot_cases_specified,extract_combustion_inputs
+export init_results_2Layers,extract_acModel,extract_acModel_compact!,fill_results!,plot_cases,plot_cases_specified,extract_combustion_inputs,read_oag
 using Plots
 using DataFrames, CSV
 using TASOPT
 include(__TASOPTindices__)
 include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
 using Statistics
+
+"""
+    read_oag(path::AbstractString)
+
+Reads OAG route-frequency data (csv columns: seat_capacity, mission_nmi, weight) and groups it by aircraft seat capacity.
+
+    **Inputs**
+        - path: path to the OAG csv file. Expected columns: seat_capacity, mission_nmi[nmi], weight
+                weight is assumed to already be normalized to sum to ~1 within each seat_capacity group (re-normalized here to correct rounding)
+
+    **Outputs**
+        - Dict{Int,NamedTuple}: keyed by seat_capacity, each value is (ranges_nmi::Vector{Float64}, weights::Vector{Float64})
+          sorted by ascending range, weights re-normalized to sum to exactly 1.0 within each seat_capacity group.
+"""
+function read_oag(path::AbstractString)
+    df = CSV.read(path, DataFrame)
+    out = Dict{Int,NamedTuple{(:ranges_nmi, :weights),Tuple{Vector{Float64},Vector{Float64}}}}()
+    for sub in groupby(df, :seat_capacity)
+        sc = Int(sub.seat_capacity[1])
+        ord = sortperm(sub.mission_nmi)
+        ranges_nmi = Float64.(sub.mission_nmi[ord])
+        weights = Float64.(sub.weight[ord])
+        weights ./= sum(weights) #Re-normalize to correct for rounding in the source data
+        out[sc] = (; ranges_nmi, weights)
+    end
+    return out
+end
 
 """
     init_results_2Layers(numPts::Int, fields::AbstractVector{Expr})
