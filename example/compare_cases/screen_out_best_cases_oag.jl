@@ -1,11 +1,12 @@
 """
-This script compares the OAG seat-capacity-swept optimization campaigns (Jet vs Ethanol)
+This script compares the OAG seat-capacity-swept optimization campaigns
 produced by opt_from_multi_warm_starts_para_oag.jl.
-
-Design/R1-mission metrics are compared directly across seat capacity.
 Off-design performance is compared via an OAG-weighted PFEI, computed over the same
 route-frequency-weighted mission set (OAG_Data_2024.csv) used to optimize each case,
 re-run here on the saved (2nd-mission) off-design missions.
+Picker the better (Low off-design averaged PFEI) or feasible case from the provided flight models across the seat capacities
+Assume the models for filtering all have the same fuel type
+Assume all model folders contain the same set of files regardless whether some cases are converged(Have ac jld2) or not (Only have optpara and other history)
 """
 
 using TASOPT
@@ -19,35 +20,20 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Jet_NoACT_OAG_6Seats_TypeC_","Opti_Eth_NoACT_OAG_6Seats_TypeC_"]
-caseNames  = ["Jet Fuel"                        ,"Ethanol"                        ]
+caseKeys   = ["Opti_Jet_NoACT_OAG_6Seats_TypeC_","Opti_Jet_NoACT_OAG_6Seats_TypeC_"]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
-idx_fuel_case      = [24       ,32       ] # Jet, Eth
-rho_fuel_case_kgm3 = [817.0    ,789.0    ] # kg/m3
-hvap_fuel_case_Jkg = [358694.0 ,918187.9 ] # J/kg
+idx_fuel_case      = 24        # Eth: 32, Jet: 24
+rho_fuel_case_kgm3 = 817.0     # Eth: 789.0, Jet: 817.0 kg/m3
+hvap_fuel_case_Jkg = 358694.0  # Eth: 918187.9, Jet: 358694.0 J/kg
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
 miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
 # Output directory
-save_dir      = "../ModelProcessed"
-save_name     = "OAG_Jet_vs_Ethanol_6Seats_TypeC" #sub_folder will be created
-# Fields to read out for the design (R1) mission
-const fields = [:(parm[imRange,1]),:(parm[imPFEI,1]),:(parm[imVfuel,1]),:(parg[igVfmax]),
-                :(wing.layout.span),:(wing.outboard.λ),:(wing.layout.ηs),:(wing.layout.AR),
-                :(para[iaCL,ipcruise1,1]),:(para[iaCL,ipcruise2,1]),
-                :(para[iaCD,ipcruise1,1]),:(para[iaCD,ipcruise2,1]),
-                :(pare[iehfuel,ipcruise1,1]),:(pare[iehfuel,ipcruise2,1]),
-                :(pare[ieTSFC,ipcruise1,1]),:(pare[ieTSFC,ipcruise2,1]),
-                :(para[iagamV,ipcruise1,1]),:(para[iagamV,ipcruise2,1]),
-                :(pare[ieu0,ipcruise1,1]),:(pare[ieu0,ipcruise2,1]),
-                :(parm[imWTO,1]),:(parm[imWfuel,1]),:(parm[imWpay,1]),:(parg[igrhofuel]),:(parg[igfreserve]),
-                :(wing.layout.S)]
-
-
+save_name     = "Opti_Jet_NoACT_OAG_6Seats_TypeC_V2" #sub_folder will be created
 
 #### Create save directory
-save_dir_sub  = joinpath(save_dir,save_name)
-mkpath(save_dir_sub)
+save_dir  = joinpath(model_dir,save_name)
+mkpath(save_dir)
 
 #### Load OAG off-design mission data (ranges/weights per seat capacity)
 miss_off_des = read_oag(miss_dir)
@@ -70,7 +56,6 @@ for (caseName,avail) in zip(caseNames,seat_caps_avail)
 end
 
 #### Initialization
-dataset = [init_results_2Layers(length(seat_caps_avail[j]), fields) for j in eachindex(caseKeys)] #[dataset[Expr][:],...]
 oag_weighted_PFEI = [fill(NaN,length(seat_caps_avail[j])) for j in eachindex(caseKeys)] #[J/J]
 
 #### Extract design-mission data, and compute OAG route-frequency-weighted off-design PFEI
@@ -81,14 +66,11 @@ for (j, caseKey) in enumerate(caseKeys)
         ac = quickload_aircraft(ac_dir)
         println("File, $(ac_dir), read successfully")
 
-        # Extract design (R1, 1st mission) data
-        extract_acModel_compact!(ac, dataset[j], i)
-
         # Run the OAG-weighted off-design missions (2nd mission) for this seat capacity
         ranges_off_nmi = miss_off_des[sc].ranges_nmi
         weights_off    = miss_off_des[sc].weights
         wei_pay_off_N  = fill(ac.parg[igWpaymax]*pass_load_frac_off, length(ranges_off_nmi))
-        out = off_design_specified!(ac, idx_fuel_case[j], rho_fuel_case_kgm3[j], hvap_fuel_case_Jkg[j],
+        out = off_design_specified!(ac, idx_fuel_case, rho_fuel_case_kgm3, hvap_fuel_case_Jkg,
                                     ranges_off_nmi, wei_pay_off_N;
                                     mod_ac_inplace=false, itermax=150, constraints=[:WPay,:MWTO,:VolFuel], save_model=false)
 
@@ -125,109 +107,79 @@ for (j, caseKey) in enumerate(caseKeys)
 end
 
 #### Plotting: Design (R1) mission comparisons vs seat capacity
-xdata_design = [Float64.(avail) for avail in seat_caps_avail]
+xdata_design = [Int64.(avail) for avail in seat_caps_avail]
 
-plot_cases_specified("Seat Capacity", "Design/R1 Flight PFEI [J/J]",
-                     xdata_design,
-                     [d[:(parm[imPFEI,1])] for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"Design_PFEI.png"))
-#
-plot_cases_specified("Seat Capacity", "Fuel Level [%]",
-                     xdata_design,
-                     [d[:(parm[imVfuel,1])] .* 100.0 ./ d[:(parg[igVfmax])] for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"Fuel_Level.png"))
-#
-plot_cases_specified("Seat Capacity", "Wingspan [m]",
-                     xdata_design,
-                     [d[:(wing.layout.span)] for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"Wingspan.png"))
-#
-plot_cases_specified("Seat Capacity", "Taper Ratio of Outer Wing Panel",
-                     xdata_design,
-                     [d[:(wing.outboard.λ)] for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"OuterTaperWing.png"))
-#
-plot_cases_specified("Seat Capacity", "Wing Span Break Location [%]",
-                     xdata_design,
-                     [d[:(wing.layout.ηs)] .* 100.0 for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"SpanBreakWing.png"))
-#
-plot_cases_specified("Seat Capacity", "Wing Aspect Ratio",
-                     xdata_design,
-                     [d[:(wing.layout.AR)]  for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"AspectRatioWing.png"))
-#
-plot_cases_specified("Seat Capacity", "Lift-to-drag Ratio at Start of Cruise",
-                     xdata_design,
-                     [d[:(para[iaCL,ipcruise1,1])] ./ d[:(para[iaCD,ipcruise1,1])]  for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"LD_StartOfCruise.png"))
-#
-plot_cases_specified("Seat Capacity", "Lift-to-drag Ratio at End of Cruise",
-                     xdata_design,
-                     [d[:(para[iaCL,ipcruise2,1])] ./ d[:(para[iaCD,ipcruise2,1])]  for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"LD_EndOfCruise.png"))
-#
-plot_cases_specified("Seat Capacity", "Engine Total Efficiency at Start of Cruise [%]",
-                     xdata_design,
-                     [100.0 .* (1.0 ./ (d[:(pare[ieTSFC,ipcruise1,1])] ./ gee)) .* ((cos.(d[:(para[iagamV,ipcruise1,1])]) .* d[:(pare[ieu0,ipcruise1,1])]) ./ d[:(pare[iehfuel,ipcruise1,1])])  for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"TotEffEngine_StartOfCruise.png"))
-#
-plot_cases_specified("Seat Capacity", "Engine Total Efficiency at End of Cruise [%]",
-                     xdata_design,
-                     [100.0 .* (1.0 ./ (d[:(pare[ieTSFC,ipcruise2,1])] ./ gee)) .* ((cos.(d[:(para[iagamV,ipcruise2,1])]) .* d[:(pare[ieu0,ipcruise2,1])]) ./ d[:(pare[iehfuel,ipcruise2,1])])  for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"TotEffEngine_EndOfCruise.png"))
-#
-plot_cases_specified("Seat Capacity", "Aircraft Empty Weight [Ton]",
-                     xdata_design,
-                     [(d[:(parm[imWTO,1])] .- d[:(parm[imWfuel,1])] .- d[:(parm[imWpay,1])]) ./ gee ./ 1000.0  for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"EmptyWeight.png"))
-#
-plot_cases_specified("Seat Capacity", "Fuel Weight Fraction of Total Takeoff Weight [%]",
-                     xdata_design,
-                     [100.0 .* (d[:(parm[imWfuel,1])] ./ d[:(parm[imWTO,1])]) for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"FuelWeightFraction.png"))
-#
-plot_cases_specified("Seat Capacity", "Wing Surface Area [m²]",
-                     xdata_design,
-                     [d[:(wing.layout.S)] for d in dataset],
-                     caseNames,
-                     joinpath(save_dir_sub,"WingSurfaceArea.png"))
-#
+#### Screen out the best performance at each range
+lookup = [Dict(zip(xdata_design[i],oag_weighted_PFEI[i])) for i in eachindex(xdata_design)]
+idx_col_best = fill(missing,length(seat_cap_keys_all))
+for i in eachindex(idx_col_best)
+    PFEI_Collect = fill(Inf,length(lookup))
+    for j in eachindex(lookup)
+        try
+            PFEI_Collect[j] = lookup[j][seat_cap_keys_all[i]]
+        catch
+        end
+    end
+    if all(PFEI_Collect .== Inf)
+        idx_col_best[i] = 1
+    else
+        idx_col_best[i] = argmin(PFEI_Collect)
+    end
+end
 
-#### Plotting: OAG route-frequency-weighted off-design PFEI comparison
-plot_cases_specified("Seat Capacity", "OAG-Weighted Off-Design PFEI [J/J]",
-                     xdata_design,
-                     oag_weighted_PFEI,
-                     caseNames,
-                     joinpath(save_dir_sub,"OAG_Weighted_PFEI.png"))
-#
-
-# #### Ethanol OAG-weighted PFEI penalty vs Jet, restricted to seat capacities both cases have
-# iRJ = 1 #Index of the jet case
-# iRE = 2 #Index of the ethanol case
-# common_caps = sort(collect(intersect(Set(seat_caps_avail[iRJ]), Set(seat_caps_avail[iRE]))))
-# PFEIEthPenalty_OAG = Float64[]
-# for sc in common_caps
-#     iJ = findfirst(==(sc), seat_caps_avail[iRJ])
-#     iE = findfirst(==(sc), seat_caps_avail[iRE])
-#     push!(PFEIEthPenalty_OAG, 100.0*(oag_weighted_PFEI[iRE][iE]-oag_weighted_PFEI[iRJ][iJ])/oag_weighted_PFEI[iRJ][iJ])
-# end
-
-# plot_cases_specified("Seat Capacity", "Ethanol OAG-Weighted PFEI Penalty [%]",
-#                      [Float64.(common_caps)],
-#                      [PFEIEthPenalty_OAG],
-#                      [nothing],
-#                      joinpath(save_dir_sub,"OAG_Weighted_PFEI_Penalty.png"))
-# #
+#### Save the copy the corresponding best model from each case into the new folder
+for (idx,idx_best) in enumerate(idx_col_best)
+    sc = round(Int, seat_cap_keys_all[idx])
+    #
+    src = joinpath(model_dir,
+                   caseKeys[idx_best],
+                   caseKeys[idx_best] * "$(sc)_design_constraints.csv")
+    dst = joinpath(save_dir,
+                   save_name * "$(sc)_design_constraints.csv")
+    cp(src, dst; force=true)
+    #
+    src = joinpath(model_dir,
+                   caseKeys[idx_best],
+                   caseKeys[idx_best] * "$(sc)_global_bounds.csv")
+    dst = joinpath(save_dir,
+                   save_name * "$(sc)_global_bounds.csv")
+    cp(src, dst; force=true)
+    #
+    src = joinpath(model_dir,
+                   caseKeys[idx_best],
+                   caseKeys[idx_best] * "$(sc)_mission_requirements.csv")
+    dst = joinpath(save_dir,
+                   save_name * "$(sc)_mission_requirements.csv")
+    cp(src, dst; force=true)
+    #
+    src = joinpath(model_dir,
+                   caseKeys[idx_best],
+                   caseKeys[idx_best] * "$(sc)_optimization_history.jld2")
+    dst = joinpath(save_dir,
+                   save_name * "$(sc)_optimization_history.jld2")
+    cp(src, dst; force=true)
+    #
+    src = joinpath(model_dir,
+                   caseKeys[idx_best],
+                   caseKeys[idx_best] * "$(sc)_optimized_parameters.csv")
+    dst = joinpath(save_dir,
+                   save_name * "$(sc)_optimized_parameters.csv")
+    cp(src, dst; force=true)
+    #
+    src = joinpath(model_dir,
+                   caseKeys[idx_best],
+                   caseKeys[idx_best] * "$(sc)_OptLog.txt")
+    dst = joinpath(save_dir,
+                   save_name * "$(sc)_OptLog.txt")
+    cp(src, dst; force=true)
+    #
+    try
+        src = joinpath(model_dir,
+                    caseKeys[idx_best],
+                    caseKeys[idx_best] * "$(sc).jld2")
+        dst = joinpath(save_dir,
+                    save_name * "$(sc).jld2")
+        cp(src, dst; force=true)
+    catch
+    end
+end
