@@ -20,7 +20,7 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Jet_NoACT_OAG_6Seats_TypeC_","Opti_Jet_NoACT_OAG_6Seats_TypeC_"]
+caseKeys   = ["Opti_Jet_NoACT_OAG_6Seats_TypeC_","Opti_Jet_NoACT_OAG_6Seats_TypeC_Fake1_","Opti_Jet_NoACT_OAG_6Seats_TypeC_Fake2_"]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
 idx_fuel_case      = 24        # Eth: 32, Jet: 24
 rho_fuel_case_kgm3 = 817.0     # Eth: 789.0, Jet: 817.0 kg/m3
@@ -29,7 +29,7 @@ pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_mu
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
 miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
 # Output directory
-save_name     = "Opti_Jet_NoACT_OAG_6Seats_TypeC_V2" #sub_folder will be created
+save_name     = "Opti_Jet_NoACT_OAG_6Seats_TypeC_V2_" #sub_folder will be created
 
 #### Create save directory
 save_dir  = joinpath(model_dir,save_name)
@@ -51,12 +51,12 @@ for caseKey in caseKeys
     push!(seat_caps_avail,avail)
 end
 println("Available seat capacities per case:")
-for (caseName,avail) in zip(caseNames,seat_caps_avail)
-    println("  $(caseName): $(avail)")
+for (caseKey,avail) in zip(caseKeys,seat_caps_avail)
+    println("  $(caseKey): $(avail)")
 end
 
 #### Initialization
-oag_weighted_PFEI = [fill(NaN,length(seat_caps_avail[j])) for j in eachindex(caseKeys)] #[J/J]
+oag_weighted_PFEI = [fill(Inf,length(seat_caps_avail[j])) for j in eachindex(caseKeys)] #[J/J] (Inf, not NaN, so a fully-failed case always loses the argmin comparison below regardless of case order)
 
 #### Extract design-mission data, and compute OAG route-frequency-weighted off-design PFEI
 for (j, caseKey) in enumerate(caseKeys)
@@ -102,7 +102,7 @@ for (j, caseKey) in enumerate(caseKeys)
             @warn "All OAG off-design missions failed for $(caseKey) at seat capacity $(sc); OAG-weighted PFEI left as missing"
         end
         n_fail>0 && println("  $(n_fail)/$(length(ranges_off_nmi)) OAG off-design missions failed for $(caseKey) at seat capacity $(sc)")
-        println("Case $(caseNames[j]) at seat capacity $(sc): OAG-weighted PFEI = $(oag_weighted_PFEI[j][i]) J/J")
+        println("Case $(caseKey) at seat capacity $(sc): OAG-weighted PFEI = $(oag_weighted_PFEI[j][i]) J/J")
     end
 end
 
@@ -111,7 +111,7 @@ xdata_design = [Int64.(avail) for avail in seat_caps_avail]
 
 #### Screen out the best performance at each range
 lookup = [Dict(zip(xdata_design[i],oag_weighted_PFEI[i])) for i in eachindex(xdata_design)]
-idx_col_best = fill(missing,length(seat_cap_keys_all))
+idx_col_best = fill(1,length(seat_cap_keys_all))
 for i in eachindex(idx_col_best)
     PFEI_Collect = fill(Inf,length(lookup))
     for j in eachindex(lookup)
