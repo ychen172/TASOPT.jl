@@ -910,6 +910,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
                 # optimize_par_bak is still used here but not much impact, as global_bond is the key for this rerun
                 (optimize_par_retry, status_retry, hist_retry) = optimizer_wrapper_global_local(ac, optimize_par_bak,
                                                                  global_bond; objVar_des=objVar_des, objVar_off=objVar_off, miss_req=miss_req, constraints=constraints,
+                                                                 off_des_miss=off_des_miss, off_des_constraints=off_des_constraints, PFEI_Weighting=PFEI_Weighting,
                                                                  ftol_rel=ftol_rel, max_iter_sizing=max_iter_sizing, print_every=print_every, pen_failed_sizing=pen_failed_sizing,
                                                                  frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded,
                                                                  optimizer_global=optimizer_global, max_iter_glo=max_iter_glo,     span_glo_to_loc=span_glo_to_loc, run_global=true,
@@ -994,6 +995,7 @@ function optimizer_wrapper_global_local(ac, optimize_par::AbstractVector{<:Param
                 # optimize_par_bak is still used here but not much impact, as global_bond is the key for this rerun
                 (optimize_par_retry, status_retry, hist_retry) = optimizer_wrapper_global_local(ac, optimize_par_bak,
                                                                  global_bond; objVar_des=objVar_des, objVar_off=objVar_off, miss_req=miss_req, constraints=constraints,
+                                                                 off_des_miss=off_des_miss, off_des_constraints=off_des_constraints, PFEI_Weighting=PFEI_Weighting,
                                                                  ftol_rel=ftol_rel, max_iter_sizing=max_iter_sizing, print_every=print_every, pen_failed_sizing=pen_failed_sizing,
                                                                  frac_edge_trigger=frac_edge_trigger, frac_edge_expanded=frac_edge_expanded,
                                                                  optimizer_global=optimizer_global, max_iter_glo=max_iter_glo,     span_glo_to_loc=span_glo_to_loc, run_global=true,

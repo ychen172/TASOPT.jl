@@ -753,6 +753,13 @@ function _size_aircraft!(ac; itermax=35,
         # BFL calculations/ Noise? / Engine perf 
 
     end
+    #Check weight closure once on the final, settled state (fsum can transiently exceed 1 mid-loop and
+    #self-correct via the relaxation factor - only a value that's still bad once the loop is done is fatal)
+    fsum_final = (wing.weight + wing.strut.weight + htail.weight + vtail.weight +
+                  parg[igWeng] + parg[igWfuel] +
+                  landing_gear.nose_gear.weight.W + landing_gear.main_gear.weight.W +
+                  parg[igWftank] + parg[igWtesys]) / parg[igWMTO] + fuse.HPE_sys.W
+    fsum_final < 1.0 || error("fsum ≥ 1.0 ($(fsum_final)) at final iteration: weight closure failed, WMTO is not physical")
     # Save the design point fuel volume into the design parameter
     parg[igVfuel] = parm[imVfuel]
 
