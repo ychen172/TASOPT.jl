@@ -1,5 +1,5 @@
 """
-    _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
+    _mission_iteration!(ac, imission, Ldebug; opt_prescribed_cruise_parameter::Union{String,Nothing}="CL", alt_req::Union{Real,Nothing}=nothing, CL_req::Union{Real,Nothing}=nothing, allow_altitude_clip::Bool=true, calculate_cruise = false, max_climb_clip_iter::Int=1000, climb_clip_tol_scale::Float64=1e-6, rlx_ratio::Float64=0.95, f_CL_thres::Float64=0.3, dRclimb_cap_floor_scale::Float64=1e-3)
 
 Runs aircraft through mission, calculating fuel burn
 and other mission variables. Formerly, `mission!()`.
@@ -18,7 +18,27 @@ and can be passed in as zero with only a minor error.
 They are updated and returned in the same para[iagamV,ip] array.
 
 """
-function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
+function _mission_iteration!(ac, imission, Ldebug; opt_prescribed_cruise_parameter::Union{String,Nothing}="CL", alt_req::Union{Real,Nothing}=nothing, CL_req::Union{Real,Nothing}=nothing, allow_altitude_clip::Bool=true, calculate_cruise = false, max_climb_clip_iter::Int=1000, climb_clip_tol_scale::Float64=1e-6, rlx_ratio::Float64=0.95, f_CL_thres::Float64=0.3, dRclimb_cap_floor_scale::Float64=1e-3)
+      #Check the clipping mode
+      max_climb_clip_iter>=1 || error("max_climb_clip_iter $(max_climb_clip_iter) needs to be at least 1 regardless clipping or not")
+      if allow_altitude_clip
+            climb_clip_tol_scale>0 || error("climb_clip_tol_scale $(climb_clip_tol_scale) needs to be bigger than 0")
+            (rlx_ratio>0 && rlx_ratio<=1.0) || error("rlx_ratio $(rlx_ratio) needs to be in (0,1]")
+            (f_CL_thres>0 && f_CL_thres<1.0) || error("f_CL_thres $(f_CL_thres) needs to be in (0,1)")
+            (dRclimb_cap_floor_scale>0 && dRclimb_cap_floor_scale<1.0) || error("dRclimb_cap_floor_scale $(dRclimb_cap_floor_scale) needs to be in (0,1)")
+            if compare_strings(opt_prescribed_cruise_parameter, "altitude")
+                  alt_req === nothing && error("alt_req must be provided when opt_prescribed_cruise_parameter=\"altitude\" with clipping on")
+            elseif compare_strings(opt_prescribed_cruise_parameter, "CL")
+                  CL_req === nothing && error("CL_req must be provided when opt_prescribed_cruise_parameter=\"CL\" with clipping on")
+                  ac_copy = deepcopy(ac)
+                  ac_copy.para[iaCL,ipcruise1,imission] = CL_req
+                  calculate_cruise_altitude_or_CL!(opt_prescribed_cruise_parameter, ac_copy.parg[igWMTO], ac_copy, imission)
+                  alt_req = ac_copy.para[iaalt,ipcruise1,imission] #The function inherently use altitude for clip judging
+            else
+                  error("Unrecognized opt_prescribed_cruise_parameter=$(opt_prescribed_cruise_parameter) with clipping on")
+            end
+      end
+      
       #Unpack aircraft
       parg, parm, para, pare, options, fuse, fuse_tank, wing, htail, vtail, eng, landing_gear = unpack_ac(ac, imission) 
 
@@ -86,6 +106,28 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
       para[iaWbuoy, iprotate:ipclimb1] .= 0.0
 
 
+      #Initialize parameters for altitude clipping
+      climb_clip_tol = max(1.0, climb_clip_tol_scale * Rangetot)
+      rlx = 1.0 #Initial relaxation
+      dAlt_prev = 1.0 #Inital sign to detech overshoot
+      climb_infeasible = false #Used to detech climb failiure mode
+      CL_failed = NaN #Used to make judgement about climb failiure mode
+
+      # Initialize climb integrands
+      FoW = zeros(Float64, iptotal)
+      FFC = zeros(Float64, iptotal)
+      Vgi = zeros(Float64, iptotal)
+      altc = para[iaalt, ipcruise1]
+      S = wing.layout.S
+      
+      # Use a loop to correct the cruise altitude if too high
+      @inbounds for clip_attempt = 1:max_climb_clip_iter
+      # Check if the previous case failed to climb
+      if climb_infeasible
+            para[iagamV, ipclimb1:ipclimbn] .= 0.0 #Reset climb angles
+      end
+      climb_infeasible = false #Reset
+
       # Start-of-cruise altitude conditions
       ip = ipcruise1
       Mach = para[iaMach, ip]
@@ -105,6 +147,14 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
       pare[ieM0, ip] = Mach
       pare[ieu0, ip] = Mach * a0
       para[iaReunit, ip] = Mach * a0 * rho0 / mu0
+
+      # update the trimmed CL given potentially a new cruise altitude
+      We_cap = WMTO * para[iafracW, ip]
+      ρcab_cap = max(parg[igpcabin], p0) / (RSL * TSL)
+      WbuoyCR_cap = (ρcab_cap - rho0) * gee * parg[igcabVol]
+      BW_cap = We_cap + WbuoyCR_cap
+      CL_cap = BW_cap / (0.5 * rho0 * pare[ieu0, ip]^2 * S)
+      para[iaCL, ipclimb1+1:ipdescentn-1] .= CL_cap
 
       # End-of-descent altitude conditions
       ip = ipdescentn
@@ -303,11 +353,6 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
       para[iafracW, iprotate:ipclimb1] .= WTO / WMTO
       para[iaWbuoy, iprotate:ipclimb1] .= 0.0
 
-      # Initialize climb integrands
-      FoW = zeros(Float64, iptotal)
-      FFC = zeros(Float64, iptotal)
-      Vgi = zeros(Float64, iptotal)
-
       # integrate trajectory over climb
       @inbounds for ip = ipclimb1:ipclimbn
             if (Ldebug)
@@ -366,6 +411,13 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
 
             # Store integrands for range and weight integration using a predictor-corrector scheme
             FoW[ip] = Ftotal / (BW * cosg) - DoL
+            
+            # Check if current climb point were feasible
+            if FoW[ip]<0.0 #Negative climb angle detected
+                  climb_infeasible = true
+                  CL_failed = para[iaCL, ip]
+                  break #Keep on running will have garbage result eitherway
+            end
 
             mfuel = pare[iemfuel, ip]
             FFC[ip] = mfuel * gee / (W * V * cosg)
@@ -428,6 +480,65 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
             end
 
       end # done integrating climb
+
+      if !allow_altitude_clip
+            if climb_infeasible
+                  error("Climb infeasible at requested altitude/CL (imission=$(imission), CL_failed=$(CL_failed)); allow_altitude_clip=false, failing fast instead of clipping.")
+            end
+            break
+      end
+
+      # cruise altitude clippling for minimum cruise range
+      dRclimb_max_cap = Rangetot + (para[iaalt, ipcruise1] - para[iaalt, ipdescentn]) / (0.5 * (parm[imgamVDE1] + parm[imgamVDEn]))
+      dRclimb_max_cap = clamp(dRclimb_max_cap,max(1.0, dRclimb_cap_floor_scale*Rangetot),Rangetot)
+      if climb_infeasible
+            if CL_failed>f_CL_thres*CLmax
+                  dRclimb_cap = dRclimb_max_cap*2
+            else
+                  dRclimb_cap = dRclimb_max_cap*0.5
+            end
+      else
+            dRclimb_cap = para[iaRange, ipclimbn] - para[iaRange, ipclimb1]
+      end
+
+      res_Lim = dRclimb_cap - dRclimb_max_cap
+      dAlt_Lim = (0.5 * (parm[imgamVDE1] + parm[imgamVDEn]))*res_Lim #(-) for over limit (+) for overshoot
+      dAlt_Des = alt_req - para[iaalt, ipcruise1] #(-) desire to fly lower (+) desire to fly higher
+
+      # Judge for converge
+      if (dAlt_Lim > 0.0) && (!climb_infeasible) #The positive cruise range limit is not violated
+            if dAlt_Des > 0.0
+                  if min(dAlt_Lim,dAlt_Des) < climb_clip_tol
+                        break
+                  end
+            else
+                  if -dAlt_Des < climb_clip_tol
+                        break
+                  end
+            end
+      end
+
+      # Catch never converged
+      if clip_attempt == max_climb_clip_iter
+            error("Cruise altitude clipping loop (imission=$(imission)) reached max_climb_clip_iter=$(max_climb_clip_iter) without converging; dRclimb_max_cap=$(dRclimb_max_cap)")
+      end
+
+      # Continue correction
+      dAlt = min(dAlt_Lim,dAlt_Des) #get as close to the desired value as possible without violating positive cruise range constraint
+      dAlt = max(dAlt,(para[iaalt, iptakeoff]+1.0)-para[iaalt, ipcruise1])
+      signM = sign(dAlt*dAlt_prev)==0 ? 1 : sign(dAlt*dAlt_prev)
+      rlx = signM<0 ? rlx*rlx_ratio : rlx #reduce overshooting
+      if rlx <= 10*eps(1.0)
+            error("Cruise altitude clipping loop (imission=$(imission)) stalled at altc=$(para[iaalt,ipcruise1]) after $(clip_attempt) attempts -- relaxation factor rlx=$(rlx) has underflowed from repeated overshoot corrections without converging. This indicates a persistently infeasible or oscillating climb search, not one that just needs more iterations.")
+      end
+      dAlt *= rlx
+      if abs(dAlt) <= 10*eps(max(abs(para[iaalt, ipcruise1]), 1.0))
+            error("Cruise altitude clipping loop (imission=$(imission)) stalled at altc=$(para[iaalt,ipcruise1]) after $(clip_attempt) attempts -- correction underflowed to numerical zero without converging. This indicates a persistently infeasible climb (e.g., requested range far exceeds design range, or an unrealistic weight estimate), not a search that just needs more iterations.")
+      end
+      dAlt_prev = dAlt
+      para[iaalt, ipcruise1] += dAlt
+
+      end #clip_attempt retry loop
 
       # First cruise point is last climb point
       para[iaRange, ipcruise1] = para[iaRange, ipclimbn]
@@ -662,7 +773,7 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
             para[iaalt, ip] = alt
 
             rhocab = max(parg[igpcabin], p0) / (RSL * Tref)
-            para[iaWbuoy, ip] = (rhocab - rho0) * gee * parg[igcabVol]
+            para[iaWbuoy, ip] = (rhocab - ρ0) * gee * parg[igcabVol]
       end
       para[iaWbuoy, ipdescentn] = 0.0
 
