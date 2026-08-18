@@ -1,5 +1,5 @@
 """
-    fly_mission!(ac, imission, itermax, initializes_engine, opt_prescribed_cruise_parameter, printTO)
+    fly_mission!(ac, imission, itermax, initializes_engine, opt_prescribed_cruise_parameter, printTO, allow_altitude_clip)
 
 Runs the aircraft through the specified mission, computing and converging the fuel weight. Formerly, `fly_offdesign_mission!()`.
 
@@ -11,12 +11,13 @@ Runs the aircraft through the specified mission, computing and converging the fu
 - `initializes_engine::Boolean`: Use design case as initial guess for engine state if true
 - `opt_prescribed_cruise_parameter::String`: option for whether cruise altitude or lift coefficient is specified. Options are "altitude" or "lift_coefficient"
 - `printTO::Bool`: print takeoff convergence table if true
+- `allow_altitude_clip::Bool`: whether to allow auto altitude clipping if the cruise range were found to be negative
 **Outputs:**
 - No explicit outputs. Computed quantities are saved to `par` arrays of `aircraft` model for the mission selected
 
 """
 function fly_mission!(ac, imission = 1; itermax = 35, initializes_engine = true, 
-        opt_prescribed_cruise_parameter = "altitude", printTO = true)
+        opt_prescribed_cruise_parameter = "altitude", printTO = true, allow_altitude_clip::Bool=true)
     if ~ac.is_sized[1]
         error("Aircraft not sized. Please size the aircraft before running the mission.")
     end
@@ -227,6 +228,10 @@ function fly_mission!(ac, imission = 1; itermax = 35, initializes_engine = true,
 #---- no convergence yet
     Lconv = false
 
+#---- record down the intial requested altitude to cruise
+    CL_req = ac.para[iaCL,ipcruise1,imission]
+    alt_req = ac.para[iaalt,ipcruise1,imission]
+
 # -------------------------------------------------------    
 #                   Weight loop
 # -------------------------------------------------------    
@@ -251,7 +256,8 @@ function fly_mission!(ac, imission = 1; itermax = 35, initializes_engine = true,
     end
 
     # Calling mission
-    time_propsys += _mission_iteration!(ac, imission, false, calculate_cruise = true) #Calculate start of cruise too
+    time_propsys += _mission_iteration!(ac, imission, false, calculate_cruise = true, opt_prescribed_cruise_parameter=opt_prescribed_cruise_parameter,
+                                        alt_req=alt_req, CL_req=CL_req, allow_altitude_clip=allow_altitude_clip) #Calculate start of cruise too
     # println(parm[imWfuel,:])
 
     #Simulate heat exchanger performance if the engine contains any
@@ -340,6 +346,10 @@ function calculate_cruise_altitude_or_CL!(opt_prescribed_cruise_parameter, WMTO,
         CL = BW / (0.5*ρ0*u0^2*S) #Find CL from L=W
         para[iaCL, ipclimb1+1:ipdescentn-1] .= CL #Store CL in climb, cruise and descent phases
     
+        set_ambient_conditions!(ac, ipcruise1, im = imission)
+        #Update fuselage drag for the new altitude
+        fuselage_drag!(fuse, parm, para, ipcruise1)
+        broadcast_fuselage_drag!(para, ipcruise1) 
     elseif compare_strings(opt_prescribed_cruise_parameter, "CL")
         CL = para[iaCL, ip]
         ρ0 = BW / (0.5*u0^2*S*CL) #Find density from L=W

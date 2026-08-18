@@ -700,7 +700,7 @@ function _size_aircraft!(ac; itermax=35,
         #Calculate engine mass properties
         eng.engineweight!(ac)
 
-        _mission_iteration!(ac, imission, Ldebug)
+        _mission_iteration!(ac, imission, Ldebug; allow_altitude_clip=false)
 
         # this calculated fuel is the design-mission fuel 
         parg[igWfuel] = parm[imWfuel]
