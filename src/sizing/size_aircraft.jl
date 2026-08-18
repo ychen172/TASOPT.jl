@@ -500,6 +500,13 @@ function _size_aircraft!(ac; itermax=35,
             htail.volume = Sh * lhtail / (wing.layout.S * wing.mean_aero_chord)
         end
 
+        # Update the takeoff thrust (Only matter for consistency for OEI sizing. Mess up the Vv calculation but that is a pure output)
+        if iterw > 2 && vtail.opt_sizing == TailSizing.OEI
+            eng.enginecalc!(ac, "off_design", imission, ipstatic, initializes_engine)
+            eng.enginecalc!(ac, "off_design", imission, iprotate, initializes_engine)
+            pare[ieFe, iptakeoff] = pare[ieFe, ipstatic]
+        end
+
         # Vertical tail sizing 
         ip = iprotate
         qstall = 0.5 * pare[ierho0, ip] * (pare[ieu0, ip] / 1.2)^2

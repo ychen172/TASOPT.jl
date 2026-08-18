@@ -68,6 +68,7 @@ objVar_off=ObjectiveVariable(:(parm[imWfuel,2]))
 pen_scale_PFEI = 2e5 #The scaling for penalty when using fuel burned per mission compared to the case that use PFEI
 pen_scale_constraints = 1e4*pen_scale_PFEI
 pen_scale_failed_sizing = 100.0*pen_scale_PFEI
+overwri_ini_des_ran = false
 # Setup an entry (value does not matter) for test ratio to be sweep later in optimization loop
 mis_opt = Requirement[]
 push!(mis_opt, Requirement(:(options.ifuel), Int(idx_fuel)))
@@ -202,7 +203,9 @@ for i in task_id:num_tasks:n_caps
     (range_max_off_nmi>10.0 && range_min_off_nmi>10.0 && range_max_off_nmi>range_min_off_nmi) || error("OAG minimum input range is required to be larger than 10 nmi")
     range_span_off_nmi = range_max_off_nmi-range_min_off_nmi
     push!(bound_glob_cur, Parameter(:(parm[imRange,1]), range_max_off_nmi*1852.0, (range_max_off_nmi+0.4*range_span_off_nmi)*1852.0, max(10.0,(range_min_off_nmi-0.2*range_span_off_nmi))*1852.0, 0.1*range_span_off_nmi*1852.0)) #[m]
-    ac.parm[imRange,:] .= range_max_off_nmi*1852.0 # This is setup so that if use warm start, the sizing mission still stay with the sepecified starting point above
+    if overwri_ini_des_ran
+        ac.parm[imRange,:] .= range_max_off_nmi*1852.0 # This is setup so that if use warm start, the sizing mission still stay with the sepecified starting point above
+    end
 
     #### If not running global search, then fetch the warm start variables from the initial aircraft model
     par_opt_cur = deepcopy(bound_glob_cur) #Use directly global bound if starting from global search
