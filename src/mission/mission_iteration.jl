@@ -708,26 +708,25 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
             Fspec = BW * (sing + cosg * DoL)
             pare[ieFe, ip] = Fspec / parg[igneng]
 
-            if initializes_engine
-                  pare[iembf, ip] = pare[iembf, ip-1]
-                  pare[iemblc, ip] = pare[iemblc, ip-1]
-                  pare[iembhc, ip] = pare[iembhc, ip-1]
-                  pare[iepif, ip] = pare[iepif, ip-1]
-                  pare[iepilc, ip] = pare[iepilc, ip-1]
-                  pare[iepihc, ip] = pare[iepihc, ip-1]
-                  initializes_engine = false #Apparently, this helps convergence
-                                             #on descent, where the engine is at lower throttle
+            # Chain every descent point's starting guess from the immediately preceding mission point, instead of the cruise 1
+            pare[iembf, ip] = pare[iembf, ip-1]
+            pare[iemblc, ip] = pare[iemblc, ip-1]
+            pare[iembhc, ip] = pare[iembhc, ip-1]
+            pare[iepif, ip] = pare[iepif, ip-1]
+            pare[iepilc, ip] = pare[iepilc, ip-1]
+            pare[iepihc, ip] = pare[iepihc, ip-1]
+            pare[ieM2, ip] = pare[ieM2, ip-1]
+            pare[ieM25, ip] = pare[ieM25, ip-1]
+            initializes_engine = false #Fresh start dont need anymore
 
-                  # make better estimate for new Tt4, adjusted for new ambient T0
-                  dTburn = pare[ieTt4, ip-1] - pare[ieTt3, ip-1]
-                  OTR = pare[ieTt3, ip-1] / pare[ieTt2, ip-1]
-                  Tt3 = pare[ieT0, ip] * OTR
-                  pare[ieTt4, ip] = Tt3 + dTburn + 50.0
+            # make better estimate for new Tt4, adjusted for new ambient T0
+            dTburn = pare[ieTt4, ip-1] - pare[ieTt3, ip-1]
+            OTR = pare[ieTt3, ip-1] / pare[ieTt2, ip-1]
+            Tt3 = pare[ieT0, ip] * OTR
+            pare[ieTt4, ip] = Tt3 + dTburn + 50.0
 
-                  # make better estimate for new pt5, adjusted for new ambient p0
-                  pare[iept5, ip] = pare[iept5, ip-1] * pare[iep0, ip] / pare[iep0, ip-1]
-
-            end
+            # make better estimate for new pt5, adjusted for new ambient p0
+            pare[iept5, ip] = pare[iept5, ip-1] * pare[iep0, ip] / pare[iep0, ip-1]
 
             eng.enginecalc!(ac, "off_design", imission, ip, initializes_engine)
 
