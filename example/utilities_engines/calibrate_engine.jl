@@ -648,4 +648,52 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
     return (;obj! = obj_tech_cali!, histTechPara = histPara_tech_cali, histEngPara = histPara_eng_opt, histPenl = histPenl_tech_cali)
 end
 
+function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
+                  upBon_tec::Vector{Float64},upBon_eng::Vector{Float64},
+                  loBon_tec::Vector{Float64},loBon_eng::Vector{Float64},
+                  Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
+                  M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
+                  printEvery::Int64=10,ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+    # Size check
+    length(ini_tec) == 8 || error("`ini_tec` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(ini_tec))")
+    length(ini_eng) == 5 || error("`ini_eng` must have exactly 5 elements [BPR,pif,pilc,pihc,Tt4], got $(length(ini_eng))")
+    any((ini_tec .< loBon_tec) .| (ini_tec .> upBon_tec)) && error("Initial guess `ini_tec` is outside the bounds [loBon_tec,upBon_tec]: ini_tec=$(ini_tec), loBon_tec=$(loBon_tec), upBon_tec=$(upBon_tec)")
+    any((ini_eng .< loBon_eng) .| (ini_eng .> upBon_eng)) && error("Initial guess `ini_eng` is outside the bounds [loBon_eng,upBon_eng]: ini_eng=$(ini_eng), loBon_eng=$(loBon_eng), upBon_eng=$(upBon_eng)")
+    ac_used = deepcopy(ac)
+    # setup objective
+    (;obj!,histTechPara,histEngPara,histPenl)=
+    make_obj_tech_cali(ac_used,ini_eng,upBon_eng,loBon_eng;
+                       printEvery=printEvery,ftol=ftol,maxIter=maxIter,optTyp=optTyp,
+                       Fn_N=Fn_N,WFuel_kgs_ref=WFuel_kgs_ref,OPR_ref=OPR_ref,BPR_ref=BPR_ref,DFan_m_ref=DFan_m_ref,
+                       M0=M0,P0=P0,T0=T0,a0=a0)
+    # optimize
+    status = :FAILURE
+    try
+        opt               = NLopt.Opt(optTyp, length(ini_tec))
+        opt.lower_bounds  = loBon_tec
+        opt.upper_bounds  = upBon_tec
+        opt.min_objective = obj!
+        opt.initial_step  = (upBon_tec .- loBon_tec)*0.1
+        opt.ftol_rel      = ftol
+        opt.maxeval       = maxIter
+        # Runing
+        (_, _, status)    = NLopt.optimize(opt, ini_tec)
+    catch e
+        e isa InterruptException && rethrow()
+        @error "Current optimization failed $(typeof(e)): $(e)"
+    end
+
+    #### Post-process the optimization results
+    bestSol_tec = ini_tec.*NaN
+    bestSol_eng = ini_eng.*NaN
+    if (status in ObjectiveFactory.success_statuses) && length(histPenl)>0
+        idxMin = argmin(histPenl)
+        bestSol_tec = histTechPara[idxMin]
+        bestSol_eng = histEngPara[idxMin]
+    else
+        status = :NO_FEASIBLE_SOLUTION
+    end
+    return  status, bestSol_tec, bestSol_eng, histTechPara, histEngPara, histPenl
+end
+
 end #CaliEng
