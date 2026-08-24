@@ -273,7 +273,7 @@ function optimize_match_EEDB!(ac,parameters::AbstractVector{<:ObjectiveFactory.P
 end
 
 """
-    UpdAcEngMod!(ac_ref, x; tol::Float64=1e-6, maxiter::Int=150)
+    UpdAcEngMod!(ac_ref, x; tol::Float64=1e-6, maxIter::Int=150)
 
 `UpdAcEngMod!` sets the engine-cycle design variables on `ac_ref` and re-sizes its engine at the
 cruise design point, iterating the cruise cycle sizing against the takeoff-rotation cooling-flow
@@ -283,7 +283,7 @@ sizing until TSFC settles.
         - `ac_ref`: Aircraft model to update (mutated in place)
         - `x::AbstractVector{<:Real}`: `[BPR, pif, pilc, pihc, Tt4]` candidate cycle design variables (SI units)
         - `tol::Float64`: Relative tolerance on TSFC for the design/cooling_sizing coupling loop to be considered converged
-        - `maxiter::Int`: Maximum number of design/cooling_sizing alternations (same convention as `size_aircraft!`'s own weight-closure loop)
+        - `maxIter::Int`: Maximum number of design/cooling_sizing alternations (same convention as `size_aircraft!`'s own weight-closure loop)
 
     ***Outputs***
         - `ac_ref`: The same aircraft model, mutated in place and returned for convenience
@@ -299,7 +299,7 @@ sizing until TSFC settles.
         - Does not throw on non-convergence of the underlying engine calcs -- caller is responsible for
           checking/catching (see `make_obj_engine_opt`)
 """
-function UpdAcEngMod!(ac_ref, x; tol::Float64=1e-6, maxiter::Int=150)
+function UpdAcEngMod!(ac_ref, x; tol::Float64=1e-6, maxIter::Int=150)
     BPR,pif,pilc,pihc,Tt4 = x
     ac_ref.pare[ieBPR,ipcruise1,1] = BPR
     ac_ref.pare[iepif,ipcruise1,1] = pif
@@ -308,7 +308,7 @@ function UpdAcEngMod!(ac_ref, x; tol::Float64=1e-6, maxiter::Int=150)
     ac_ref.pare[ieTt4,ipcruise1,1] = Tt4
 
     TSFC_prev = Inf
-    for _ in 1:maxiter
+    for _ in 1:maxIter
         ac_ref.engine.enginecalc!(ac_ref, "design", 1, ipcruise1, true, 1)
         ac_ref.engine.enginecalc!(ac_ref, "cooling_sizing", 1, iprotate, true, 1)
         TSFC_cur = ac_ref.pare[ieTSFC, ipcruise1, 1]
@@ -371,7 +371,9 @@ function make_obj_engine_opt(ac,printEvery::Int64)
         end
         if (mod(count,printEvery)==0)&&(length(histPenl_engine_opt)>0)
             idxMin = argmin(histPenl_engine_opt)
-            println("Current best for obj_engine_opt: Penalty: $(histPenl_engine_opt[idxMin]) with Parameters: $(histPara_engine_opt[idxMin])")
+            println("EngRun#$(count): Current best for obj_engine_opt: Penalty: $(histPenl_engine_opt[idxMin]) with Parameters: $(histPara_engine_opt[idxMin])")
+        else
+            println("EngRun#$(count): No Feasible Sol Yet")
         end
         return penal
     end
@@ -441,6 +443,111 @@ function engine_opt(ac;
         status = :NO_FEASIBLE_SOLUTION
     end
     return bestSol, status, histPara, histPenl
+end
+
+function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
+                      upBon_eng::Vector{Float64},loBon_eng::Vector{Float64};printEvery::Int64=10,
+                      ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+    # Unpack
+    length(x) == 8 || throw(DimensionMismatch("`x` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(x))"))
+    pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal = x
+    # Update aircraft with technology parameters
+    ac_ref.pare[iepib,   :, :] .= pib
+    ac_ref.pare[ieepolf, :, :] .= epolf
+    ac_ref.pare[ieepollc,:, :] .= epollc
+    ac_ref.pare[ieepolhc,:, :] .= epolhc
+    ac_ref.pare[ieepolht,:, :] .= epolht
+    ac_ref.pare[ieepollt,:, :] .= epollt
+    ac_ref.pare[ieetab,  :, :] .= etab
+    ac_ref.parg[igTmetal]       = Tmetal
+    # Optimize engine at the design point
+    bestSol, _, _, _ = engine_opt(ac_ref;ini=ini_eng,upBon=upBon_eng,loBon=loBon_eng,
+                                          printEvery=printEvery,ftol=ftol,maxIter=maxIter,optTyp=optTyp)
+    flgSizSuc = true
+    if any(isnan,bestSol)
+        flgSizSuc = false
+    else
+        try
+            # Update aircraft with update engine cycle
+            UpdAcEngMod!(ac_ref, bestSol; tol=ftol, maxIter=150) #Update the engine model
+        catch e
+            e isa InterruptException && rethrow()
+            flgSizSuc = false
+        end
+    end
+    return ac_ref, flgSizSuc, bestSol
+end
+
+function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float64},loBon_eng::Vector{Float64};
+                            printEvery::Int64,ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
+                            Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
+                            M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21)
+    ac_used = deepcopy(ac)
+    histPara_tech_cali = Vector{Vector{Float64}}()
+    histPara_eng_opt =  Vector{Vector{Float64}}()
+    histPenl_tech_cali = Vector{Float64}()
+    num_WFuel = count(.!ismissing.(WFuel_kgs_ref))
+    num_OPR = count(.!ismissing.(OPR_ref))
+    num_BPR = count(.!ismissing.(BPR_ref))
+    count = 0
+    function obj_tech_cali!(x, grad)
+        count += 1
+        ac_ref = deepcopy(ac_used)
+        penal=0.0
+        try
+            # Optimize the engine with the tech parameters
+            ac_ref,flgSizSuc,bestEngSol = UpdAcTecLvl!(ac_ref,x,ini_eng,upBon_eng,loBon_eng;printEvery=printEvery,
+                                             ftol=ftol,maxIter=maxIter,optTyp=optTyp)
+            if flgSizSuc
+                if DFan_m_ref>0.0
+                    penal += 100.0*abs((ac_ref.parg[igdfan]-DFan_m_ref)/DFan_m_ref) #Percentage deviation
+                end
+                # Perform EEDB off-design
+                flgOffDesSuc = true
+                for (idxFn,Fn_N_cur) in enumerate(Fn_N)
+                    try
+                        res = RunEngine.runOffDes(ac_ref, M0, P0, T0, a0, Fn_N_cur)
+                        penal += !res.Lconv ? 1000 : 0.0 #Represents 10 times of the deviation
+                        if !ismissing(WFuel_kgs_ref[idxFn])
+                            penal += 100*(abs(res.mcore*res.ff-WFuel_kgs_ref[idxFn])/WFuel_kgs_ref[idxFn])*(0.3333/num_WFuel)
+                        end
+                        if !ismissing(OPR_ref[idxFn])
+                            penal += 100*(abs(res.OPR-OPR_ref[idxFn])/OPR_ref[idxFn])*(0.3333/num_OPR)
+                        end
+                        if !ismissing(BPR_ref[idxFn])
+                            penal += 100*(abs(res.BPR-BPR_ref[idxFn])/BPR_ref[idxFn])*(0.3333/num_BPR)
+                        end
+                    catch e
+                        flgOffDesSuc = false
+                        if e isa InterruptException #Unless user interruption
+                            rethrow()
+                        end
+                        penal += 1000.0 #Represents 10 times of the deviation
+                    end
+                end
+                if flgOffDesSuc
+                    # Record the feasible solution
+                    push!(histPara_eng_opt,bestEngSol)
+                    push!(histPara_tech_cali,x)
+                    push!(histPenl_tech_cali,penal)
+                end
+            else
+                penal += 1000.0 * (length(Fn_N) + 1) #Represents 10 times of the deviation
+            end
+        catch e
+            (e isa InterruptException) && rethrow()
+            penal += 1000.0 * (length(Fn_N) + 1) #Represents 10 times of the deviation
+        end
+        # Print
+        if (mod(count,printEvery)==0)&&(length(histPenl_tech_cali)>0)
+            idxMin = argmin(histPenl_tech_cali)
+            println("TechRun#$(count): Current best for obj_tech_cali: Penalty: $(histPenl_tech_cali[idxMin]) with Tech Parameters: $(histPara_tech_cali[idxMin]) and Eng Parameters: $(histPara_eng_opt[idxMin])")
+        else
+            println("TechRun#$(count): No Feasible Sol Yet")
+        end
+        return penal
+    end
+    return (;obj! = obj_tech_cali!, histTechPara = histPara_tech_cali, histEngPara = histPara_eng_opt, histPenl = histPenl_tech_cali)
 end
 
 end #CaliEng
