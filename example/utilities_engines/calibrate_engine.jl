@@ -288,8 +288,19 @@ function make_obj_engine_opt(ac,printEvery::Int64)
         ac_ref.pare[ieTt4,ipcruise1,1] = Tt4
         penal=0.0
         try
-            ac_ref.engine.enginecalc!(ac_ref, "design", 1, ipcruise1, true, 1)
-            ac_ref.engine.enginecalc!(ac_ref, "cooling_sizing", 1, iprotate, true, 1)
+            #### Alternate design <-> cooling_sizing until TSFC settles (couples Tmetal-driven
+            #### cooling flow back into the cycle it actually affects), same itermax convention
+            #### as size_aircraft!'s own weight-closure loop
+            TSFC_prev = Inf
+            for _ in 1:150
+                ac_ref.engine.enginecalc!(ac_ref, "design", 1, ipcruise1, true, 1)
+                ac_ref.engine.enginecalc!(ac_ref, "cooling_sizing", 1, iprotate, true, 1)
+                TSFC_cur = ac_ref.pare[ieTSFC, ipcruise1, 1]
+                if abs(TSFC_cur - TSFC_prev) < 1e-6*max(abs(TSFC_prev), 1e-30)
+                    break
+                end
+                TSFC_prev = TSFC_cur
+            end
             penal = ac_ref.pare[ieTSFC, ipcruise1, 1] / gee #(kg/s/N) ~1.78e-5
             if penal<=0.0
                 penal = 1.78e-3
@@ -313,6 +324,7 @@ end
 function engine_opt(ac;
                     ini::Vector{Float64},upBon::Vector{Float64},loBon::Vector{Float64},
                     printEvery::Int64,ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+    any((ini .< loBon) .| (ini .> upBon)) && error("Initial guess `ini` is outside the bounds [loBon,upBon]: ini=$(ini), loBon=$(loBon), upBon=$(upBon)")
     ac_used = deepcopy(ac)
     (; obj!, histPara, histPenl) = make_obj_engine_opt(ac_used, printEvery)
     status = :FAILURE
