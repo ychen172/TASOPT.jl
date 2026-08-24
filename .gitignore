@@ -3,7 +3,7 @@
 *.out
 *.err
 *.inp
-*.restart
+*.restart 
 *.output
 *.log
 *.code-workspace
