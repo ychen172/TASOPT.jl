@@ -272,6 +272,81 @@ function optimize_match_EEDB!(ac,parameters::AbstractVector{<:ObjectiveFactory.P
     return status, hist, bestSol
 end
 
+"""
+    UpdAcEngMod!(ac_ref, x; tol::Float64=1e-6, maxiter::Int=150)
+
+`UpdAcEngMod!` sets the engine-cycle design variables on `ac_ref` and re-sizes its engine at the
+cruise design point, iterating the cruise cycle sizing against the takeoff-rotation cooling-flow
+sizing until TSFC settles.
+
+    ***Inputs:***
+        - `ac_ref`: Aircraft model to update (mutated in place)
+        - `x::AbstractVector{<:Real}`: `[BPR, pif, pilc, pihc, Tt4]` candidate cycle design variables (SI units)
+        - `tol::Float64`: Relative tolerance on TSFC for the design/cooling_sizing coupling loop to be considered converged
+        - `maxiter::Int`: Maximum number of design/cooling_sizing alternations (same convention as `size_aircraft!`'s own weight-closure loop)
+
+    ***Outputs***
+        - `ac_ref`: The same aircraft model, mutated in place and returned for convenience
+
+    ***Behavior***
+        - Overwrites `ac_ref.pare[ieBPR/iepif/iepilc/iepihc/ieTt4, ipcruise1, 1]` with `x`
+        - Alternates `"design"` (cruise cycle sizing, `ipcruise1`) and `"cooling_sizing"` (Tmetal-driven
+          cooling flow at `iprotate`) engine calcs -- the two are coupled through the shared design-reference
+          values (`pifD` etc.) and the cooling-flow ratio (`epsrow`), so a single pass of each is NOT enough
+          for the two to be mutually consistent
+        - Uses `initializes_engine=true` on every call, so each evaluation starts from a clean bootstrap
+          rather than warm-starting off whatever was previously in `ac_ref`
+        - Does not throw on non-convergence of the underlying engine calcs -- caller is responsible for
+          checking/catching (see `make_obj_engine_opt`)
+"""
+function UpdAcEngMod!(ac_ref, x; tol::Float64=1e-6, maxiter::Int=150)
+    BPR,pif,pilc,pihc,Tt4 = x
+    ac_ref.pare[ieBPR,ipcruise1,1] = BPR
+    ac_ref.pare[iepif,ipcruise1,1] = pif
+    ac_ref.pare[iepilc,ipcruise1,1] = pilc
+    ac_ref.pare[iepihc,ipcruise1,1] = pihc
+    ac_ref.pare[ieTt4,ipcruise1,1] = Tt4
+
+    TSFC_prev = Inf
+    for _ in 1:maxiter
+        ac_ref.engine.enginecalc!(ac_ref, "design", 1, ipcruise1, true, 1)
+        ac_ref.engine.enginecalc!(ac_ref, "cooling_sizing", 1, iprotate, true, 1)
+        TSFC_cur = ac_ref.pare[ieTSFC, ipcruise1, 1]
+        if abs(TSFC_cur - TSFC_prev) < tol*max(abs(TSFC_prev), 1e-30)
+            break
+        end
+        TSFC_prev = TSFC_cur
+    end
+    return ac_ref
+end
+
+"""
+    make_obj_engine_opt(ac, printEvery::Int64)
+
+`make_obj_engine_opt` constructs and returns an objective function for the engine-cycle-only
+inner-loop optimization: minimize TSFC at a single fixed flight condition/thrust (the design point
+already stored on `ac`), searching over `[BPR, pif, pilc, pihc, Tt4]` via `UpdAcEngMod!`.
+
+    ***Inputs:***
+        - `ac`: Baseline aircraft model, providing the fixed flight condition/thrust/technology
+          parameters for the design point (passed by copy, never mutated)
+        - `printEvery::Int64`: Print the current best solution every this many objective calls
+
+    ***Outputs***
+        - `obj!`::a function: Objective function `(x, grad) -> penalty` for the optimizer. A fresh
+          copy of `ac` is used and updated via `UpdAcEngMod!` on every call; `ac` itself is never
+          modified.
+        - `histPara`::Vector{Vector{Float64}}: Parameter vectors `x` for every successful evaluation,
+          returned by reference and updated by `obj!` calls
+        - `histPenl`::Vector{Float64}: Penalty (TSFC/gee) for every successful evaluation, same order
+          as `histPara`, returned by reference and updated by `obj!` calls
+
+    ***Behavior***
+        - Penalty is `TSFC/gee` (kg/s/N); if the engine calc fails to converge or a non-positive TSFC
+          results, a fixed fallback penalty (1.78e-3) is returned instead and the evaluation is NOT
+          recorded in `histPara`/`histPenl`
+        - All inputs/outputs are in SI units
+"""
 function make_obj_engine_opt(ac,printEvery::Int64)
     ac_used = deepcopy(ac)
     histPara_engine_opt = Vector{Vector{Float64}}()
@@ -280,27 +355,9 @@ function make_obj_engine_opt(ac,printEvery::Int64)
     function obj_engine_opt!(x, grad)
         count += 1
         ac_ref = deepcopy(ac_used)
-        BPR,pif,pilc,pihc,Tt4 = x
-        ac_ref.pare[ieBPR,ipcruise1,1] = BPR
-        ac_ref.pare[iepif,ipcruise1,1] = pif
-        ac_ref.pare[iepilc,ipcruise1,1] = pilc
-        ac_ref.pare[iepihc,ipcruise1,1] = pihc
-        ac_ref.pare[ieTt4,ipcruise1,1] = Tt4
         penal=0.0
         try
-            #### Alternate design <-> cooling_sizing until TSFC settles (couples Tmetal-driven
-            #### cooling flow back into the cycle it actually affects), same itermax convention
-            #### as size_aircraft!'s own weight-closure loop
-            TSFC_prev = Inf
-            for _ in 1:150
-                ac_ref.engine.enginecalc!(ac_ref, "design", 1, ipcruise1, true, 1)
-                ac_ref.engine.enginecalc!(ac_ref, "cooling_sizing", 1, iprotate, true, 1)
-                TSFC_cur = ac_ref.pare[ieTSFC, ipcruise1, 1]
-                if abs(TSFC_cur - TSFC_prev) < 1e-6*max(abs(TSFC_prev), 1e-30)
-                    break
-                end
-                TSFC_prev = TSFC_cur
-            end
+            UpdAcEngMod!(ac_ref, x)
             penal = ac_ref.pare[ieTSFC, ipcruise1, 1] / gee #(kg/s/N) ~1.78e-5
             if penal<=0.0
                 penal = 1.78e-3
@@ -321,6 +378,38 @@ function make_obj_engine_opt(ac,printEvery::Int64)
     return (;obj! = obj_engine_opt!,histPara = histPara_engine_opt, histPenl = histPenl_engine_opt)
 end
 
+"""
+    engine_opt(ac; ini::Vector{Float64}, upBon::Vector{Float64}, loBon::Vector{Float64},
+              printEvery::Int64, ftol::Float64=1e-6, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD)
+
+`engine_opt` runs the engine-cycle-only inner-loop optimization (see `make_obj_engine_opt`) to find
+the minimum-TSFC engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed design point.
+
+    ***Inputs:***
+        - `ac`: Baseline aircraft model for sizing (passed by copy)
+        - `ini::Vector{Float64}`: Initial guess `[BPR, pif, pilc, pihc, Tt4]` (SI units)
+        - `upBon::Vector{Float64}`: Upper bounds, same order as `ini`
+        - `loBon::Vector{Float64}`: Lower bounds, same order as `ini`
+        - `printEvery::Int64`: Print the current best solution every this many objective calls
+        - `ftol::Float64`: Relative tolerance for the NLopt optimizer to converge
+        - `maxIter::Int`: Maximum number of optimization iterations
+        - `optTyp::Symbol`: NLopt algorithm symbol (only non-gradient-based algorithms supported,
+          e.g. `:LN_NELDERMEAD` local, `:GN_CRS2_LM`/`:GN_DIRECT` global)
+
+    ***Outputs***
+        - `bestSol::Vector{Float64}`: `[BPR, pif, pilc, pihc, Tt4]` of the minimum-penalty evaluation
+          found, or a vector of `NaN` if the optimizer status wasn't a success or no evaluation
+          succeeded
+        - `status::Symbol`: `:NO_FEASIBLE_SOLUTION` if the optimizer reported success but no
+          evaluation succeeded; otherwise NLopt's own termination status
+        - `histPara::Vector{Vector{Float64}}`: All successful evaluations' parameter vectors
+        - `histPenl::Vector{Float64}`: All successful evaluations' penalties, same order as `histPara`
+
+    ***Behavior***
+        - Errors immediately if `ini` is outside `[loBon,upBon]`
+        - `ac` is never mutated -- a fresh copy is made internally
+        - Only supports non-gradient-based NLopt algorithms
+"""
 function engine_opt(ac;
                     ini::Vector{Float64},upBon::Vector{Float64},loBon::Vector{Float64},
                     printEvery::Int64,ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
