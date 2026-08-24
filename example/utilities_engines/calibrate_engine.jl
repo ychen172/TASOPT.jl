@@ -272,5 +272,33 @@ function optimize_match_EEDB!(ac,parameters::AbstractVector{<:ObjectiveFactory.P
     return status, hist, bestSol
 end
 
+function make_obj_engine_opt(ac)
+    ac_used = deepcopy(ac)
+    hist_engine_opt = Vector{Vector{Float64}}()
+    function obj_engine_opt!(x, grad)
+        ac_ref = deepcopy(ac_used)
+        BPR,pif,pilc,pihc,Tt4 = x
+        ac_ref.pare[ieBPR,ipcruise1,1] = BPR
+        ac_ref.pare[iepif,ipcruise1,1] = pif
+        ac_ref.pare[iepilc,ipcruise1,1] = pilc
+        ac_ref.pare[iepihc,ipcruise1,1] = pihc
+        ac_ref.pare[ieTt4,ipcruise1,1] = Tt4
+        penal=0.0
+        try
+            ac_ref.engine.enginecalc!(ac_ref, "design", 1, ipcruise1, true, 1)
+            ac_ref.engine.enginecalc!(ac_ref, "cooling_sizing", 1, iprotate, true, 1)
+            penal = ac_ref.pare[ieTSFC, ipcruise1, 1] / gee #(kg/s/N) ~1.78e-5
+            if penal<=0.0
+                penal = 1.78e-3
+            else
+                push!(hist_engine_opt,vcat(x,[penal]))
+            end
+        catch
+            penal = 1.78e-3
+        end
+        return penal
+    end
+    return (;obj! = obj_engine_opt!,hist = hist_engine_opt)
+end
 
 end #CaliEng
