@@ -272,10 +272,13 @@ function optimize_match_EEDB!(ac,parameters::AbstractVector{<:ObjectiveFactory.P
     return status, hist, bestSol
 end
 
-function make_obj_engine_opt(ac)
+function make_obj_engine_opt(ac,printEvery::Int64)
     ac_used = deepcopy(ac)
-    hist_engine_opt = Vector{Vector{Float64}}()
+    histPara_engine_opt = Vector{Vector{Float64}}()
+    histPenl_engine_opt = Vector{Float64}()
+    count = 0
     function obj_engine_opt!(x, grad)
+        count += 1
         ac_ref = deepcopy(ac_used)
         BPR,pif,pilc,pihc,Tt4 = x
         ac_ref.pare[ieBPR,ipcruise1,1] = BPR
@@ -291,14 +294,52 @@ function make_obj_engine_opt(ac)
             if penal<=0.0
                 penal = 1.78e-3
             else
-                push!(hist_engine_opt,vcat(x,[penal]))
+                push!(histPara_engine_opt,copy(x))
+                push!(histPenl_engine_opt,penal)
             end
-        catch
+        catch e
+            e isa InterruptException && rethrow()
             penal = 1.78e-3
+        end
+        if (mod(count,printEvery)==0)&&(length(histPenl_engine_opt)>0)
+            idxMin = argmin(histPenl_engine_opt)
+            println("Current best for obj_engine_opt: Penalty: $(histPenl_engine_opt[idxMin]) with Parameters: $(histPara_engine_opt[idxMin])")
         end
         return penal
     end
-    return (;obj! = obj_engine_opt!,hist = hist_engine_opt)
+    return (;obj! = obj_engine_opt!,histPara = histPara_engine_opt, histPenl = histPenl_engine_opt)
+end
+
+function engine_opt(ac;
+                    ini::Vector{Float64},upBon::Vector{Float64},loBon::Vector{Float64},
+                    printEvery::Int64,ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+    ac_used = deepcopy(ac)
+    (; obj!, histPara, histPenl) = make_obj_engine_opt(ac_used, printEvery)
+    status = :FAILURE
+    try
+        opt               = NLopt.Opt(optTyp, length(ini))
+        opt.lower_bounds  = loBon
+        opt.upper_bounds  = upBon
+        opt.min_objective = obj!
+        opt.initial_step  = (upBon .- loBon)*0.1
+        opt.ftol_rel      = ftol
+        opt.maxeval       = maxIter
+        # Runing
+        (_, _, status)    = NLopt.optimize(opt, ini)
+    catch e
+        e isa InterruptException && rethrow()
+        @error "Current optimization failed $(typeof(e)): $(e)"
+    end
+
+    #### Post-process the optimization results
+    bestSol = ini.*NaN
+    if (status in ObjectiveFactory.success_statuses) && length(histPenl)>0
+        idxMin = argmin(histPenl)
+        bestSol = histPara[idxMin]
+    else
+        status = :NO_FEASIBLE_SOLUTION
+    end
+    return bestSol, status, histPara, histPenl
 end
 
 end #CaliEng
