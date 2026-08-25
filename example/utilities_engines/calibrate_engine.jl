@@ -373,11 +373,13 @@ function make_obj_engine_opt(ac,printEvery::Int64;tol_coupling::Float64=1e-8)
             e isa InterruptException && rethrow()
             penal = 1.78e-3
         end
-        if (mod(iterCount,printEvery)==0)&&(length(histPenl_engine_opt)>0)
-            idxMin = argmin(histPenl_engine_opt)
-            println("EngRun#$(iterCount): Current best for obj_engine_opt: Penalty: $(histPenl_engine_opt[idxMin]) with Parameters: $(histPara_engine_opt[idxMin])")
-        else
-            println("EngRun#$(iterCount): No Feasible Sol Yet")
+        if mod(iterCount,printEvery)==0
+            if length(histPenl_engine_opt)>0
+                idxMin = argmin(histPenl_engine_opt)
+                println("EngRun#$(iterCount): Current best for obj_engine_opt: Penalty: $(histPenl_engine_opt[idxMin]) with Parameters: $(histPara_engine_opt[idxMin])")
+            else
+                println("EngRun#$(iterCount): No Feasible Sol Yet")
+            end
         end
         return penal
     end
@@ -654,11 +656,13 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
             penal += 1000.0 * (length(Fn_N) + 1) #Represents 10 times of the deviation
         end
         # Print
-        if (mod(iterCount,printEvery)==0)&&(length(histPenl_tech_cali)>0)
-            idxMin = argmin(histPenl_tech_cali)
-            println("TechRun#$(iterCount): Current best for obj_tech_cali: Penalty: $(histPenl_tech_cali[idxMin]) with Tech Parameters: $(histPara_tech_cali[idxMin]) and Eng Parameters: $(histPara_eng_opt[idxMin])")
-        else
-            println("TechRun#$(iterCount): No Feasible Sol Yet")
+        if mod(iterCount,printEvery)==0
+            if length(histPenl_tech_cali)>0
+                idxMin = argmin(histPenl_tech_cali)
+                println("TechRun#$(iterCount): Current best for obj_tech_cali: Penalty: $(histPenl_tech_cali[idxMin]) with Tech Parameters: $(histPara_tech_cali[idxMin]) and Eng Parameters: $(histPara_eng_opt[idxMin])")
+            else
+                println("TechRun#$(iterCount): No Feasible Sol Yet")
+            end
         end
         return penal
     end
