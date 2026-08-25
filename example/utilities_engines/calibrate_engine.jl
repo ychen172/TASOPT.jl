@@ -331,6 +331,10 @@ already stored on `ac`), searching over `[BPR, pif, pilc, pihc, Tt4]` via `UpdAc
         - `ac`: Baseline aircraft model, providing the fixed flight condition/thrust/technology
           parameters for the design point (passed by copy, never mutated)
         - `printEvery::Int64`: Print the current best solution every this many objective calls
+        - `tol_coupling::Float64`: Forwarded to `UpdAcEngMod!` as its design/cooling_sizing
+          coupling-loop tolerance -- should be tighter than whatever NLopt tolerance the caller's
+          own optimizer uses (e.g. `engine_opt`'s `ftol`), since that search can't reliably resolve
+          improvements finer than the noise floor left by an under-converged coupling loop
 
     ***Outputs***
         - `obj!`::a function: Objective function `(x, grad) -> penalty` for the optimizer. A fresh
@@ -347,7 +351,7 @@ already stored on `ac`), searching over `[BPR, pif, pilc, pihc, Tt4]` via `UpdAc
           recorded in `histPara`/`histPenl`
         - All inputs/outputs are in SI units
 """
-function make_obj_engine_opt(ac,printEvery::Int64)
+function make_obj_engine_opt(ac,printEvery::Int64;tol_coupling::Float64=1e-8)
     ac_used = deepcopy(ac)
     histPara_engine_opt = Vector{Vector{Float64}}()
     histPenl_engine_opt = Vector{Float64}()
@@ -357,7 +361,7 @@ function make_obj_engine_opt(ac,printEvery::Int64)
         ac_ref = deepcopy(ac_used)
         penal=0.0
         try
-            UpdAcEngMod!(ac_ref, x)
+            UpdAcEngMod!(ac_ref, x; tol=tol_coupling)
             penal = ac_ref.pare[ieTSFC, ipcruise1, 1] / gee #(kg/s/N) ~1.78e-5
             if penal<=0.0
                 penal = 1.78e-3
@@ -382,7 +386,7 @@ end
 
 """
     engine_opt(ac; ini::Vector{Float64}, upBon::Vector{Float64}, loBon::Vector{Float64},
-              printEvery::Int64, ftol::Float64=1e-6, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD)
+              printEvery::Int64, ftol::Float64=1e-6, tol_coupling::Float64=1e-8, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD)
 
 `engine_opt` runs the engine-cycle-only inner-loop optimization (see `make_obj_engine_opt`) to find
 the minimum-TSFC engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed design point.
@@ -393,7 +397,11 @@ the minimum-TSFC engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed desi
         - `upBon::Vector{Float64}`: Upper bounds, same order as `ini`
         - `loBon::Vector{Float64}`: Lower bounds, same order as `ini`
         - `printEvery::Int64`: Print the current best solution every this many objective calls
-        - `ftol::Float64`: Relative tolerance for the NLopt optimizer to converge
+        - `ftol::Float64`: Relative tolerance for this function's own NLopt optimizer to converge
+        - `tol_coupling::Float64`: Forwarded to `make_obj_engine_opt`/`UpdAcEngMod!` as the design/
+          cooling_sizing coupling-loop tolerance -- should be tighter than `ftol`, since this NLopt
+          search can't reliably resolve improvements finer than the noise floor left by an
+          under-converged coupling loop
         - `maxIter::Int`: Maximum number of optimization iterations
         - `optTyp::Symbol`: NLopt algorithm symbol (only non-gradient-based algorithms supported,
           e.g. `:LN_NELDERMEAD` local, `:GN_CRS2_LM`/`:GN_DIRECT` global)
@@ -414,10 +422,10 @@ the minimum-TSFC engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed desi
 """
 function engine_opt(ac;
                     ini::Vector{Float64},upBon::Vector{Float64},loBon::Vector{Float64},
-                    printEvery::Int64,ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+                    printEvery::Int64,ftol::Float64=1e-6,tol_coupling::Float64=1e-8,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
     any((ini .< loBon) .| (ini .> upBon)) && error("Initial guess `ini` is outside the bounds [loBon,upBon]: ini=$(ini), loBon=$(loBon), upBon=$(upBon)")
     ac_used = deepcopy(ac)
-    (; obj!, histPara, histPenl) = make_obj_engine_opt(ac_used, printEvery)
+    (; obj!, histPara, histPenl) = make_obj_engine_opt(ac_used, printEvery; tol_coupling=tol_coupling)
     status = :FAILURE
     try
         opt               = NLopt.Opt(optTyp, length(ini))
@@ -448,7 +456,7 @@ end
 """
     UpdAcTecLvl!(ac_ref, x::Vector{Float64}, ini_eng::Vector{Float64},
                 upBon_eng::Vector{Float64}, loBon_eng::Vector{Float64}; printEvery::Int64=10,
-                ftol::Float64=1e-6, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD)
+                ftol_eng::Float64=1e-7, tol_coupling::Float64=1e-8, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD)
 
 `UpdAcTecLvl!` sets the 8 engine technology parameters on `ac_ref`, then runs `engine_opt` to find
 the minimum-TSFC engine cycle for that technology level (see `make_obj_engine_opt`/`engine_opt`),
@@ -461,7 +469,13 @@ and re-materializes that optimal cycle onto `ac_ref` via `UpdAcEngMod!`.
         - `upBon_eng::Vector{Float64}`: Upper bounds for the inner search, same order as `ini_eng`
         - `loBon_eng::Vector{Float64}`: Lower bounds for the inner search, same order as `ini_eng`
         - `printEvery::Int64`: Forwarded to `engine_opt` -- print the current best solution every this many objective calls
-        - `ftol::Float64`: Forwarded to `engine_opt` as its NLopt relative tolerance, and reused as `UpdAcEngMod!`'s design/cooling_sizing coupling-loop tolerance
+        - `ftol_eng::Float64`: Forwarded to `engine_opt` as its NLopt relative tolerance (the middle of the
+          three nested loops -- should be looser than `tol_coupling` but tighter than whatever tolerance
+          the caller's own outer optimizer uses, e.g. `tech_opt`'s `ftol_tec`)
+        - `tol_coupling::Float64`: Forwarded to `UpdAcEngMod!` as its design/cooling_sizing coupling-loop
+          tolerance (the innermost of the three nested loops -- should be tighter than `ftol_eng`, since
+          `engine_opt`'s own NLopt search can't reliably resolve improvements finer than the noise floor
+          left by an under-converged coupling loop)
         - `maxIter::Int`: Forwarded to `engine_opt` as its maximum optimization iterations
         - `optTyp::Symbol`: Forwarded to `engine_opt` as its NLopt algorithm symbol
 
@@ -485,7 +499,7 @@ and re-materializes that optimal cycle onto `ac_ref` via `UpdAcEngMod!`.
 """
 function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
                       upBon_eng::Vector{Float64},loBon_eng::Vector{Float64};printEvery::Int64=10,
-                      ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+                      ftol_eng::Float64=1e-7,tol_coupling::Float64=1e-8,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
     # Unpack
     length(x) == 8 || throw(DimensionMismatch("`x` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(x))"))
     pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal = x
@@ -503,7 +517,7 @@ function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
     bestSol = fill(NaN, length(ini_eng))
     try
         bestSol, _, _, _ = engine_opt(ac_ref;ini=ini_eng,upBon=upBon_eng,loBon=loBon_eng,
-                                              printEvery=printEvery,ftol=ftol,maxIter=maxIter,optTyp=optTyp)
+                                              printEvery=printEvery,ftol=ftol_eng,tol_coupling=tol_coupling,maxIter=maxIter,optTyp=optTyp)
     catch e
         e isa InterruptException && rethrow()
         flgSizSuc = false
@@ -513,7 +527,7 @@ function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
     elseif flgSizSuc
         try
             # Update aircraft with update engine cycle
-            UpdAcEngMod!(ac_ref, bestSol; tol=ftol, maxIter=150) #Update the engine model
+            UpdAcEngMod!(ac_ref, bestSol; tol=tol_coupling, maxIter=150) #Update the engine model
         catch e
             e isa InterruptException && rethrow()
             flgSizSuc = false
@@ -524,7 +538,7 @@ end
 
 """
     make_obj_tech_cali(ac, ini_eng::Vector{Float64}, upBon_eng::Vector{Float64}, loBon_eng::Vector{Float64};
-                       printEvery::Int64, ftol::Float64=1e-6, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD,
+                       printEvery::Int64, ftol_eng::Float64=1e-7, tol_coupling::Float64=1e-8, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD,
                        Fn_N::Vector{Float64}, WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},
                        OPR_ref::Vector{<:Union{Missing,Float64}}, BPR_ref::Vector{<:Union{Missing,Float64}},
                        DFan_m_ref::Float64=-1.0, M0::Float64=0.0, P0::Float64=101320.0, T0::Float64=288.2, a0::Float64=340.21)
@@ -543,7 +557,10 @@ optionally, fan diameter).
         - `loBon_eng::Vector{Float64}`: Lower bounds for the inner search, same order as `ini_eng`
         - `printEvery::Int64`: Print the current best solution every this many outer objective calls
           (also forwarded to `UpdAcTecLvl!`/`engine_opt` for their own inner-loop printouts)
-        - `ftol::Float64`: Forwarded to `UpdAcTecLvl!` as the inner `engine_opt` NLopt relative tolerance
+        - `ftol_eng::Float64`: Forwarded to `UpdAcTecLvl!` as the inner `engine_opt` NLopt relative tolerance
+        - `tol_coupling::Float64`: Forwarded to `UpdAcTecLvl!` as the innermost design/cooling_sizing
+          coupling-loop tolerance (should be tighter than `ftol_eng`, which should in turn be tighter
+          than whatever tolerance the caller's own outer optimizer uses, e.g. `tech_opt`'s `ftol_tec`)
         - `maxIter::Int`: Forwarded to `UpdAcTecLvl!` as the inner `engine_opt` maximum optimization iterations
         - `optTyp::Symbol`: Forwarded to `UpdAcTecLvl!` as the inner `engine_opt` NLopt algorithm symbol
         - `Fn_N::Vector{Float64}`: EEDB reference thrust levels to fly off-design (N)
@@ -577,7 +594,7 @@ optionally, fan diameter).
         - All inputs/outputs are in SI units
 """
 function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float64},loBon_eng::Vector{Float64};
-                            printEvery::Int64,ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
+                            printEvery::Int64,ftol_eng::Float64=1e-7,tol_coupling::Float64=1e-8,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
                             Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
                             M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21)
     ac_used = deepcopy(ac)
@@ -595,7 +612,7 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
         try
             # Optimize the engine with the tech parameters
             ac_ref,flgSizSuc,bestEngSol = UpdAcTecLvl!(ac_ref,x,ini_eng,upBon_eng,loBon_eng;printEvery=printEvery,
-                                             ftol=ftol,maxIter=maxIter,optTyp=optTyp)
+                                             ftol_eng=ftol_eng,tol_coupling=tol_coupling,maxIter=maxIter,optTyp=optTyp)
             if flgSizSuc
                 if DFan_m_ref>0.0
                     penal += 100.0*abs((ac_ref.parg[igdfan]-DFan_m_ref)/DFan_m_ref) #Percentage deviation
@@ -653,7 +670,8 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
                   loBon_tec::Vector{Float64},loBon_eng::Vector{Float64},
                   Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
                   M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
-                  printEvery::Int64=10,ftol::Float64=1e-6,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+                  printEvery::Int64=10,ftol_tec::Float64=1e-6,ftol_eng::Float64=1e-7,tol_coupling::Float64=1e-8,
+                  maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
     # Size check
     length(ini_tec) == 8 || error("`ini_tec` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(ini_tec))")
     length(ini_eng) == 5 || error("`ini_eng` must have exactly 5 elements [BPR,pif,pilc,pihc,Tt4], got $(length(ini_eng))")
@@ -663,7 +681,7 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
     # setup objective
     (;obj!,histTechPara,histEngPara,histPenl)=
     make_obj_tech_cali(ac_used,ini_eng,upBon_eng,loBon_eng;
-                       printEvery=printEvery,ftol=ftol,maxIter=maxIter,optTyp=optTyp,
+                       printEvery=printEvery,ftol_eng=ftol_eng,tol_coupling=tol_coupling,maxIter=maxIter,optTyp=optTyp,
                        Fn_N=Fn_N,WFuel_kgs_ref=WFuel_kgs_ref,OPR_ref=OPR_ref,BPR_ref=BPR_ref,DFan_m_ref=DFan_m_ref,
                        M0=M0,P0=P0,T0=T0,a0=a0)
     # optimize
@@ -674,7 +692,7 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
         opt.upper_bounds  = upBon_tec
         opt.min_objective = obj!
         opt.initial_step  = (upBon_tec .- loBon_tec)*0.1
-        opt.ftol_rel      = ftol
+        opt.ftol_rel      = ftol_tec
         opt.maxeval       = maxIter
         # Runing
         (_, _, status)    = NLopt.optimize(opt, ini_tec)
