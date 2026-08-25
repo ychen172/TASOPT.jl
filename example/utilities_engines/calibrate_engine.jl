@@ -355,9 +355,9 @@ function make_obj_engine_opt(ac,printEvery::Int64;tol_coupling::Float64=1e-8)
     ac_used = deepcopy(ac)
     histPara_engine_opt = Vector{Vector{Float64}}()
     histPenl_engine_opt = Vector{Float64}()
-    count = 0
+    iterCount = 0
     function obj_engine_opt!(x, grad)
-        count += 1
+        iterCount += 1
         ac_ref = deepcopy(ac_used)
         penal=0.0
         try
@@ -373,11 +373,11 @@ function make_obj_engine_opt(ac,printEvery::Int64;tol_coupling::Float64=1e-8)
             e isa InterruptException && rethrow()
             penal = 1.78e-3
         end
-        if (mod(count,printEvery)==0)&&(length(histPenl_engine_opt)>0)
+        if (mod(iterCount,printEvery)==0)&&(length(histPenl_engine_opt)>0)
             idxMin = argmin(histPenl_engine_opt)
-            println("EngRun#$(count): Current best for obj_engine_opt: Penalty: $(histPenl_engine_opt[idxMin]) with Parameters: $(histPara_engine_opt[idxMin])")
+            println("EngRun#$(iterCount): Current best for obj_engine_opt: Penalty: $(histPenl_engine_opt[idxMin]) with Parameters: $(histPara_engine_opt[idxMin])")
         else
-            println("EngRun#$(count): No Feasible Sol Yet")
+            println("EngRun#$(iterCount): No Feasible Sol Yet")
         end
         return penal
     end
@@ -604,9 +604,9 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
     num_WFuel = count(.!ismissing.(WFuel_kgs_ref))
     num_OPR = count(.!ismissing.(OPR_ref))
     num_BPR = count(.!ismissing.(BPR_ref))
-    count = 0
+    iterCount = 0
     function obj_tech_cali!(x, grad)
-        count += 1
+        iterCount += 1
         ac_ref = deepcopy(ac_used)
         penal=0.0
         try
@@ -643,7 +643,7 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
                 if flgOffDesSuc
                     # Record the feasible solution
                     push!(histPara_eng_opt,bestEngSol)
-                    push!(histPara_tech_cali,x)
+                    push!(histPara_tech_cali,copy(x))
                     push!(histPenl_tech_cali,penal)
                 end
             else
@@ -654,11 +654,11 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
             penal += 1000.0 * (length(Fn_N) + 1) #Represents 10 times of the deviation
         end
         # Print
-        if (mod(count,printEvery)==0)&&(length(histPenl_tech_cali)>0)
+        if (mod(iterCount,printEvery)==0)&&(length(histPenl_tech_cali)>0)
             idxMin = argmin(histPenl_tech_cali)
-            println("TechRun#$(count): Current best for obj_tech_cali: Penalty: $(histPenl_tech_cali[idxMin]) with Tech Parameters: $(histPara_tech_cali[idxMin]) and Eng Parameters: $(histPara_eng_opt[idxMin])")
+            println("TechRun#$(iterCount): Current best for obj_tech_cali: Penalty: $(histPenl_tech_cali[idxMin]) with Tech Parameters: $(histPara_tech_cali[idxMin]) and Eng Parameters: $(histPara_eng_opt[idxMin])")
         else
-            println("TechRun#$(count): No Feasible Sol Yet")
+            println("TechRun#$(iterCount): No Feasible Sol Yet")
         end
         return penal
     end
