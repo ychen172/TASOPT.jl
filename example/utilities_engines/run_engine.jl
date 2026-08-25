@@ -192,7 +192,7 @@ end
 For BLI
 assume zero Phiinl, Kinl, and no eng_has_BLI_cores
 """
-function runOffDes(ac,M0_test,p0_test,T0_test,a0_test,Fe_test)
+function runOffDes(ac,M0_test,p0_test,T0_test,a0_test,Fe_test; zero_offtake::Bool=false)
     ####Extract parameters
     gee = TASOPT.gee
     # sea-level static inlet conditions
@@ -255,9 +255,9 @@ function runOffDes(ac,M0_test,p0_test,T0_test,a0_test,Fe_test)
     Tfuel = ac.pare[ieTfuel,ipcruise1,1] #280 K
     ifuel = ac.options.ifuel
     hvap = ac.pare[iehvapcombustor,ipcruise1,1] #358694.0 J/kg for jet fuel
-    # off-take
-    mofft = (ac.parg[igmofWpay] * ac.parg[igWpay] + ac.parg[igmofWMTO] * ac.parg[igWMTO]) / ac.parg[igneng]
-    Pofft = (ac.parg[igPofWpay] * ac.parg[igWpay] + ac.parg[igPofWMTO] * ac.parg[igWMTO]) / ac.parg[igneng] + ac.pare[ieHXrecircP,ipcruise1,1]
+    # off-take (zeroed when matching a no-offtake reference such as ICAO EEDB certification data)
+    mofft = zero_offtake ? 0.0 : (ac.parg[igmofWpay] * ac.parg[igWpay] + ac.parg[igmofWMTO] * ac.parg[igWMTO]) / ac.parg[igneng]
+    Pofft = zero_offtake ? 0.0 : (ac.parg[igPofWpay] * ac.parg[igWpay] + ac.parg[igPofWMTO] * ac.parg[igWMTO]) / ac.parg[igneng] + ac.pare[ieHXrecircP,ipcruise1,1]
     Tt9 = ac.pare[ieTt9,ipcruise1,1] #[K] offtake air discharge total temperature
     pt9 = ac.pare[iept9,ipcruise1,1] #[Pa] offtake air discharge total pressure
     # cooling

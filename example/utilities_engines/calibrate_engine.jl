@@ -108,7 +108,7 @@ function make_obj(ac, parameters::AbstractVector{<:ObjectiveFactory.Parameter}, 
         #### Run engine mission
         for (idxFn,Fn_N_cur) in enumerate(Fn_N)
             try
-                res = RunEngine.runOffDes(ac, M0, P0, T0, a0, Fn_N_cur)
+                res = RunEngine.runOffDes(ac, M0, P0, T0, a0, Fn_N_cur; zero_offtake=true) #EEDB reference data is measured with no customer offtake
                 penalty += !res.Lconv ? pen_failed_engine : 0.0
                 if !ismissing(WFuel_kgs[idxFn])
                     penalty += 100*(abs(res.mcore*res.ff-WFuel_kgs[idxFn])/WFuel_kgs[idxFn])*(pen_wei[1]/num_WFuel)
@@ -623,7 +623,7 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
                 flgOffDesSuc = true
                 for (idxFn,Fn_N_cur) in enumerate(Fn_N)
                     try
-                        res = RunEngine.runOffDes(ac_ref, M0, P0, T0, a0, Fn_N_cur)
+                        res = RunEngine.runOffDes(ac_ref, M0, P0, T0, a0, Fn_N_cur; zero_offtake=true) #EEDB reference data is measured with no customer offtake
                         penal += !res.Lconv ? 1000 : 0.0 #Represents 10 times of the deviation
                         if !ismissing(WFuel_kgs_ref[idxFn])
                             penal += 100*(abs(res.mcore*res.ff-WFuel_kgs_ref[idxFn])/WFuel_kgs_ref[idxFn])*(0.3333/num_WFuel)
