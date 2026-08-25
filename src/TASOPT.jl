@@ -137,13 +137,12 @@ function size_aircraft!(ac::aircraft; iter=35, initwgt=false, Ldebug=false,
         printiter=true)
 
     Ldebug && println("Max weight iterations = $iter")
-    _size_aircraft!(ac, itermax = iter, initwgt = initwgt,
+    Lconv = _size_aircraft!(ac, itermax = iter, initwgt = initwgt,
         Ldebug = Ldebug, printiter = printiter)
 
-    #if sized properly, mark as such
-    #TODO: apply logic and exit codes to make check more robust
-    ac.is_sized .= true
-    ;
+    #only mark as sized if the weight loop actually converged
+    ac.is_sized .= Lconv
+    return Lconv
 end # size_aircraft!
 
 end # module TASOPT

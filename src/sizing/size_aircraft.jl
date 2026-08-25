@@ -812,6 +812,7 @@ function _size_aircraft!(ac; itermax=35,
     
     #Warn user if HX effectiveness is overwritten
     check_HX_overwriting(eng.heat_exchangers) 
+    return Lconv
 end
 
 #TODO: update_WMTO! and update_weights! docstrings need full description
