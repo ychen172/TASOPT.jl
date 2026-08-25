@@ -20,16 +20,16 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Jet_NoACT_OAG_6Seats_TypeC_","Opti_Jet_NoACT_OAG_6Seats_TypeC_Fake1_","Opti_Jet_NoACT_OAG_6Seats_TypeC_Fake2_"]
+caseKeys   = ["Opti_Eth_NoACT_OAG_6Seats_TypeC_V1_","Opti_Eth_NoACT_OAG_6Seats_TypeC_V2_"]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
-idx_fuel_case      = 24        # Eth: 32, Jet: 24
-rho_fuel_case_kgm3 = 817.0     # Eth: 789.0, Jet: 817.0 kg/m3
-hvap_fuel_case_Jkg = 358694.0  # Eth: 918187.9, Jet: 358694.0 J/kg
+idx_fuel_case      = 32        # Eth: 32, Jet: 24
+rho_fuel_case_kgm3 = 789.0     # Eth: 789.0, Jet: 817.0 kg/m3
+hvap_fuel_case_Jkg = 918187.9  # Eth: 918187.9, Jet: 358694.0 J/kg
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
 miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
 # Output directory
-save_name     = "Opti_Jet_NoACT_OAG_6Seats_TypeC_V2_" #sub_folder will be created
+save_name     = "Opti_Eth_NoACT_OAG_6Seats_TypeC_V2P_" #sub_folder will be created
 
 #### Create save directory
 save_dir  = joinpath(model_dir,save_name)
@@ -152,19 +152,25 @@ for (idx,idx_best) in enumerate(idx_col_best)
                    save_name * "$(sc)_mission_requirements.csv")
     cp(src, dst; force=true)
     #
-    src = joinpath(model_dir,
-                   caseKeys[idx_best],
-                   caseKeys[idx_best] * "$(sc)_optimization_history.jld2")
-    dst = joinpath(save_dir,
-                   save_name * "$(sc)_optimization_history.jld2")
-    cp(src, dst; force=true)
+    try
+        src = joinpath(model_dir,
+                    caseKeys[idx_best],
+                    caseKeys[idx_best] * "$(sc)_optimization_history.jld2")
+        dst = joinpath(save_dir,
+                    save_name * "$(sc)_optimization_history.jld2")
+        cp(src, dst; force=true)
+    catch
+    end
     #
-    src = joinpath(model_dir,
-                   caseKeys[idx_best],
-                   caseKeys[idx_best] * "$(sc)_optimized_parameters.csv")
-    dst = joinpath(save_dir,
-                   save_name * "$(sc)_optimized_parameters.csv")
-    cp(src, dst; force=true)
+    try
+        src = joinpath(model_dir,
+                    caseKeys[idx_best],
+                    caseKeys[idx_best] * "$(sc)_optimized_parameters.csv")
+        dst = joinpath(save_dir,
+                    save_name * "$(sc)_optimized_parameters.csv")
+        cp(src, dst; force=true)
+    catch
+    end
     #
     src = joinpath(model_dir,
                    caseKeys[idx_best],

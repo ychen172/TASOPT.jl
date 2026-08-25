@@ -19,18 +19,20 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Jet_NoACT_OAG_6Seats_TypeC_","Opti_Eth_NoACT_OAG_6Seats_TypeC_"]
-caseNames  = ["Jet Fuel"                        ,"Ethanol"                        ]
+caseKeys   = ["Opti_Jet_NoACT_OAG_6Seats_TypeC_V2_","Opti_Eth_NoACT_OAG_6Seats_TypeC_V3P_","Opti_Jet_NoACT_OAG_6Seats_TypeE_V1_","Opti_Eth_NoACT_OAG_6Seats_TypeE_V1_"]
+caseNames  = ["Jet Fuel"                           ,"Ethanol"                             ,"Jet Fuel with Type E Span"          ,"Ethanol with Type E Span"           ]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
-idx_fuel_case      = [24       ,32       ] # Jet, Eth
-rho_fuel_case_kgm3 = [817.0    ,789.0    ] # kg/m3
-hvap_fuel_case_Jkg = [358694.0 ,918187.9 ] # J/kg
+idx_fuel_case      = [24       ,32       ,24       ,32       ] # Jet, Eth ,32       ,24
+rho_fuel_case_kgm3 = [817.0    ,789.0    ,817.0    ,789.0    ] # kg/m3.   ,789.0    ,817.0
+hvap_fuel_case_Jkg = [358694.0 ,918187.9 ,358694.0 ,918187.9 ] # J/kg     ,918187.9 ,358694.0
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
+constraints        = [[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel]] #Constraints for off-design
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
 miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
 # Output directory
 save_dir      = "../ModelProcessed"
-save_name     = "OAG_Jet_vs_Ethanol_6Seats_TypeC" #sub_folder will be created
+save_name     = "OAG_Jet_Eth_WingSpanE" #sub_folder will be created
+iter_max      = 150 #max iteration for off-design calculation
 # Fields to read out for the design (R1) mission
 const fields = [:(parm[imRange,1]),:(parm[imPFEI,1]),:(parm[imVfuel,1]),:(parg[igVfmax]),
                 :(wing.layout.span),:(wing.outboard.λ),:(wing.layout.ηs),:(wing.layout.AR),
@@ -90,7 +92,7 @@ for (j, caseKey) in enumerate(caseKeys)
         wei_pay_off_N  = fill(ac.parg[igWpaymax]*pass_load_frac_off, length(ranges_off_nmi))
         out = off_design_specified!(ac, idx_fuel_case[j], rho_fuel_case_kgm3[j], hvap_fuel_case_Jkg[j],
                                     ranges_off_nmi, wei_pay_off_N;
-                                    mod_ac_inplace=false, itermax=150, constraints=[:WPay,:MWTO,:VolFuel], save_model=false)
+                                    mod_ac_inplace=false, itermax=iter_max, constraints=constraints[j], save_model=false)
 
         # Average PFEI = weighted sum(PFEI*payload*range) / weighted sum(payload*range), using the OAG weight
         # for each mission and the actual off-design (2nd mission) payload/range/PFEI returned above.
