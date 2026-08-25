@@ -289,6 +289,7 @@ function make_obj(ac, parameters::AbstractVector{<:Parameter} ; objVar_des::Obje
         flgSuccessed = true
         try
             TASOPT.size_aircraft!(ac, iter=max_iter_sizing, printiter=false)
+            flgSuccessed = ac.is_sized[1] #Reject silent non-convergence (warns but doesn't throw)
         catch e
             if e isa InterruptException #Unless user interruption
                 rethrow()
@@ -315,7 +316,7 @@ function make_obj(ac, parameters::AbstractVector{<:Parameter} ; objVar_des::Obje
 
         #### Check for any off-design mission requirements
         off_des_penalty = 0.0
-        if !isempty(off_des_miss.ranges_nmi)
+        if flgSuccessed && !isempty(off_des_miss.ranges_nmi)
             for idx in eachindex(off_des_miss.ranges_nmi)
                 # Run the off-design missions (Probably also corrupte the aircraft model locally)
                 off_des_out = off_design_specified!(ac, off_des_miss.idx_fuel[idx], off_des_miss.rho_fuel_kgm3[idx], off_des_miss.hvap_fuel_Jkg[idx], [off_des_miss.ranges_nmi[idx]], [off_des_miss.wei_pay_N[idx]];
@@ -1058,6 +1059,7 @@ function size_aircraft_w_param!(ac; mission_req::AbstractVector{<:Requirement}=V
     flgSuccessed = true
     try
         TASOPT.size_aircraft!(ac, iter=max_iter_sizing, printiter=printiter)
+        flgSuccessed = ac.is_sized[1] #Reject silent non-convergence (warns but doesn't throw)
     catch e
         if e isa InterruptException #Unless user interruption
             rethrow()
