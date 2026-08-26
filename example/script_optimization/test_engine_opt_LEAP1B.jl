@@ -1,5 +1,6 @@
 using TASOPT
 using CSV, DataFrames
+using JLD2
 include(__TASOPTindices__)
 include(joinpath(__TASOPTroot__, "../example/utilities_engines/run_engine.jl"))
 include(joinpath(__TASOPTroot__, "../example/utilities_for_optimization/objective_factory.jl"))
@@ -25,12 +26,12 @@ DFan_m_ref = 1.76 #m
 #### Bounds for the 5 inner-loop cycle-design variables [BPR, pif, pilc, pihc, Tt4],
 #### matching example/utilities_engines/test.jl lines 34-49 (Parameter(name, val, bon_up, bon_lo, d_val))
 loBon_eng = [1.0,  1.25, 1.25, 1.25, 1000.0]
-upBon_eng = [12.0, 4.0,  10.0, 60.0, 2000.0]
+upBon_eng = [16.0, 4.0,  10.0, 60.0, 2500.0]
 
 #### Bounds for the 8 outer-loop technology parameters [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal],
 #### matching example/utilities_engines/test.jl lines 39-51
-loBon_tec = [0.93, 0.87, 0.87, 0.87, 0.87, 0.87, 0.975, 1000.0]
-upBon_tec = [0.98, 0.92, 0.92, 0.92, 0.92, 0.92, 0.999, 1330.0]
+loBon_tec = [0.93, 0.86, 0.86, 0.86, 0.86, 0.86, 0.975, 1000.0]
+upBon_tec = [0.98, 0.96, 0.96, 0.96, 0.96, 0.96, 0.999, 1330.0]
 
 #### Initial guess: pull each parameter's actual cruise-point value from the reference aircraft, clamped to bounds
 ini_eng_raw = [ac.pare[ieBPR,ipcruise1,1], ac.pare[iepif,ipcruise1,1], ac.pare[iepilc,ipcruise1,1],
@@ -45,17 +46,22 @@ ini_tec = clamp.(ini_tec_raw, loBon_tec, upBon_tec)
 println("Initial guess [BPR, pif, pilc, pihc, Tt4]: ", ini_eng)
 println("Initial guess [pib, epolf, epollc, epolhc, epolht, epollt, etab, Tmetal]: ", ini_tec)
 
-#### Run the full double-loop technology calibration (outer: match LEAP-1B EEDB data; inner: minimum-TSFC cycle)
+#### Run the full double-loop technology calibration (outer: match LEAP-1B EEDB data; inner: minimum-PFEI cycle)
 status, bestSol_tec, bestSol_eng, histTechPara, histEngPara, histPenl =
     CaliEng.tech_opt(ac; ini_tec=ini_tec, ini_eng=ini_eng,
-                      upBon_tec=upBon_tec, upBon_eng=upBon_eng,
-                      loBon_tec=loBon_tec, loBon_eng=loBon_eng,
-                      Fn_N=Fn_N, WFuel_kgs_ref=WFuel_kgs_ref, OPR_ref=OPR_ref, BPR_ref=BPR_ref, DFan_m_ref=DFan_m_ref,
-                      M0=M0, P0=P0, T0=T0, a0=a0,
-                      printEvery=10, ftol_tec=1e-6, ftol_eng=1e-7, tol_coupling=1e-8, maxIter=50)
+                     upBon_tec=upBon_tec, upBon_eng=upBon_eng,
+                     loBon_tec=loBon_tec, loBon_eng=loBon_eng,
+                     Fn_N=Fn_N, WFuel_kgs_ref=WFuel_kgs_ref, OPR_ref=OPR_ref, BPR_ref=BPR_ref, DFan_m_ref=DFan_m_ref,
+                     M0=M0, P0=P0, T0=T0, a0=a0,
+                     printEvery=5, ftol_tec=1e-6, ftol_eng=1e-7, iter_sizing=150, maxIter=5000, optTyp=:LN_NELDERMEAD)
 
 println()
 println("Status: ", status)
 println("Best Tech Parameters [pib, epolf, epollc, epolhc, epolht, epollt, etab, Tmetal]: ", bestSol_tec)
 println("Best Engine Parameters [BPR, pif, pilc, pihc, Tt4]: ", bestSol_eng)
 println("Number of fully-feasible evaluations recorded: ", length(histPenl))
+
+#### Save results for now (quick JLD2 dump, not a formal output convention yet)
+result_savepath = joinpath(__TASOPTroot__, "../example/script_optimization/tech_opt_LEAP1B_result.jld2")
+@save result_savepath status bestSol_tec bestSol_eng histTechPara histEngPara histPenl
+println("Saved results to: ", result_savepath)
