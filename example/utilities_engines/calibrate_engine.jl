@@ -291,25 +291,47 @@ function optimize_match_EEDB!(ac,parameters::AbstractVector{<:ObjectiveFactory.P
 end
 
 """
-    UpdAcEngMod!(ac_ref, x; iter_sizing::Int=150)
+    UpdAcEngMod!(ac_ref, x; iter_sizing::Int=150, hard_lpc_hpc_stage_ratio::Bool=false,
+                numStageLC::Int=0, numStageHC::Int=0)
 
 `UpdAcEngMod!` sets the engine-cycle design variables on `ac_ref` and fully sizes the aircraft with that cycle.
 
     ***Inputs:***
         - `ac_ref`: Aircraft model to update (mutated in place)
-        - `x::AbstractVector{<:Real}`: `[BPR, pif, pilc, pihc, Tt4]` candidate cycle design variables (SI units)
+        - `x::AbstractVector{<:Real}`: Candidate cycle design variables (SI units). Shape depends on
+          `hard_lpc_hpc_stage_ratio`:
+            - `false` (default): `[BPR, pif, pilc, pihc, Tt4]` (5 elements) -- `pilc`/`pihc` set directly.
+            - `true`: `[BPR, pif, per_stage, Tt4]` (4 elements) -- `pilc`/`pihc` are both derived from the
+              single per-stage pressure ratio `per_stage` via `pilc = per_stage^numStageLC`,
+              `pihc = per_stage^numStageHC`, enforcing a physical fixed-stage-count LPC/HPC split
+              (equal pressure ratio per stage) instead of letting `pilc`/`pihc` vary independently.
         - `iter_sizing::Int`: Forwarded to `size_aircraft!` as its maximum weight-iteration count
+        - `hard_lpc_hpc_stage_ratio::Bool`: Selects which shape of `x` is expected (see above)
+        - `numStageLC::Int`, `numStageHC::Int`: Number of LPC/HPC stages, used to derive `pilc`/`pihc`
+          from `per_stage` when `hard_lpc_hpc_stage_ratio=true` (e.g. `3`/`10` for a LEAP-1B-like split).
+          Must both be positive when `hard_lpc_hpc_stage_ratio=true`; unused (default `0`) otherwise.
 
     ***Outputs***
         - `ac_ref`: The same aircraft model, mutated in place and returned for convenience
 
     ***Behavior***
-        - Overwrites `ac_ref.pare[ieBPR/iepif/iepilc/iepihc/ieTt4, ipcruise1, 1]` with `x`
-        - Calls `TASOPT.size_aircraft!` -- cold-started 
-        - THROWS if `size_aircraft!` fails to converge or hits a physically invalid cycle
+        - Overwrites `ac_ref.pare[ieBPR/iepif/iepilc/iepihc/ieTt4, ipcruise1, 1]` with the (possibly derived) cycle values
+        - Calls `TASOPT.size_aircraft!` -- cold-started
+        - THROWS if `size_aircraft!` fails to converge, hits a physically invalid cycle, or `x`'s length
+          doesn't match `hard_lpc_hpc_stage_ratio`'s expected shape
 """
-function UpdAcEngMod!(ac_ref, x; iter_sizing::Int=150)
-    BPR,pif,pilc,pihc,Tt4 = x
+function UpdAcEngMod!(ac_ref, x; iter_sizing::Int=150, hard_lpc_hpc_stage_ratio::Bool=false,
+                      numStageLC::Int=0, numStageHC::Int=0)
+    if hard_lpc_hpc_stage_ratio
+        (numStageLC>0 && numStageHC>0) || error("`numStageLC` and `numStageHC` must both be positive when hard_lpc_hpc_stage_ratio=true, got numStageLC=$(numStageLC), numStageHC=$(numStageHC)")
+        length(x)==4 || throw(DimensionMismatch("`x` must have exactly 4 elements [BPR,pif,per_stage,Tt4] when hard_lpc_hpc_stage_ratio=true, got $(length(x))"))
+        BPR,pif,per_stage,Tt4 = x
+        pilc = per_stage^numStageLC
+        pihc = per_stage^numStageHC
+    else
+        length(x)==5 || throw(DimensionMismatch("`x` must have exactly 5 elements [BPR,pif,pilc,pihc,Tt4] when hard_lpc_hpc_stage_ratio=false, got $(length(x))"))
+        BPR,pif,pilc,pihc,Tt4 = x
+    end
     ac_ref.pare[ieBPR,ipcruise1,1] = BPR
     ac_ref.pare[iepif,ipcruise1,1] = pif
     ac_ref.pare[iepilc,ipcruise1,1] = pilc
@@ -322,10 +344,13 @@ function UpdAcEngMod!(ac_ref, x; iter_sizing::Int=150)
 end
 
 """
-    make_obj_engine_opt(ac, printEvery::Int64; iter_sizing::Int=150, constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+    make_obj_engine_opt(ac, printEvery::Int64; iter_sizing::Int=150,
+                       constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+                       hard_lpc_hpc_stage_ratio::Bool=false, numStageLC::Int=0, numStageHC::Int=0)
 
 `make_obj_engine_opt` constructs and returns an objective function for the engine-cycle-only
-inner-loop optimization: minimize PFEI (at a given technology level in `ac`) by searching over `[BPR, pif, pilc, pihc, Tt4]`.
+inner-loop optimization: minimize PFEI (at a given technology level in `ac`) by searching over the
+engine cycle (`[BPR,pif,pilc,pihc,Tt4]`, or `[BPR,pif,per_stage,Tt4]` under `hard_lpc_hpc_stage_ratio` -- see `UpdAcEngMod!`).
 
     ***Inputs:***
         - `ac`: Baseline aircraft model, with fixed technology parameters already assigned
@@ -333,6 +358,9 @@ inner-loop optimization: minimize PFEI (at a given technology level in `ac`) by 
         - `iter_sizing::Int`: `size_aircraft!` maximum weight-iteration count
         - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
            against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
+        - `hard_lpc_hpc_stage_ratio::Bool`, `numStageLC::Int`, `numStageHC::Int`: Forwarded to
+          `UpdAcEngMod!` -- see its docstring. Also determine the expected length of `x` (4 if
+          `hard_lpc_hpc_stage_ratio=true`, 5 otherwise).
 
     ***Outputs***
         - `obj!`::a function: Objective function `(x, grad) -> penalty` for the optimizer. A fresh
@@ -348,7 +376,8 @@ inner-loop optimization: minimize PFEI (at a given technology level in `ac`) by 
         - All inputs/outputs are in SI units
 """
 function make_obj_engine_opt(ac,printEvery::Int64;iter_sizing::Int=150,
-                             constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+                             constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+                             hard_lpc_hpc_stage_ratio::Bool=false,numStageLC::Int=0,numStageHC::Int=0)
     ac_used = deepcopy(ac)
     histPara_engine_opt = Vector{Vector{Float64}}()
     histPenl_engine_opt = Vector{Float64}()
@@ -358,7 +387,8 @@ function make_obj_engine_opt(ac,printEvery::Int64;iter_sizing::Int=150,
         ac_ref = deepcopy(ac_used)
         penal=0.0
         try
-            UpdAcEngMod!(ac_ref, x; iter_sizing=iter_sizing)
+            UpdAcEngMod!(ac_ref, x; iter_sizing=iter_sizing, hard_lpc_hpc_stage_ratio=hard_lpc_hpc_stage_ratio,
+                        numStageLC=numStageLC, numStageHC=numStageHC)
             penal = ac_ref.parm[imPFEI,1]
             if penal<=0.0
                 penal = 100.0
@@ -394,16 +424,20 @@ end
 """
     engine_opt(ac; ini::Vector{Float64}, upBon::Vector{Float64}, loBon::Vector{Float64},
                printEvery::Int64, ftol::Float64=1e-6, iter_sizing::Int=150, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD,
-               constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+               constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+               hard_lpc_hpc_stage_ratio::Bool=false, numStageLC::Int=0, numStageHC::Int=0)
 
 `engine_opt` runs the engine-cycle-only inner-loop optimization (see `make_obj_engine_opt`) to find
-the minimum-PFEI engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed technology level
+the minimum-PFEI engine cycle at `ac`'s fixed technology level (`[BPR,pif,pilc,pihc,Tt4]`, or
+`[BPR,pif,per_stage,Tt4]` under `hard_lpc_hpc_stage_ratio` -- see `UpdAcEngMod!`)
 
     ***Inputs:***
         - `ac`: Baseline aircraft model for sizing (passed by copy)
-        - `ini::Vector{Float64}`: Initial guess `[BPR, pif, pilc, pihc, Tt4]` (SI units)
-        - `upBon::Vector{Float64}`: Upper bounds, same order as `ini`
-        - `loBon::Vector{Float64}`: Lower bounds, same order as `ini`
+        - `ini::Vector{Float64}`: Initial guess (SI units), same shape as `UpdAcEngMod!`'s `x` --
+          `[BPR, pif, pilc, pihc, Tt4]` (5 elements) if `hard_lpc_hpc_stage_ratio=false`, or
+          `[BPR, pif, per_stage, Tt4]` (4 elements) if `true`
+        - `upBon::Vector{Float64}`: Upper bounds, same shape and order as `ini`
+        - `loBon::Vector{Float64}`: Lower bounds, same shape and order as `ini`
         - `printEvery::Int64`: Print the current best solution every this many objective calls
         - `ftol::Float64`: Relative tolerance for this function's own NLopt optimizer to converge
         - `iter_sizing::Int`: `size_aircraft!`'s internal maximum weight-iteration count
@@ -412,11 +446,12 @@ the minimum-PFEI engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed tech
           e.g. `:LN_NELDERMEAD` local, `:GN_CRS2_LM`/`:GN_DIRECT` global)
         - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
            against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
+        - `hard_lpc_hpc_stage_ratio::Bool`, `numStageLC::Int`, `numStageHC::Int`: Forwarded to
+          `UpdAcEngMod!` -- see its docstring; also determine `ini`/`upBon`/`loBon`'s expected shape (see above)
 
     ***Outputs***
-        - `bestSol::Vector{Float64}`: `[BPR, pif, pilc, pihc, Tt4]` of the minimum-penalty evaluation
-          found, or a vector of `NaN` if the optimizer status wasn't a success or no evaluation
-          succeeded
+        - `bestSol::Vector{Float64}`: minimum-penalty evaluation found, same shape as `ini`,
+          or a vector of `NaN` if the optimizer status wasn't a success or no evaluation succeeded
         - `status::Symbol`: `:NO_FEASIBLE_SOLUTION` if the optimizer reported success but no
           evaluation succeeded; otherwise NLopt's own termination status
         - `histPara::Vector{Vector{Float64}}`: All successful evaluations' parameter vectors
@@ -430,10 +465,12 @@ the minimum-PFEI engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed tech
 function engine_opt(ac;
                     ini::Vector{Float64},upBon::Vector{Float64},loBon::Vector{Float64},
                     printEvery::Int64,ftol::Float64=1e-6,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
-                    constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+                    constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+                    hard_lpc_hpc_stage_ratio::Bool=false,numStageLC::Int=0,numStageHC::Int=0)
     any((ini .< loBon) .| (ini .> upBon)) && error("Initial guess `ini` is outside the bounds [loBon,upBon]: ini=$(ini), loBon=$(loBon), upBon=$(upBon)")
     ac_used = deepcopy(ac)
-    (; obj!, histPara, histPenl) = make_obj_engine_opt(ac_used, printEvery; iter_sizing=iter_sizing, constraints=constraints)
+    (; obj!, histPara, histPenl) = make_obj_engine_opt(ac_used, printEvery; iter_sizing=iter_sizing, constraints=constraints,
+                                                        hard_lpc_hpc_stage_ratio=hard_lpc_hpc_stage_ratio, numStageLC=numStageLC, numStageHC=numStageHC)
     status = :FAILURE
     try
         opt               = NLopt.Opt(optTyp, length(ini))
@@ -465,7 +502,8 @@ end
     UpdAcTecLvl!(ac_ref, x::Vector{Float64}, ini_eng::Vector{Float64},
                  upBon_eng::Vector{Float64}, loBon_eng::Vector{Float64}; printEvery::Int64=10,
                  ftol_eng::Float64=1e-7, iter_sizing::Int=150, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD,
-                 constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+                 constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+                 hard_lpc_hpc_stage_ratio::Bool=false, numStageLC::Int=0, numStageHC::Int=0)
 
 `UpdAcTecLvl!` sets the 8 engine technology parameters on `ac_ref`, then runs `engine_opt` to find
 the minimum-PFEI engine cycle for that technology level (see `make_obj_engine_opt`/`engine_opt`),
@@ -474,9 +512,11 @@ and re-materializes that optimal cycle onto `ac_ref` via `UpdAcEngMod!`.
     ***Inputs:***
         - `ac_ref`: Aircraft model to update (mutated in place)
         - `x::Vector{Float64}`: `[pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal]` candidate technology parameters (SI units)
-        - `ini_eng::Vector{Float64}`: Initial guess `[BPR,pif,pilc,pihc,Tt4]` for the inner `engine_opt` cycle-design search
-        - `upBon_eng::Vector{Float64}`: Upper bounds for the inner search, same order as `ini_eng`
-        - `loBon_eng::Vector{Float64}`: Lower bounds for the inner search, same order as `ini_eng`
+        - `ini_eng::Vector{Float64}`: Initial guess for the inner `engine_opt` cycle-design search --
+          `[BPR,pif,pilc,pihc,Tt4]` (5 elements) if `hard_lpc_hpc_stage_ratio=false`, or
+          `[BPR,pif,per_stage,Tt4]` (4 elements) if `true`
+        - `upBon_eng::Vector{Float64}`: Upper bounds for the inner search, same shape and order as `ini_eng`
+        - `loBon_eng::Vector{Float64}`: Lower bounds for the inner search, same shape and order as `ini_eng`
         - `printEvery::Int64`: Forwarded to `engine_opt` -- print the current best solution every this many objective calls
         - `ftol_eng::Float64`: Forwarded to `engine_opt` as its NLopt relative tolerance
         - `iter_sizing::Int`: `size_aircraft!`'s internal maximum weight-iteration count
@@ -484,13 +524,16 @@ and re-materializes that optimal cycle onto `ac_ref` via `UpdAcEngMod!`.
         - `optTyp::Symbol`: Forwarded to `engine_opt` as its NLopt algorithm symbol
         - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
            against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
+        - `hard_lpc_hpc_stage_ratio::Bool`, `numStageLC::Int`, `numStageHC::Int`: Forwarded to both the
+          inner `engine_opt` search and the re-materializing `UpdAcEngMod!` call -- see `UpdAcEngMod!`'s
+          docstring; also determine `ini_eng`/`upBon_eng`/`loBon_eng`'s expected shape (see above)
 
     ***Outputs***
         - `ac_ref`: The same aircraft model, mutated in place and returned for convenience
         - `flgSizSuc::Bool`: `true` only if the inner `engine_opt` search found a feasible cycle AND
           `UpdAcEngMod!` successfully re-converged it onto `ac_ref`; `false` otherwise
-        - `bestSol::Vector{Float64}`: `[BPR,pif,pilc,pihc,Tt4]` found by `engine_opt`, or a vector of
-          `NaN` if that search itself failed
+        - `bestSol::Vector{Float64}`: cycle found by `engine_opt`, same shape as `ini_eng`, or a vector
+          of `NaN` if that search itself failed
 
     ***Behavior***
         - Broadcasts the 7 `pare`-based technology parameters across every point, read by `tfcalc!` and `tfoper!`
@@ -502,7 +545,8 @@ and re-materializes that optimal cycle onto `ac_ref` via `UpdAcEngMod!`.
 function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
                       upBon_eng::Vector{Float64},loBon_eng::Vector{Float64};printEvery::Int64=10,
                       ftol_eng::Float64=1e-7,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
-                      constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+                      constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+                      hard_lpc_hpc_stage_ratio::Bool=false,numStageLC::Int=0,numStageHC::Int=0)
     # Unpack
     length(x) == 8 || throw(DimensionMismatch("`x` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(x))"))
     pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal = x
@@ -521,7 +565,8 @@ function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
     try
         bestSol, _, _, _ = engine_opt(ac_ref;ini=ini_eng,upBon=upBon_eng,loBon=loBon_eng,
                                       printEvery=printEvery,ftol=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp,
-                                      constraints=constraints)
+                                      constraints=constraints,hard_lpc_hpc_stage_ratio=hard_lpc_hpc_stage_ratio,
+                                      numStageLC=numStageLC,numStageHC=numStageHC)
     catch e
         e isa InterruptException && rethrow()
         flgSizSuc = false
@@ -531,7 +576,8 @@ function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
     elseif flgSizSuc
         try
             # Update aircraft with update engine cycle
-            UpdAcEngMod!(ac_ref, bestSol; iter_sizing=iter_sizing) #Update the engine model
+            UpdAcEngMod!(ac_ref, bestSol; iter_sizing=iter_sizing, hard_lpc_hpc_stage_ratio=hard_lpc_hpc_stage_ratio,
+                        numStageLC=numStageLC, numStageHC=numStageHC) #Update the engine model
         catch e
             e isa InterruptException && rethrow()
             flgSizSuc = false
@@ -546,7 +592,8 @@ end
                        Fn_N::Vector{Float64}, WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},
                        OPR_ref::Vector{<:Union{Missing,Float64}}, BPR_ref::Vector{<:Union{Missing,Float64}},
                        DFan_m_ref::Float64=-1.0, M0::Float64=0.0, P0::Float64=101320.0, T0::Float64=288.2, a0::Float64=340.21,
-                       constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+                       constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+                       hard_lpc_hpc_stage_ratio::Bool=false, numStageLC::Int=0, numStageHC::Int=0)
 
 `make_obj_tech_cali` constructs and returns the outer-loop objective function for engine technology
 calibration: for a candidate set of 8 technology parameters, find the minimum-PFEI engine cycle for
@@ -557,9 +604,10 @@ optionally, fan diameter).
     ***Inputs:***
         - `ac`: Baseline aircraft model, providing the fixed cruise design point (flight condition,
           thrust) that `UpdAcTecLvl!`'s inner cycle-design search holds fixed (passed by copy, never mutated)
-        - `ini_eng::Vector{Float64}`: Initial guess `[BPR,pif,pilc,pihc,Tt4]` for the inner `engine_opt` search
-        - `upBon_eng::Vector{Float64}`: Upper bounds for the inner search, same order as `ini_eng`
-        - `loBon_eng::Vector{Float64}`: Lower bounds for the inner search, same order as `ini_eng`
+        - `ini_eng::Vector{Float64}`: Initial guess for the inner `engine_opt` search -- `[BPR,pif,pilc,pihc,Tt4]`
+          (5 elements) if `hard_lpc_hpc_stage_ratio=false`, or `[BPR,pif,per_stage,Tt4]` (4 elements) if `true`
+        - `upBon_eng::Vector{Float64}`: Upper bounds for the inner search, same shape and order as `ini_eng`
+        - `loBon_eng::Vector{Float64}`: Lower bounds for the inner search, same shape and order as `ini_eng`
         - `printEvery::Int64`: Print the current best solution every this many outer objective calls
           (also forwarded to `UpdAcTecLvl!`/`engine_opt` for their own inner-loop printouts)
         - `ftol_eng::Float64`: Forwarded to `UpdAcTecLvl!` as the inner `engine_opt` NLopt relative tolerance
@@ -575,14 +623,16 @@ optionally, fan diameter).
         - `M0`, `P0`, `T0`, `a0`: Inlet flight condition (Mach, Pa, K, m/s) used for every `Fn_N` off-design point
         - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
            against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
+        - `hard_lpc_hpc_stage_ratio::Bool`, `numStageLC::Int`, `numStageHC::Int`: Forwarded to
+          `UpdAcTecLvl!` -- see `UpdAcEngMod!`'s docstring; also determine `ini_eng`'s expected shape (see above)
 
     ***Outputs***
         - `obj!`::a function: Objective function `(x, grad) -> penalty` for the outer optimizer. `x` is
           `[pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal]`. `ac` itself is never modified.
         - `histTechPara`::Vector{Vector{Float64}}: Technology parameter vectors `x` for every fully-feasible
           evaluation (sized AND every `Fn_N` point converged), returned by reference and updated by `obj!` calls
-        - `histEngPara`::Vector{Vector{Float64}}: The corresponding `[BPR,pif,pilc,pihc,Tt4]` found by the
-          inner loop for each fully-feasible evaluation, same order as `histTechPara`
+        - `histEngPara`::Vector{Vector{Float64}}: The corresponding engine-cycle vector found by the
+          inner loop for each fully-feasible evaluation (same shape as `ini_eng`), same order as `histTechPara`
         - `histPenl`::Vector{Float64}: Penalty for every fully-feasible evaluation, same order as `histTechPara`
 
     ***Behavior***
@@ -602,7 +652,8 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
                             printEvery::Int64,ftol_eng::Float64=1e-7,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
                             Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
                             M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
-                            constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+                            constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+                            hard_lpc_hpc_stage_ratio::Bool=false,numStageLC::Int=0,numStageHC::Int=0)
     ac_used = deepcopy(ac)
     histPara_tech_cali = Vector{Vector{Float64}}()
     histPara_eng_opt =  Vector{Vector{Float64}}()
@@ -619,7 +670,8 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
             # Optimize the engine with the tech parameters
             ac_ref,flgSizSuc,bestEngSol = UpdAcTecLvl!(ac_ref,x,ini_eng,upBon_eng,loBon_eng;printEvery=printEvery,
                                                        ftol_eng=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp,
-                                                       constraints=constraints)
+                                                       constraints=constraints,hard_lpc_hpc_stage_ratio=hard_lpc_hpc_stage_ratio,
+                                                       numStageLC=numStageLC,numStageHC=numStageHC)
             if flgSizSuc
                 if DFan_m_ref>0.0
                     penal += 100.0*abs((ac_ref.parg[igdfan]-DFan_m_ref)/DFan_m_ref) #Percentage deviation
@@ -682,14 +734,16 @@ tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
          M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
          printEvery::Int64=10,ftol_tec::Float64=1e-6,ftol_eng::Float64=1e-7,iter_sizing::Int=150,
          maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
-         constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+         constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+         hard_lpc_hpc_stage_ratio::Bool=false,numStageLC::Int=0,numStageHC::Int=0)
 
 Outer optimization loop of a double loop engine calibration. Outer loop test out different engine technology levels. Inner loop optimizes for the best design given a technology level.
 
     ***Inputs:***
         - `ac`: baseline aircraft model
         - `xxx_tec`: technology parameters `pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal`
-        - `xxx_eng`: engine parameters `BPR,pif,pilc,pihc,Tt4`
+        - `xxx_eng`: engine parameters `BPR,pif,pilc,pihc,Tt4` (5 elements) if `hard_lpc_hpc_stage_ratio=false`,
+          or `BPR,pif,per_stage,Tt4` (4 elements) if `true`
         - `Fn_N`: required engine uninstalled thrust values to run
         - `WFuel_kgs_ref, OPR_ref, BPR_ref`: Reference eedb parameters for technology levels to match. Same length as thrust, but can have missing for thrust where data are missing.
         - `DFan_m_ref`: Reference fan diameter to match, can be set to negative if not to calibrate against this value
@@ -700,7 +754,10 @@ Outer optimization loop of a double loop engine calibration. Outer loop test out
         - `optTyp`: optimizer type
         - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
            against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
-    
+        - `hard_lpc_hpc_stage_ratio::Bool`, `numStageLC::Int`, `numStageHC::Int`: Forwarded to
+          `make_obj_tech_cali` -- see `UpdAcEngMod!`'s docstring. `ini_eng`/`upBon_eng`/`loBon_eng` must
+          be length 4 (`[BPR,pif,per_stage,Tt4]`) when `hard_lpc_hpc_stage_ratio=true`, length 5 otherwise.
+
     ***Outputs:***
         - `status`: optimization status for the outer loop
         - `bestSol_tec`, `bestSol_eng`: calibrated and optimized technology and engine parameters
@@ -718,10 +775,12 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
                   M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
                   printEvery::Int64=10,ftol_tec::Float64=1e-6,ftol_eng::Float64=1e-7,iter_sizing::Int=150,
                   maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
-                  constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
+                  constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
+                  hard_lpc_hpc_stage_ratio::Bool=false,numStageLC::Int=0,numStageHC::Int=0)
     # Size check
     length(ini_tec) == 8 || error("`ini_tec` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(ini_tec))")
-    length(ini_eng) == 5 || error("`ini_eng` must have exactly 5 elements [BPR,pif,pilc,pihc,Tt4], got $(length(ini_eng))")
+    expected_len_eng = hard_lpc_hpc_stage_ratio ? 4 : 5
+    length(ini_eng) == expected_len_eng || error("`ini_eng` must have exactly $(expected_len_eng) elements $(hard_lpc_hpc_stage_ratio ? "[BPR,pif,per_stage,Tt4]" : "[BPR,pif,pilc,pihc,Tt4]") when hard_lpc_hpc_stage_ratio=$(hard_lpc_hpc_stage_ratio), got $(length(ini_eng))")
     any((ini_tec .< loBon_tec) .| (ini_tec .> upBon_tec)) && error("Initial guess `ini_tec` is outside the bounds [loBon_tec,upBon_tec]: ini_tec=$(ini_tec), loBon_tec=$(loBon_tec), upBon_tec=$(upBon_tec)")
     any((ini_eng .< loBon_eng) .| (ini_eng .> upBon_eng)) && error("Initial guess `ini_eng` is outside the bounds [loBon_eng,upBon_eng]: ini_eng=$(ini_eng), loBon_eng=$(loBon_eng), upBon_eng=$(upBon_eng)")
     ac_used = deepcopy(ac)
@@ -730,7 +789,8 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
     make_obj_tech_cali(ac_used,ini_eng,upBon_eng,loBon_eng;
                        printEvery=printEvery,ftol_eng=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp,
                        Fn_N=Fn_N,WFuel_kgs_ref=WFuel_kgs_ref,OPR_ref=OPR_ref,BPR_ref=BPR_ref,DFan_m_ref=DFan_m_ref,
-                       M0=M0,P0=P0,T0=T0,a0=a0,constraints=constraints)
+                       M0=M0,P0=P0,T0=T0,a0=a0,constraints=constraints,hard_lpc_hpc_stage_ratio=hard_lpc_hpc_stage_ratio,
+                       numStageLC=numStageLC,numStageHC=numStageHC)
     # optimize
     status = :FAILURE
     try
