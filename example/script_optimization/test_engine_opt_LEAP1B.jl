@@ -33,6 +33,18 @@ upBon_eng = [16.0, 4.0,  10.0, 60.0, 2500.0]
 loBon_tec = [0.93, 0.86, 0.86, 0.86, 0.86, 0.86, 0.975, 1000.0]
 upBon_tec = [0.98, 0.96, 0.96, 0.96, 0.96, 0.96, 0.999, 1330.0]
 
+#### Design constraints for the inner engine-cycle search, checked against the sized aircraft
+constraints = ObjectiveFactory.Constraint[
+    ObjectiveFactory.Constraint(:(wing.layout.span);        lim_up=35.814,  pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parm[imlBF,1]);           lim_up=2400.0,  pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(para[iagamV,ipclimbn,1]); lim_lo=0.015,   pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(pare[ieTt3,:,1]);         lim_up=900.0,   pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(pare[ieTmet1,:,1]);       lim_up=1333.33, pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parg[igdfan]);            lim_up=2.0,     pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parm[imWTO,1]);           lim_up=:(parg[igWMTO]),  pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parm[imVfuel,1]);         lim_up=:(parg[igVfmax]), pen_sca=2000.0),
+]
+
 #### Initial guess: pull each parameter's actual cruise-point value from the reference aircraft, clamped to bounds
 ini_eng_raw = [ac.pare[ieBPR,ipcruise1,1], ac.pare[iepif,ipcruise1,1], ac.pare[iepilc,ipcruise1,1],
                ac.pare[iepihc,ipcruise1,1], ac.pare[ieTt4,ipcruise1,1]]
@@ -53,7 +65,8 @@ status, bestSol_tec, bestSol_eng, histTechPara, histEngPara, histPenl =
                      loBon_tec=loBon_tec, loBon_eng=loBon_eng,
                      Fn_N=Fn_N, WFuel_kgs_ref=WFuel_kgs_ref, OPR_ref=OPR_ref, BPR_ref=BPR_ref, DFan_m_ref=DFan_m_ref,
                      M0=M0, P0=P0, T0=T0, a0=a0,
-                     printEvery=5, ftol_tec=1e-6, ftol_eng=1e-7, iter_sizing=150, maxIter=5000, optTyp=:LN_NELDERMEAD)
+                     printEvery=5, ftol_tec=1e-6, ftol_eng=1e-7, iter_sizing=150, maxIter=5000, optTyp=:LN_NELDERMEAD,
+                     constraints=constraints)
 
 println()
 println("Status: ", status)

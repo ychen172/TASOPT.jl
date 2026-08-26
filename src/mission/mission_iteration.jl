@@ -366,6 +366,7 @@ function _mission_iteration!(ac, imission, Ldebug; calculate_cruise = false)
 
             # Store integrands for range and weight integration using a predictor-corrector scheme
             FoW[ip] = Ftotal / (BW * cosg) - DoL
+            FoW[ip] >= 0.0 || error("Climb infeasible at ip=$(ip): thrust cannot overcome drag (FoW=$(FoW[ip]))")
 
             mfuel = pare[iemfuel, ip]
             FFC[ip] = mfuel * gee / (W * V * cosg)

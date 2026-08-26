@@ -7,6 +7,24 @@ import ..RunEngine
 import ..ObjectiveFactory
 
 """
+Default 8 design constraints for the engine-cycle inner loop (`obj_engine_opt!`):
+wingspan, balanced field length, top-of-climb gradient, max Tt3, max metal temperature,
+fan diameter, WTO<=WMTO, and fuel volume<=Vfmax. `pen_sca=2000.0` makes the squared-fraction
+penalty `pen_sca*err_frac^2` .
+Pass a different `AbstractVector{<:ObjectiveFactory.Constraint}` via the `constraints` kwarg
+"""
+const DEFAULT_ENGINE_TECH_CONSTRAINTS = ObjectiveFactory.Constraint[
+    ObjectiveFactory.Constraint(:(wing.layout.span);        lim_up=35.814,  pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parm[imlBF,1]);           lim_up=2400.0,  pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(para[iagamV,ipclimbn,1]); lim_lo=0.015,   pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(pare[ieTt3,:,1]);         lim_up=900.0,   pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(pare[ieTmet1,:,1]);       lim_up=1333.33, pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parg[igdfan]);            lim_up=2.0,     pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parm[imWTO,1]);           lim_up=:(parg[igWMTO]),  pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parm[imVfuel,1]);         lim_up=:(parg[igVfmax]), pen_sca=2000.0),
+]
+
+"""
     make_obj(ac, parameters::AbstractVector{<:ObjectiveFactory.Parameter}, Fn_N::AbstractVector{<:Real},
             WFuel_kgs::AbstractVector{<:Union{Real,Missing}}, OPR::AbstractVector{<:Union{Real,Missing}}, BPR::AbstractVector{<:Union{Real,Missing}};
             M0::Real=0.0, P0::Real=101320.0, T0::Real=288.2, a0::Real=340.21, dia_fan_m::Real=-1.0, pen_wei::AbstractVector{<:Real}=[1.0/3.0,1.0/3.0,1.0/3.0],
@@ -304,7 +322,7 @@ function UpdAcEngMod!(ac_ref, x; iter_sizing::Int=150)
 end
 
 """
-    make_obj_engine_opt(ac, printEvery::Int64)
+    make_obj_engine_opt(ac, printEvery::Int64; iter_sizing::Int=150, constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
 
 `make_obj_engine_opt` constructs and returns an objective function for the engine-cycle-only
 inner-loop optimization: minimize PFEI (at a given technology level in `ac`) by searching over `[BPR, pif, pilc, pihc, Tt4]`.
@@ -313,6 +331,8 @@ inner-loop optimization: minimize PFEI (at a given technology level in `ac`) by 
         - `ac`: Baseline aircraft model, with fixed technology parameters already assigned
         - `printEvery::Int64`: Print the current best solution every this many objective calls
         - `iter_sizing::Int`: `size_aircraft!` maximum weight-iteration count
+        - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
+           against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
 
     ***Outputs***
         - `obj!`::a function: Objective function `(x, grad) -> penalty` for the optimizer. A fresh
@@ -324,10 +344,11 @@ inner-loop optimization: minimize PFEI (at a given technology level in `ac`) by 
           as `histPara`, returned by reference and updated by `obj!` calls
 
     ***Behavior***
-        - Penalty is `ac_ref.parm[imPFEI,1]`; fallback penalty `100.0`
+        - Penalty is `ac_ref.parm[imPFEI,1]` plus a percentage-violation penalty for each entry in `constraints`; fallback penalty `100.0`
         - All inputs/outputs are in SI units
 """
-function make_obj_engine_opt(ac,printEvery::Int64;iter_sizing::Int=150)
+function make_obj_engine_opt(ac,printEvery::Int64;iter_sizing::Int=150,
+                             constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
     ac_used = deepcopy(ac)
     histPara_engine_opt = Vector{Vector{Float64}}()
     histPenl_engine_opt = Vector{Float64}()
@@ -342,6 +363,14 @@ function make_obj_engine_opt(ac,printEvery::Int64;iter_sizing::Int=150)
             if penal<=0.0
                 penal = 100.0
             else
+                # Percentage-violation penalty for each constraint (0 if satisfied)
+                violated_constraints = Vector{ObjectiveFactory.Constraint}()
+                for const_cur in constraints
+                    val_cur = ObjectiveFactory.getNestedProp_fromExpr(ac_ref; field_path=const_cur.field_path, index=const_cur.index)
+                    flag_const_added = false
+                    flag_const_added, penal = ObjectiveFactory.Check_Upper_Constraint!(val_cur, ac_ref, const_cur, flag_const_added, penal, violated_constraints)
+                    flag_const_added, penal = ObjectiveFactory.Check_Lower_Constraint!(val_cur, ac_ref, const_cur, flag_const_added, penal, violated_constraints)
+                end
                 push!(histPara_engine_opt,copy(x))
                 push!(histPenl_engine_opt,penal)
             end
@@ -364,7 +393,8 @@ end
 
 """
     engine_opt(ac; ini::Vector{Float64}, upBon::Vector{Float64}, loBon::Vector{Float64},
-              printEvery::Int64, ftol::Float64=1e-6, iter_sizing::Int=150, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD)
+               printEvery::Int64, ftol::Float64=1e-6, iter_sizing::Int=150, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD,
+               constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
 
 `engine_opt` runs the engine-cycle-only inner-loop optimization (see `make_obj_engine_opt`) to find
 the minimum-PFEI engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed technology level
@@ -380,6 +410,8 @@ the minimum-PFEI engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed tech
         - `maxIter::Int`: Maximum number of optimization iterations (number of size_aircraft! calls)
         - `optTyp::Symbol`: NLopt algorithm symbol (only non-gradient-based algorithms supported,
           e.g. `:LN_NELDERMEAD` local, `:GN_CRS2_LM`/`:GN_DIRECT` global)
+        - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
+           against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
 
     ***Outputs***
         - `bestSol::Vector{Float64}`: `[BPR, pif, pilc, pihc, Tt4]` of the minimum-penalty evaluation
@@ -397,10 +429,11 @@ the minimum-PFEI engine cycle `[BPR, pif, pilc, pihc, Tt4]` at `ac`'s fixed tech
 """
 function engine_opt(ac;
                     ini::Vector{Float64},upBon::Vector{Float64},loBon::Vector{Float64},
-                    printEvery::Int64,ftol::Float64=1e-6,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+                    printEvery::Int64,ftol::Float64=1e-6,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
+                    constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
     any((ini .< loBon) .| (ini .> upBon)) && error("Initial guess `ini` is outside the bounds [loBon,upBon]: ini=$(ini), loBon=$(loBon), upBon=$(upBon)")
     ac_used = deepcopy(ac)
-    (; obj!, histPara, histPenl) = make_obj_engine_opt(ac_used, printEvery; iter_sizing=iter_sizing)
+    (; obj!, histPara, histPenl) = make_obj_engine_opt(ac_used, printEvery; iter_sizing=iter_sizing, constraints=constraints)
     status = :FAILURE
     try
         opt               = NLopt.Opt(optTyp, length(ini))
@@ -430,8 +463,9 @@ end
 
 """
     UpdAcTecLvl!(ac_ref, x::Vector{Float64}, ini_eng::Vector{Float64},
-                upBon_eng::Vector{Float64}, loBon_eng::Vector{Float64}; printEvery::Int64=10,
-                ftol_eng::Float64=1e-7, iter_sizing::Int=150, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD)
+                 upBon_eng::Vector{Float64}, loBon_eng::Vector{Float64}; printEvery::Int64=10,
+                 ftol_eng::Float64=1e-7, iter_sizing::Int=150, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD,
+                 constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
 
 `UpdAcTecLvl!` sets the 8 engine technology parameters on `ac_ref`, then runs `engine_opt` to find
 the minimum-PFEI engine cycle for that technology level (see `make_obj_engine_opt`/`engine_opt`),
@@ -448,6 +482,8 @@ and re-materializes that optimal cycle onto `ac_ref` via `UpdAcEngMod!`.
         - `iter_sizing::Int`: `size_aircraft!`'s internal maximum weight-iteration count
         - `maxIter::Int`: Maximum number of optimization iterations (number of size_aircraft! calls)
         - `optTyp::Symbol`: Forwarded to `engine_opt` as its NLopt algorithm symbol
+        - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
+           against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
 
     ***Outputs***
         - `ac_ref`: The same aircraft model, mutated in place and returned for convenience
@@ -465,7 +501,8 @@ and re-materializes that optimal cycle onto `ac_ref` via `UpdAcEngMod!`.
 """
 function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
                       upBon_eng::Vector{Float64},loBon_eng::Vector{Float64};printEvery::Int64=10,
-                      ftol_eng::Float64=1e-7,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+                      ftol_eng::Float64=1e-7,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
+                      constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
     # Unpack
     length(x) == 8 || throw(DimensionMismatch("`x` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(x))"))
     pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal = x
@@ -483,7 +520,8 @@ function UpdAcTecLvl!(ac_ref,x::Vector{Float64},ini_eng::Vector{Float64},
     bestSol = fill(NaN, length(ini_eng))
     try
         bestSol, _, _, _ = engine_opt(ac_ref;ini=ini_eng,upBon=upBon_eng,loBon=loBon_eng,
-                                              printEvery=printEvery,ftol=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp)
+                                      printEvery=printEvery,ftol=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp,
+                                      constraints=constraints)
     catch e
         e isa InterruptException && rethrow()
         flgSizSuc = false
@@ -507,7 +545,8 @@ end
                        printEvery::Int64, ftol_eng::Float64=1e-7, iter_sizing::Int=150, maxIter::Int=1000, optTyp::Symbol=:LN_NELDERMEAD,
                        Fn_N::Vector{Float64}, WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},
                        OPR_ref::Vector{<:Union{Missing,Float64}}, BPR_ref::Vector{<:Union{Missing,Float64}},
-                       DFan_m_ref::Float64=-1.0, M0::Float64=0.0, P0::Float64=101320.0, T0::Float64=288.2, a0::Float64=340.21)
+                       DFan_m_ref::Float64=-1.0, M0::Float64=0.0, P0::Float64=101320.0, T0::Float64=288.2, a0::Float64=340.21,
+                       constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
 
 `make_obj_tech_cali` constructs and returns the outer-loop objective function for engine technology
 calibration: for a candidate set of 8 technology parameters, find the minimum-PFEI engine cycle for
@@ -534,6 +573,8 @@ optionally, fan diameter).
         - `BPR_ref::Vector{<:Union{Missing,Float64}}`: Reference bypass ratio at each `Fn_N` point
         - `DFan_m_ref::Float64`: Reference fan diameter to match (m); set negative to disable this criterion
         - `M0`, `P0`, `T0`, `a0`: Inlet flight condition (Mach, Pa, K, m/s) used for every `Fn_N` off-design point
+        - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
+           against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
 
     ***Outputs***
         - `obj!`::a function: Objective function `(x, grad) -> penalty` for the outer optimizer. `x` is
@@ -560,7 +601,8 @@ optionally, fan diameter).
 function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float64},loBon_eng::Vector{Float64};
                             printEvery::Int64,ftol_eng::Float64=1e-7,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
                             Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
-                            M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21)
+                            M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
+                            constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
     ac_used = deepcopy(ac)
     histPara_tech_cali = Vector{Vector{Float64}}()
     histPara_eng_opt =  Vector{Vector{Float64}}()
@@ -576,7 +618,8 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
         try
             # Optimize the engine with the tech parameters
             ac_ref,flgSizSuc,bestEngSol = UpdAcTecLvl!(ac_ref,x,ini_eng,upBon_eng,loBon_eng;printEvery=printEvery,
-                                             ftol_eng=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp)
+                                                       ftol_eng=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp,
+                                                       constraints=constraints)
             if flgSizSuc
                 if DFan_m_ref>0.0
                     penal += 100.0*abs((ac_ref.parg[igdfan]-DFan_m_ref)/DFan_m_ref) #Percentage deviation
@@ -633,12 +676,13 @@ end
 
 """
 tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
-                  upBon_tec::Vector{Float64},upBon_eng::Vector{Float64},
-                  loBon_tec::Vector{Float64},loBon_eng::Vector{Float64},
-                  Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
-                  M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
-                  printEvery::Int64=10,ftol_tec::Float64=1e-6,ftol_eng::Float64=1e-7,iter_sizing::Int=150,
-                  maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+         upBon_tec::Vector{Float64},upBon_eng::Vector{Float64},
+         loBon_tec::Vector{Float64},loBon_eng::Vector{Float64},
+         Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
+         M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
+         printEvery::Int64=10,ftol_tec::Float64=1e-6,ftol_eng::Float64=1e-7,iter_sizing::Int=150,
+         maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
+         constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
 
 Outer optimization loop of a double loop engine calibration. Outer loop test out different engine technology levels. Inner loop optimizes for the best design given a technology level.
 
@@ -654,6 +698,8 @@ Outer optimization loop of a double loop engine calibration. Outer loop test out
         - `iter_sizing`: `size_aircraft!`'s internal maximum weight-iteration count
         - `maxIter`: maximum optimization iterations for both loops
         - `optTyp`: optimizer type
+        - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
+           against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
     
     ***Outputs:***
         - `status`: optimization status for the outer loop
@@ -671,7 +717,8 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
                   Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
                   M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
                   printEvery::Int64=10,ftol_tec::Float64=1e-6,ftol_eng::Float64=1e-7,iter_sizing::Int=150,
-                  maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD)
+                  maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
+                  constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS)
     # Size check
     length(ini_tec) == 8 || error("`ini_tec` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(ini_tec))")
     length(ini_eng) == 5 || error("`ini_eng` must have exactly 5 elements [BPR,pif,pilc,pihc,Tt4], got $(length(ini_eng))")
@@ -683,7 +730,7 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
     make_obj_tech_cali(ac_used,ini_eng,upBon_eng,loBon_eng;
                        printEvery=printEvery,ftol_eng=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp,
                        Fn_N=Fn_N,WFuel_kgs_ref=WFuel_kgs_ref,OPR_ref=OPR_ref,BPR_ref=BPR_ref,DFan_m_ref=DFan_m_ref,
-                       M0=M0,P0=P0,T0=T0,a0=a0)
+                       M0=M0,P0=P0,T0=T0,a0=a0,constraints=constraints)
     # optimize
     status = :FAILURE
     try
