@@ -18,10 +18,10 @@ const DEFAULT_ENGINE_TECH_CONSTRAINTS = ObjectiveFactory.Constraint[
     ObjectiveFactory.Constraint(:(parm[imlBF,1]);           lim_up=2400.0,  pen_sca=2000.0),
     ObjectiveFactory.Constraint(:(para[iagamV,ipclimbn,1]); lim_lo=0.015,   pen_sca=2000.0),
     ObjectiveFactory.Constraint(:(pare[ieTt3,:,1]);         lim_up=900.0,   pen_sca=2000.0),
-    ObjectiveFactory.Constraint(:(pare[ieTmet1,:,1]);       lim_up=1333.33, pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(pare[ieTmet1,:,1]);       lim_up=:(parg[igTmetal]), pen_sca=2000.0, eps_buff=1e-4),
     ObjectiveFactory.Constraint(:(parg[igdfan]);            lim_up=2.0,     pen_sca=2000.0),
-    ObjectiveFactory.Constraint(:(parm[imWTO,1]);           lim_up=:(parg[igWMTO]),  pen_sca=2000.0),
-    ObjectiveFactory.Constraint(:(parm[imVfuel,1]);         lim_up=:(parg[igVfmax]), pen_sca=2000.0),
+    ObjectiveFactory.Constraint(:(parm[imWTO,1]);           lim_up=:(parg[igWMTO]),  pen_sca=2000.0, eps_buff=1e-4),
+    ObjectiveFactory.Constraint(:(parm[imVfuel,1]);         lim_up=:(parg[igVfmax]), pen_sca=2000.0, eps_buff=1e-4),
 ]
 
 """
@@ -294,17 +294,23 @@ end
     UpdAcEngMod!(ac_ref, x; iter_sizing::Int=150, hard_lpc_hpc_stage_ratio::Bool=false,
                 numStageLC::Int=0, numStageHC::Int=0)
 
-`UpdAcEngMod!` sets the engine-cycle design variables on `ac_ref` and fully sizes the aircraft with that cycle.
+`UpdAcEngMod!` sets the engine-cycle AND geometry design variables on `ac_ref` and fully sizes the
+aircraft with that combination.
 
     ***Inputs:***
         - `ac_ref`: Aircraft model to update (mutated in place)
-        - `x::AbstractVector{<:Real}`: Candidate cycle design variables (SI units). Shape depends on
-          `hard_lpc_hpc_stage_ratio`:
-            - `false` (default): `[BPR, pif, pilc, pihc, Tt4]` (5 elements) -- `pilc`/`pihc` set directly.
-            - `true`: `[BPR, pif, per_stage, Tt4]` (4 elements) -- `pilc`/`pihc` are both derived from the
-              single per-stage pressure ratio `per_stage` via `pilc = per_stage^numStageLC`,
-              `pihc = per_stage^numStageHC`, enforcing a physical fixed-stage-count LPC/HPC split
-              (equal pressure ratio per stage) instead of letting `pilc`/`pihc` vary independently.
+        - `x::AbstractVector{<:Real}`: Candidate cycle+geometry design variables (SI units,
+          `Sweep_wing` in degrees). Shape depends on `hard_lpc_hpc_stage_ratio`:
+            - `false` (default): `[BPR, pif, pilc, pihc, Tt4, CL_cruise, Sweep_wing, AR_wing]`
+              (8 elements) -- `pilc`/`pihc` set directly.
+            - `true`: `[BPR, pif, per_stage, Tt4, CL_cruise, Sweep_wing, AR_wing]` (7 elements) --
+              `pilc`/`pihc` are both derived from the single per-stage pressure ratio `per_stage` via
+              `pilc = per_stage^numStageLC`, `pihc = per_stage^numStageHC`, enforcing a physical
+              fixed-stage-count LPC/HPC split (equal pressure ratio per stage) instead of letting
+              `pilc`/`pihc` vary independently.
+          `CL_cruise`/`Sweep_wing`/`AR_wing` are the 3 geometry parameters identified as the dominant
+          non-engine PFEI drivers by sensitivity analysis (see tasopt-engine-calibration-double-loop
+          memory) -- every other geometry field stays fixed at whatever `ac_ref` already had.
         - `iter_sizing::Int`: Forwarded to `size_aircraft!` as its maximum weight-iteration count
         - `hard_lpc_hpc_stage_ratio::Bool`: Selects which shape of `x` is expected (see above)
         - `numStageLC::Int`, `numStageHC::Int`: Number of LPC/HPC stages, used to derive `pilc`/`pihc`
@@ -315,7 +321,11 @@ end
         - `ac_ref`: The same aircraft model, mutated in place and returned for convenience
 
     ***Behavior***
-        - Overwrites `ac_ref.pare[ieBPR/iepif/iepilc/iepihc/ieTt4, ipcruise1, 1]` with the (possibly derived) cycle values
+        - Overwrites `ac_ref.pare[ieBPR/iepif/iepilc/iepihc/ieTt4, ipcruise1, 1]` with the (possibly
+          derived) cycle values, `ac_ref.para[iaCL, ipclimb2:ipdescent4, 1]` with `CL_cruise` (broadcast
+          across the cruise-climb mission points, matching how off-design flying reads CL directly
+          rather than inheriting it from the design point), and `ac_ref.wing.layout.sweep`/
+          `ac_ref.wing.layout.AR` with `Sweep_wing`/`AR_wing`
         - Calls `TASOPT.size_aircraft!` -- cold-started
         - THROWS if `size_aircraft!` fails to converge, hits a physically invalid cycle, or `x`'s length
           doesn't match `hard_lpc_hpc_stage_ratio`'s expected shape
@@ -324,19 +334,22 @@ function UpdAcEngMod!(ac_ref, x; iter_sizing::Int=150, hard_lpc_hpc_stage_ratio:
                       numStageLC::Int=0, numStageHC::Int=0)
     if hard_lpc_hpc_stage_ratio
         (numStageLC>0 && numStageHC>0) || error("`numStageLC` and `numStageHC` must both be positive when hard_lpc_hpc_stage_ratio=true, got numStageLC=$(numStageLC), numStageHC=$(numStageHC)")
-        length(x)==4 || throw(DimensionMismatch("`x` must have exactly 4 elements [BPR,pif,per_stage,Tt4] when hard_lpc_hpc_stage_ratio=true, got $(length(x))"))
-        BPR,pif,per_stage,Tt4 = x
+        length(x)==7 || throw(DimensionMismatch("`x` must have exactly 7 elements [BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing] when hard_lpc_hpc_stage_ratio=true, got $(length(x))"))
+        BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing = x
         pilc = per_stage^numStageLC
         pihc = per_stage^numStageHC
     else
-        length(x)==5 || throw(DimensionMismatch("`x` must have exactly 5 elements [BPR,pif,pilc,pihc,Tt4] when hard_lpc_hpc_stage_ratio=false, got $(length(x))"))
-        BPR,pif,pilc,pihc,Tt4 = x
+        length(x)==8 || throw(DimensionMismatch("`x` must have exactly 8 elements [BPR,pif,pilc,pihc,Tt4,CL_cruise,Sweep_wing,AR_wing] when hard_lpc_hpc_stage_ratio=false, got $(length(x))"))
+        BPR,pif,pilc,pihc,Tt4,CL_cruise,Sweep_wing,AR_wing = x
     end
     ac_ref.pare[ieBPR,ipcruise1,1] = BPR
     ac_ref.pare[iepif,ipcruise1,1] = pif
     ac_ref.pare[iepilc,ipcruise1,1] = pilc
     ac_ref.pare[iepihc,ipcruise1,1] = pihc
     ac_ref.pare[ieTt4,ipcruise1,1] = Tt4
+    ac_ref.para[iaCL, ipclimb2:ipdescent4, 1] .= CL_cruise
+    ac_ref.wing.layout.sweep = Sweep_wing
+    ac_ref.wing.layout.AR = AR_wing
 
     TASOPT.size_aircraft!(ac_ref; iter=iter_sizing, initwgt=false, printiter=false)
     ac_ref.is_sized[1] || error("size_aircraft! did not converge within $(iter_sizing) weight iterations")
@@ -348,9 +361,10 @@ end
                        constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
                        hard_lpc_hpc_stage_ratio::Bool=false, numStageLC::Int=0, numStageHC::Int=0)
 
-`make_obj_engine_opt` constructs and returns an objective function for the engine-cycle-only
+`make_obj_engine_opt` constructs and returns an objective function for the engine-cycle-plus-geometry
 inner-loop optimization: minimize PFEI (at a given technology level in `ac`) by searching over the
-engine cycle (`[BPR,pif,pilc,pihc,Tt4]`, or `[BPR,pif,per_stage,Tt4]` under `hard_lpc_hpc_stage_ratio` -- see `UpdAcEngMod!`).
+engine cycle and 3 geometry parameters (`[BPR,pif,pilc,pihc,Tt4,CL_cruise,Sweep_wing,AR_wing]`, or
+`[BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing]` under `hard_lpc_hpc_stage_ratio` -- see `UpdAcEngMod!`).
 
     ***Inputs:***
         - `ac`: Baseline aircraft model, with fixed technology parameters already assigned
@@ -427,15 +441,17 @@ end
                constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
                hard_lpc_hpc_stage_ratio::Bool=false, numStageLC::Int=0, numStageHC::Int=0)
 
-`engine_opt` runs the engine-cycle-only inner-loop optimization (see `make_obj_engine_opt`) to find
-the minimum-PFEI engine cycle at `ac`'s fixed technology level (`[BPR,pif,pilc,pihc,Tt4]`, or
-`[BPR,pif,per_stage,Tt4]` under `hard_lpc_hpc_stage_ratio` -- see `UpdAcEngMod!`)
+`engine_opt` runs the engine-cycle-plus-geometry inner-loop optimization (see `make_obj_engine_opt`)
+to find the minimum-PFEI cycle+geometry at `ac`'s fixed technology level
+(`[BPR,pif,pilc,pihc,Tt4,CL_cruise,Sweep_wing,AR_wing]`, or
+`[BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing]` under `hard_lpc_hpc_stage_ratio` -- see `UpdAcEngMod!`)
 
     ***Inputs:***
         - `ac`: Baseline aircraft model for sizing (passed by copy)
         - `ini::Vector{Float64}`: Initial guess (SI units), same shape as `UpdAcEngMod!`'s `x` --
-          `[BPR, pif, pilc, pihc, Tt4]` (5 elements) if `hard_lpc_hpc_stage_ratio=false`, or
-          `[BPR, pif, per_stage, Tt4]` (4 elements) if `true`
+          `[BPR, pif, pilc, pihc, Tt4, CL_cruise, Sweep_wing, AR_wing]` (8 elements) if
+          `hard_lpc_hpc_stage_ratio=false`, or `[BPR, pif, per_stage, Tt4, CL_cruise, Sweep_wing, AR_wing]`
+          (7 elements) if `true`
         - `upBon::Vector{Float64}`: Upper bounds, same shape and order as `ini`
         - `loBon::Vector{Float64}`: Lower bounds, same shape and order as `ini`
         - `printEvery::Int64`: Print the current best solution every this many objective calls
@@ -512,9 +528,9 @@ and re-materializes that optimal cycle onto `ac_ref` via `UpdAcEngMod!`.
     ***Inputs:***
         - `ac_ref`: Aircraft model to update (mutated in place)
         - `x::Vector{Float64}`: `[pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal]` candidate technology parameters (SI units)
-        - `ini_eng::Vector{Float64}`: Initial guess for the inner `engine_opt` cycle-design search --
-          `[BPR,pif,pilc,pihc,Tt4]` (5 elements) if `hard_lpc_hpc_stage_ratio=false`, or
-          `[BPR,pif,per_stage,Tt4]` (4 elements) if `true`
+        - `ini_eng::Vector{Float64}`: Initial guess for the inner `engine_opt` cycle+geometry search --
+          `[BPR,pif,pilc,pihc,Tt4,CL_cruise,Sweep_wing,AR_wing]` (8 elements) if `hard_lpc_hpc_stage_ratio=false`, or
+          `[BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing]` (7 elements) if `true`
         - `upBon_eng::Vector{Float64}`: Upper bounds for the inner search, same shape and order as `ini_eng`
         - `loBon_eng::Vector{Float64}`: Lower bounds for the inner search, same shape and order as `ini_eng`
         - `printEvery::Int64`: Forwarded to `engine_opt` -- print the current best solution every this many objective calls
@@ -604,8 +620,9 @@ optionally, fan diameter).
     ***Inputs:***
         - `ac`: Baseline aircraft model, providing the fixed cruise design point (flight condition,
           thrust) that `UpdAcTecLvl!`'s inner cycle-design search holds fixed (passed by copy, never mutated)
-        - `ini_eng::Vector{Float64}`: Initial guess for the inner `engine_opt` search -- `[BPR,pif,pilc,pihc,Tt4]`
-          (5 elements) if `hard_lpc_hpc_stage_ratio=false`, or `[BPR,pif,per_stage,Tt4]` (4 elements) if `true`
+        - `ini_eng::Vector{Float64}`: Initial guess for the inner `engine_opt` search --
+          `[BPR,pif,pilc,pihc,Tt4,CL_cruise,Sweep_wing,AR_wing]` (8 elements) if `hard_lpc_hpc_stage_ratio=false`,
+          or `[BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing]` (7 elements) if `true`
         - `upBon_eng::Vector{Float64}`: Upper bounds for the inner search, same shape and order as `ini_eng`
         - `loBon_eng::Vector{Float64}`: Lower bounds for the inner search, same shape and order as `ini_eng`
         - `printEvery::Int64`: Print the current best solution every this many outer objective calls
@@ -620,6 +637,8 @@ optionally, fan diameter).
         - `OPR_ref::Vector{<:Union{Missing,Float64}}`: Reference overall pressure ratio at each `Fn_N` point
         - `BPR_ref::Vector{<:Union{Missing,Float64}}`: Reference bypass ratio at each `Fn_N` point
         - `DFan_m_ref::Float64`: Reference fan diameter to match (m); set negative to disable this criterion
+        - `MWTO_ref::Float64`: Reference max takeoff weight to match (N); set negative to disable this criterion
+        - `ARwing_ref::Float64`: Reference wing aspect ratio to match; set negative to disable this criterion
         - `M0`, `P0`, `T0`, `a0`: Inlet flight condition (Mach, Pa, K, m/s) used for every `Fn_N` off-design point
         - `constraints::AbstractVector{<:ObjectiveFactory.Constraint}`: Design constraints checked
            against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
@@ -651,6 +670,7 @@ optionally, fan diameter).
 function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float64},loBon_eng::Vector{Float64};
                             printEvery::Int64,ftol_eng::Float64=1e-7,iter_sizing::Int=150,maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
                             Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
+                            MWTO_ref::Float64=-1.0,ARwing_ref::Float64=-1.0,
                             M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
                             constraints::AbstractVector{<:ObjectiveFactory.Constraint}=DEFAULT_ENGINE_TECH_CONSTRAINTS,
                             hard_lpc_hpc_stage_ratio::Bool=false,numStageLC::Int=0,numStageHC::Int=0)
@@ -675,6 +695,12 @@ function make_obj_tech_cali(ac,ini_eng::Vector{Float64},upBon_eng::Vector{Float6
             if flgSizSuc
                 if DFan_m_ref>0.0
                     penal += 100.0*abs((ac_ref.parg[igdfan]-DFan_m_ref)/DFan_m_ref) #Percentage deviation
+                end
+                if MWTO_ref>0.0
+                    penal += 100.0*abs((ac_ref.parg[igWMTO]-MWTO_ref)/MWTO_ref) #Percentage deviation
+                end
+                if ARwing_ref>0.0
+                    penal += 100.0*abs((ac_ref.wing.layout.AR-ARwing_ref)/ARwing_ref) #Percentage deviation
                 end
                 # Perform EEDB off-design
                 flgOffDesSuc = true
@@ -731,6 +757,7 @@ tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
          upBon_tec::Vector{Float64},upBon_eng::Vector{Float64},
          loBon_tec::Vector{Float64},loBon_eng::Vector{Float64},
          Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
+         MWTO_ref::Float64=-1.0,ARwing_ref::Float64=-1.0,
          M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
          printEvery::Int64=10,ftol_tec::Float64=1e-6,ftol_eng::Float64=1e-7,iter_sizing::Int=150,
          maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
@@ -742,11 +769,14 @@ Outer optimization loop of a double loop engine calibration. Outer loop test out
     ***Inputs:***
         - `ac`: baseline aircraft model
         - `xxx_tec`: technology parameters `pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal`
-        - `xxx_eng`: engine parameters `BPR,pif,pilc,pihc,Tt4` (5 elements) if `hard_lpc_hpc_stage_ratio=false`,
-          or `BPR,pif,per_stage,Tt4` (4 elements) if `true`
+        - `xxx_eng`: engine+geometry parameters `BPR,pif,pilc,pihc,Tt4,CL_cruise,Sweep_wing,AR_wing`
+          (8 elements) if `hard_lpc_hpc_stage_ratio=false`, or `BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing`
+          (7 elements) if `true`
         - `Fn_N`: required engine uninstalled thrust values to run
         - `WFuel_kgs_ref, OPR_ref, BPR_ref`: Reference eedb parameters for technology levels to match. Same length as thrust, but can have missing for thrust where data are missing.
         - `DFan_m_ref`: Reference fan diameter to match, can be set to negative if not to calibrate against this value
+        - `MWTO_ref`: Reference max takeoff weight to match (N), can be set to negative if not to calibrate against this value
+        - `ARwing_ref`: Reference wing aspect ratio to match, can be set to negative if not to calibrate against this value
         - `M0,P0,T0,a0`: Engine inlet conditions
         - `printEvery`: print frequency
         - `iter_sizing`: `size_aircraft!`'s internal maximum weight-iteration count
@@ -756,7 +786,8 @@ Outer optimization loop of a double loop engine calibration. Outer loop test out
            against the sized `ac_ref` after each `UpdAcEngMod!` call (defaults to `DEFAULT_ENGINE_TECH_CONSTRAINTS`)
         - `hard_lpc_hpc_stage_ratio::Bool`, `numStageLC::Int`, `numStageHC::Int`: Forwarded to
           `make_obj_tech_cali` -- see `UpdAcEngMod!`'s docstring. `ini_eng`/`upBon_eng`/`loBon_eng` must
-          be length 4 (`[BPR,pif,per_stage,Tt4]`) when `hard_lpc_hpc_stage_ratio=true`, length 5 otherwise.
+          be length 7 (`[BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing]`) when
+          `hard_lpc_hpc_stage_ratio=true`, length 8 otherwise.
 
     ***Outputs:***
         - `status`: optimization status for the outer loop
@@ -772,6 +803,7 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
                   upBon_tec::Vector{Float64},upBon_eng::Vector{Float64},
                   loBon_tec::Vector{Float64},loBon_eng::Vector{Float64},
                   Fn_N::Vector{Float64},WFuel_kgs_ref::Vector{<:Union{Missing,Float64}},OPR_ref::Vector{<:Union{Missing,Float64}},BPR_ref::Vector{<:Union{Missing,Float64}},DFan_m_ref::Float64=-1.0,
+                  MWTO_ref::Float64=-1.0,ARwing_ref::Float64=-1.0,
                   M0::Float64=0.0,P0::Float64=101320.0,T0::Float64=288.2,a0::Float64=340.21,
                   printEvery::Int64=10,ftol_tec::Float64=1e-6,ftol_eng::Float64=1e-7,iter_sizing::Int=150,
                   maxIter::Int=1000,optTyp::Symbol=:LN_NELDERMEAD,
@@ -779,8 +811,8 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
                   hard_lpc_hpc_stage_ratio::Bool=false,numStageLC::Int=0,numStageHC::Int=0)
     # Size check
     length(ini_tec) == 8 || error("`ini_tec` must have exactly 8 elements [pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal], got $(length(ini_tec))")
-    expected_len_eng = hard_lpc_hpc_stage_ratio ? 4 : 5
-    length(ini_eng) == expected_len_eng || error("`ini_eng` must have exactly $(expected_len_eng) elements $(hard_lpc_hpc_stage_ratio ? "[BPR,pif,per_stage,Tt4]" : "[BPR,pif,pilc,pihc,Tt4]") when hard_lpc_hpc_stage_ratio=$(hard_lpc_hpc_stage_ratio), got $(length(ini_eng))")
+    expected_len_eng = hard_lpc_hpc_stage_ratio ? 7 : 8
+    length(ini_eng) == expected_len_eng || error("`ini_eng` must have exactly $(expected_len_eng) elements $(hard_lpc_hpc_stage_ratio ? "[BPR,pif,per_stage,Tt4,CL_cruise,Sweep_wing,AR_wing]" : "[BPR,pif,pilc,pihc,Tt4,CL_cruise,Sweep_wing,AR_wing]") when hard_lpc_hpc_stage_ratio=$(hard_lpc_hpc_stage_ratio), got $(length(ini_eng))")
     any((ini_tec .< loBon_tec) .| (ini_tec .> upBon_tec)) && error("Initial guess `ini_tec` is outside the bounds [loBon_tec,upBon_tec]: ini_tec=$(ini_tec), loBon_tec=$(loBon_tec), upBon_tec=$(upBon_tec)")
     any((ini_eng .< loBon_eng) .| (ini_eng .> upBon_eng)) && error("Initial guess `ini_eng` is outside the bounds [loBon_eng,upBon_eng]: ini_eng=$(ini_eng), loBon_eng=$(loBon_eng), upBon_eng=$(upBon_eng)")
     ac_used = deepcopy(ac)
@@ -789,6 +821,7 @@ function tech_opt(ac;ini_tec::Vector{Float64},ini_eng::Vector{Float64},
     make_obj_tech_cali(ac_used,ini_eng,upBon_eng,loBon_eng;
                        printEvery=printEvery,ftol_eng=ftol_eng,iter_sizing=iter_sizing,maxIter=maxIter,optTyp=optTyp,
                        Fn_N=Fn_N,WFuel_kgs_ref=WFuel_kgs_ref,OPR_ref=OPR_ref,BPR_ref=BPR_ref,DFan_m_ref=DFan_m_ref,
+                       MWTO_ref=MWTO_ref,ARwing_ref=ARwing_ref,
                        M0=M0,P0=P0,T0=T0,a0=a0,constraints=constraints,hard_lpc_hpc_stage_ratio=hard_lpc_hpc_stage_ratio,
                        numStageLC=numStageLC,numStageHC=numStageHC)
     # optimize
