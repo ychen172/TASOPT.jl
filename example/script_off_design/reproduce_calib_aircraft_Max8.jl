@@ -1,5 +1,13 @@
 """
-Reproduces a single sized aircraft model from engine calibration
+Reproduces a single sized 737MAX8 aircraft model directly from a
+calib_engine_Max8L1B_FixPR_Ratio_M78_210S.jl calibration result (fixed technology level +
+hard-ratio engine cycle+geometry, currently hardcoded to TechRun#200, penalty 7.007138022178629)
+-- no optimizer involved, just the base airframe, aircraft-parameter setup (material, 210-pax/
+exit-limit fuselage, Mach 0.78, R1 range), the calibrated tech/eng parameters applied directly via
+UpdAcTecLvl!/UpdAcEngMod!, and a single size_aircraft! call. Also runs the EEDB off-design sweep as
+a convergence check/log only (not folded into any objective/penalty here), with a retry-with-
+perturbed-mbf fallback for the known-flaky 7791N idle point (see offdes_with_mbf_retry). Saves the
+resulting aircraft model as a .jld2 file regardless of the EEDB check's outcome.
 """
 
 using TASOPT
@@ -20,7 +28,7 @@ converge, temporarily scale the aircraft's stored fan corrected-mass-flow initia
 (`ac.pare[iembf,ipcruise1,1]`, what `runOffDes` reads its own initial guess from) by each of
 `retry_scales` in turn and retry, restoring the original value afterward regardless of outcome.
 For the 7791N idle-point EEDB convergence flake (2026-08-28), a fine-grained scan found the fix
-is asymmetric: any *downward* nudge works, down to as little as -0.01% (`mbf*0.9999`), while every
+is asymmetric: any *downward* nudge works, down to at least -0.0001% (`mbf*0.999999`), while every
 upward nudge up to +5% fails (a larger jump, e.g. +30%, does eventually work upward too per an
 earlier coarser sweep, kept here only as a last-resort fallback). Scales ordered smallest-to-
 largest downward first so the retry stays as close to the original cruise-seeded guess as possible.

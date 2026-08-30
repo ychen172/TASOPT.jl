@@ -29,7 +29,7 @@ ac.fuselage.bendingmaterial_h.material = TASOPT.materials.StructuralAlloy("Al-20
 ac.fuselage.bendingmaterial_v.material = ac.fuselage.bendingmaterial_h.material
 ac.fuselage.floor.material = TASOPT.materials.StructuralAlloy("Al-2024-T4"; max_avg_stress=1.1, safety_factor=1.5)
 
-#### Reset to a 189-pax (737MAX8-like) payload/fuselage, same direct-overwrite pattern as
+#### Reset to a 210-pax (737MAX8 FAA exit-limit) payload/fuselage, same direct-overwrite pattern as
 #### opt_from_multi_warm_starts_para_oag_Rerun.jl:182-193 / the R1Size MAX8 scripts.
 num_pax = 210
 wei_per_pass_N = 956.36773

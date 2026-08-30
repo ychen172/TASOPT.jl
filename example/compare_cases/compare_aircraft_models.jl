@@ -253,7 +253,7 @@ println()
 println("Saved aircraft comparison table to: ", joinpath(save_dir,"Compare_Aircraft_Models.csv"))
 
 ## Reference vs Model vs Difference%, one table per candidate.
-## Uses BPR_eng_static/OPR_eng_static to match the reference row concept directly -- caveat above applies.
+## Uses BPR_eng_static/OPR_eng_static to match the reference row concept directly.
 # diff_param_order = ["MWTO_Ton","WZF_R1_Ton","R1_nmi","WZF_R2_Ton","R2_nmi","WZF_R3_Ton","R3_nmi",
 #                      "L_fuse_apu_end_m","R_fuse_m","b_wing_m","AR_wing","Sweep_wing_deg",
 #                      "S_vtail_m2","AR_vtail","b_htail_m","x_box_wing_m","x_box_vtail_m","x_box_htail_m",
