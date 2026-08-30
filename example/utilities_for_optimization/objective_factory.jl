@@ -119,8 +119,14 @@ OptHistory() = OptHistory{Float64}(
 """
 Container type for the mission requirement parameters
 Use the corresponding constructor for it as additional field_path needs to be generated when constructed
+`val` can hold anything settable onto an aircraft field -- Real/Enum/Array values
+`Expr` (a derived requirement, re-evaluated as `base^expo`
+`Struct`like a `TASOPT.materials.StructuralAlloy`
+CSV save/load only supports Real/Enum/Array/Expr cases; a struct-valued `val` is NOT silently
+skipped -- `save_vec_struct_csv` warns and saves an unrecoverable placeholder for it, and
+`load_csv_requirements` raises an explicit error if it tries to reconstruct one.
 """
-mutable struct Requirement{T<:Union{Real,Enum,AbstractArray{<:Real},AbstractArray{<:Enum},Expr}}
+mutable struct Requirement{T}
     name::Expr #Expression for requirement parameter (Ex. :(parg[igVfuel]), :(parm[imVfuel, :]), :(pare[ierhofuel_driven,:,:]), :(fuselage.layout.cross_section.radius))
     val::T #value or derived value to set
     expo::Float64 #exponent applied as val.^expo
@@ -130,13 +136,13 @@ end
 
 """
 Constructor for the `Requirement` type
-Requirement(name::Expr, val::Union{Real,Enum,AbstractArray{<:Real},AbstractArray{<:Enum},Expr}; expo::Real=1.0)
+Requirement(name::Expr, val; expo::Real=1.0)
     `name`: Expression for requirement parameter (Ex. :(parg[igVfuel]), :(parm[imVfuel, :]), :(pare[ierhofuel_driven,:,:]), :(fuselage.layout.cross_section.radius))
             Remember the parameters should be mission 1 parameters for sizing
     `val`: value you want to set into that parameter, accept broadcasting and elementwise assingment to an array.
     `expo`: exponential value to be applied to val
 """
-function Requirement(name::Expr, val::Union{Real,Enum,AbstractArray{<:Real},AbstractArray{<:Enum},Expr}; expo::Real=1.0)
+function Requirement(name::Expr, val; expo::Real=1.0)
     field_path, index = format_params(expr_to_string(name))
     return Requirement{typeof(val)}(name,val,Float64(expo),field_path,index)
 end
@@ -213,8 +219,8 @@ end
         - `parameters::AbstractVector{<:Parameter}`: parameters for optimization. (SI unit except for sweep angle using deg) (Unaltered by obj! call)
         - `objVar_des::ObjectiveVariable=default`: objective variable from the sizing mission to be minimized, needs to be a variable extracted from the design mission, needs to be a single real value.
         - `objVar_off::ObjectiveVariable=default`: objective variable from the off-design missions to be minimized, needs to be a variable extracted from the 2nd mission, need to be a singel real value comparable in size to that for the design mission
+        - `mission_req::AbstractVector{<:Requirement}=default empty`: mission requirements, applied to `ac` on every `obj!` call, after `parameters` are inserted. Requirements with a literal `val` are redundant here if already baked into `ac` beforehand (harmless no-op); requirements with `val::Expr` (derived requirements, e.g. a hard LPC/HPC pressure-ratio split) are NOT baked in ahead of time and MUST be passed here to take effect, since they depend on the current `parameters` values. A struct-valued `val` (e.g. a material) is never touched here -- assign those directly outside the optimizer instead.
         - `constraints::AbstractVector{<:Constraint}=default empty`: constraints for optimization. Empty container of this type for unconstraint problem. (SI unit except for sweep angle using deg)
-        - `mission_req::AbstractVector{<:Requirement}=default empty`: requirements for derived requirement assignment adaptive to optimization parameters
         - `off_des_miss::OffDesMission`: off-design flight ranges and payload weights to achieve
         - `off_des_constraints::AbstractVector{Symbol}`: constraints for off-design missions to judge for a successful run. Only accept :WPay,:MWTO,:VolFuel
         - `PFEI_Weighting::AbstractVector{<:Real}`: weights of the objective(Not necessarily PFEI) for final objective calculation. [design mission(At least one), off-des mission 1, off-des mission 2, ...] (A local normalized copy will be saved for internal use)
@@ -723,7 +729,7 @@ end
                                    frac_edge_trigger::AbstractFloat=0.15, frac_edge_expanded::AbstractFloat=0.3,
                                    optimizer_global::Symbol=:GN_CRS2_LM,   max_iter_glo::Int=50000,   span_glo_to_loc::AbstractFloat=0.25, run_global::Bool=false,
                                    optimizer_local::Symbol=:LN_NELDERMEAD, max_iter_loc_C::Int=500,   max_round_loc_C::Int=100,
-                                                                           max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10,    rel_tol_round_converge::Float64 = 5e-3)
+                                                                           max_iter_loc_F::Int=10000, max_round_loc_F::Int=10,             max_retry::Int = 10,    rel_tol_round_converge::Float64 = 1e-3)
 
 `optimizer_wrapper_global_local` wraps around the single point optimizer to create a global then local search algorithm, along with adaptive bounds movement.
 
@@ -1167,13 +1173,16 @@ end
 
 `_decode_union` corresponds to _encode_union to reconvert the stored string form data back to
 their original form. Rational and Irrational all go into Float.
-    
+
     **Inputs**
         - data_val: The raw value read from CSV
         - data_type: the type of data
-    
+
     **Outputs**
         - data_val in the converted form
+        - EXCEPT for `data_type == "struct"`: this means `save_vec_struct_csv` couldn't encode the
+          original value (e.g. a material) and saved an unrecoverable placeholder instead -- this
+          function throws an `ArgumentError` in that case rather than returning anything.
 
 """
 function _decode_union(data_val, data_type::AbstractString)
@@ -1190,6 +1199,8 @@ function _decode_union(data_val, data_type::AbstractString)
         return parse(Bool, string(data_val))
     elseif data_type == "int"
         return parse(Int, string(data_val))
+    elseif data_type == "struct"
+        throw(ArgumentError("This field's original value was a plain struct (e.g. a material) that `save_vec_struct_csv` could not encode and saved as an unrecoverable placeholder -- it cannot be reconstructed from this CSV. Requirements loaded from this file are NOT the same as the ones originally saved; re-set this field manually."))
     else #float
         return parse(Float64, string(data_val))
     end
@@ -1205,7 +1216,12 @@ Current setup does not support AbstractArray of values(Int, Enum, Expr...) only 
         - `path`: Path of csv to save. "xxxx.csv"
         - `data`: One of the three type (Vector of of the three types)
         - `fieldIgnore`: fields to not save due to complexity of the data
-    
+
+    **Behavior**
+        - A field whose value can't be encoded by `_encode_union` (e.g. a `Requirement.val` holding
+          a plain struct like a material) does NOT fail the whole save -- it's saved as an
+          unrecoverable `"struct"`-tagged placeholder with a `@warn`. `load_csv_requirements` raises
+          an explicit error if it later tries to reconstruct one of these.
 """
 function save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIgnore::AbstractVector{<:AbstractString}=["field_path", "index"])
     #### Size check
@@ -1236,7 +1252,12 @@ function save_vec_struct_csv(path::AbstractString, data::AbstractVector; fieldIg
                 push!(pairs_row, Symbol(f, "_type")  => val_kind)
                 push!(pairs_row, Symbol(f, "_value") => val)
             catch err
-                throw(ArgumentError("Data conversion for field $(f) failed: $(typeof(err)), $err"))
+                # Fields whose value can't be encoded (e.g. a plain struct like a material) are
+                # tagged "struct" with no data instead of failing the whole save -- load_csv_* will
+                # raise a clear error if it ever tries to reconstruct one of these.
+                @warn "Field $(f) on row $(idx) could not be encoded for CSV (value is a $(typeof(v)), not Real/Enum/Array/Expr) -- saving as an unrecoverable placeholder instead of failing the save" exception=err
+                push!(pairs_row, Symbol(f, "_type")  => "struct")
+                push!(pairs_row, Symbol(f, "_value") => "")
             end
         end
         rows[idx] = (; pairs_row...) # Conver to a named tuple for storage
@@ -1315,9 +1336,14 @@ Current setup does not support AbstractArray of values(Int, Enum, Expr...) only 
 
     **Inputs**
         - path: the path of the csv
-    
+
     **Outputs**
         - requirements_out::Vector{Requirement}: The mission requirements
+
+    **Behavior**
+        - Throws an `ArgumentError` if any row's `val` was originally a plain struct (e.g. a
+          material) -- `save_vec_struct_csv` cannot round-trip those, so the loaded requirements
+          would silently differ from what was saved; this is intentionally a hard failure instead.
 
 """
 function load_csv_requirements(path::AbstractString)
