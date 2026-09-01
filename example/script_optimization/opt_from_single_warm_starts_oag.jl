@@ -1,5 +1,5 @@
 """
-This script performs parallel optimization from single/multiple(not yet implemented) warm-start model(s)
+This script performs series optimization(batch array with single task) from single warm-start model(s) with successive warm start ability
 Can create or remove optimization parameters. Will automatically fetch initial guesses from warm start models.
 Extract the off-design missions from OAG csv data, and optimize for the weighted average fuel consumption for those off-design mission.
 The design-point mission perform is never optimized
@@ -24,32 +24,41 @@ const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
 # Prefix to read warm start data files
-par_path_base_prefix = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_") #Also the prefixed for aircraft model
+par_path_base_ini = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_3000.jld2") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_OAG_6Seats_TypeC"
+save_key = "Opti_Jet_NoACT_OAGLog230Down_6Seats_TypeC_24Field"
 # Mission extraction directory
-miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
+miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OAG_Data_2024/OAG_Data_2024_Refit/OffDesignMissions_50_300_300.csv")
 # Optimization configuration parameters
-flag_skip_global = true #Switch on to skip the global search if confident that warm start model can converge
+flag_skip_global = false #Switch on to skip the global search. Only effective for first iteration.
+overwri_ini_des_ran = false #overwrite the R1 initial guess? Matter to first iteration with skip global search. default to the ac's original sizing mission as intial guess.
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
 optimizers = [:GN_CRS2_LM, :LN_NELDERMEAD] # Optimizer choice. [Global,Local]
 max_num_iter_opt = [30000, 800, 10000] # Maximum number of optimization steps [Global, Local Coarse, Local Fine]
 max_num_round_loc = [120, 30] #Maximum number of adaptive bounds refinements rounds for local search [Local Coarse, Local Fine]
 span_glo_to_loc = 0.25 # span_local_search/span_global_search
 # Misc
-range_warm_start_miss = 3000
+### Fuselage setup
+seat_capacity_start = 230
+seat_capacity_end = 50
 num_seats_per_row = 6
 wei_per_pass_N = 956.36773 #Weight per passenger [N] (Assume a constant APU, seat, and added weight fractions)
 pass_load_frac_off = 0.825 #Load factor of passengers
+### Fuel setup
 idx_fuel = 24 #Eth: 32, Jet: 24 #Assume off-design use the same fuel
 rho_fuel_kgm3 = 817.0 #Eth: 789.0, Jet: 817.0 #kg/m3
 hvap_fuel_Jkg = 358694.0 #Eth: 918187.9, Jet: 358694.0 #J/kg
-objVar_des=ObjectiveVariable(:(parm[imWfuel,1]))
-objVar_off=ObjectiveVariable(:(parm[imWfuel,2]))
-pen_scale_PFEI = 2e5 #The scaling for penalty when using fuel burned per mission compared to the case that use PFEI
+### Objective setup
+objVar_des=ObjectiveVariable(:(parm[imWfuel,1])) #Design mission objective
+objVar_off=ObjectiveVariable(:(parm[imWfuel,2])) #Offdesign mission objective
+pen_scale_PFEI = 2e5 #The scaling for penalty when using fuel burned per mission compared to the case that uses PFEI
 pen_scale_constraints = 1e4*pen_scale_PFEI
 pen_scale_failed_sizing = 100.0*pen_scale_PFEI
+### Fixed engine parameters setup
+nLPC = 3.0
+nHPC = 10.0
+
 # Setup an entry (value does not matter) for test ratio to be sweep later in optimization loop
 mis_opt = Requirement[]
 push!(mis_opt, Requirement(:(options.ifuel), Int(idx_fuel))) 
@@ -60,30 +69,45 @@ push!(mis_opt, Requirement(:(options.has_ACT_fuel), false)) # Whether to allow a
 push!(mis_opt, Requirement(:(options.compensate_ACT), false)) # Whether to increase the aircraft length to accmondate for the cargo space taken by ACT
 push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_vol), 1.00)) # Volumetric efficiency of ACT fuel tank
 push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_wei), 1.00)) # Gravimetric efficiency of ACT fuel tank
-push!(mis_opt, Requirement(:(para[iaMach, ipclimbn:ipdescent1, 1]), 0.8)) # Cruise Mach number
+push!(mis_opt, Requirement(:(para[iaMach, ipclimbn:ipdescent1, 1]), 0.78)) # Cruise Mach number
 push!(mis_opt, Requirement(:(vtail.opt_sizing), TailSizing.OEI)) # Vertical tail sizing mode (Engine out or fixed volume)
 push!(mis_opt, Requirement(:(parg[igCLveout]), 0.47)) # Vertical tail CL at engine out condition
 push!(mis_opt, Requirement(:(htail.opt_sizing), TailSizing.CLmaxFwdCG)) # Horizontal tail sizing mode (Forward CG or fixed volume)
 push!(mis_opt, Requirement(:(htail.CL_max_fwd_CG), -0.7)) # Horizontal tail CL at forward CG condition
-# Calibrated Fixed Design Parameters for Combustor (Technology Level)
-# push!(mis_opt, Requirement(:(pare[iepib, ipclimb2:ipdescent4, 1]), 0.965)) #Combustor pressure ratio
-# push!(mis_opt, Requirement(:(pare[ieepolf, ipclimb2:ipdescent4, 1]), 0.923)) #Fan Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepollc, ipclimb2:ipdescent4, 1]), 0.912)) #LPC Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepolhc, ipclimb2:ipdescent4, 1]), 0.918)) #HPC Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepolht, ipclimb2:ipdescent4, 1]), 0.903)) #HPT Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieepollt, ipclimb2:ipdescent4, 1]), 0.913)) #LPT Poly Eff
-# push!(mis_opt, Requirement(:(pare[ieetab, ipclimb2:ipdescent4, 1]), 0.9985)) #Combustion Eff
-# push!(mis_opt, Requirement(:(parg[igTmetal]), 1275)) #Maximum metal temperature
+push!(mis_opt, Requirement(:(pare[iepilc, ipclimb2:ipdescent4, 1]), :(pare[iepihc, ipclimb2:ipdescent4, 1]); expo=nLPC/nHPC)) # LPC PR at cruise.
+# Calibrated Fixed Design Parameters for Combustor (Lvl 3 Technology Level)
+push!(mis_opt, Requirement(:(pare[iepib, :, 1]), 0.957)) #Combustor pressure ratio
+push!(mis_opt, Requirement(:(pare[ieepolf, :, 1]), 0.936)) #Fan Poly Eff
+push!(mis_opt, Requirement(:(pare[ieepollc, :, 1]), 0.909)) #LPC Poly Eff
+push!(mis_opt, Requirement(:(pare[ieepolhc, :, 1]), 0.905)) #HPC Poly Eff
+push!(mis_opt, Requirement(:(pare[ieepolht, :, 1]), 0.897)) #HPT Poly Eff
+push!(mis_opt, Requirement(:(pare[ieepollt, :, 1]), 0.916)) #LPT Poly Eff
+push!(mis_opt, Requirement(:(pare[ieetab, :, 1]), 0.986)) #Combustion Eff
+push!(mis_opt, Requirement(:(parg[igTmetal]), 1493.0)) #Maximum metal temperature
+mat_1_5 = TASOPT.materials.StructuralAlloy("Al-2024-T4"; max_avg_stress=1.1, safety_factor=1.5)
+mat_3_0 = TASOPT.materials.StructuralAlloy("Al-2024-T4"; max_avg_stress=1.1, safety_factor=3.0)
+mat_2_0 = TASOPT.materials.StructuralAlloy("Al-2024-T4"; max_avg_stress=1.1, safety_factor=2.0)
+push!(mis_opt, Requirement(:(wing.inboard.caps.material), mat_1_5))
+push!(mis_opt, Requirement(:(wing.outboard.caps.material), mat_1_5))
+push!(mis_opt, Requirement(:(wing.inboard.webs.material), mat_1_5))
+push!(mis_opt, Requirement(:(wing.outboard.webs.material), mat_1_5))
+push!(mis_opt, Requirement(:(fuselage.bendingmaterial_h.material), mat_1_5))
+push!(mis_opt, Requirement(:(fuselage.bendingmaterial_v.material), mat_1_5))
+push!(mis_opt, Requirement(:(fuselage.floor.material), mat_1_5))
+push!(mis_opt, Requirement(:(fuselage.skin.material), mat_3_0))
+push!(mis_opt, Requirement(:(fuselage.cone.material), mat_2_0))
+
 # Constraints for this optimization
 con_opt = Constraint[]
 push!(con_opt, Constraint(:(wing.layout.span); pen_sca=pen_scale_constraints, lim_up=35.814)) # [m] Type C wing span constraint
 push!(con_opt, Constraint(:(parm[imlBF, 1]); pen_sca=pen_scale_constraints, lim_up=2400.0)) # [m] Maximum balanced field length for takeoff
 push!(con_opt, Constraint(:(para[iagamV, ipclimbn, 1]); pen_sca=pen_scale_constraints, lim_lo=0.015)) # [rad] Minimum cruise climb angle at TOC
 push!(con_opt, Constraint(:(pare[ieTt3, :, 1]); pen_sca=pen_scale_constraints, lim_up=900.0)) # [K] Maximum compressor outlet temperature
-push!(con_opt, Constraint(:(pare[ieTmet1, :, 1]); pen_sca=pen_scale_constraints, lim_up=1333.33)) # [K] Maximum turbine metal temperature
+push!(con_opt, Constraint(:(pare[ieTmet1, :, 1]); pen_sca=pen_scale_constraints, lim_up=:(parg[igTmetal]), eps_buff=1e-4)) # [K] Maximum turbine metal temperature
 push!(con_opt, Constraint(:(parg[igdfan]); pen_sca=pen_scale_constraints, lim_up=3.0)) # [m] Maximum fan diameter
 push!(con_opt, Constraint(:(parm[imWTO, 1]); pen_sca=pen_scale_constraints, lim_up=:(parg[igWMTO]), eps_buff=1e-4)) # [N] Maximum takeoff weight
 push!(con_opt, Constraint(:(parm[imVfuel, 1]); pen_sca=pen_scale_constraints, lim_up=:(parg[igVfmax]), eps_buff=1e-4)) # [m3] Maximum fuel volume
+
 # Parameters to be optimized (Initial guess(Only for local search), Upper bound, Lower bound, Initial Step Size(Only for local search))
 bound_glob = Parameter[] #Step size = 1/5 of local search span = 1/5 * 1/4 * global search span specified below
 push!(bound_glob, Parameter(:(wing.layout.sweep), 30.0, 60.0, 0.0, 5.0)) # [deg] Wing sweep angle 
@@ -96,8 +120,7 @@ push!(bound_glob, Parameter(:(para[iarcls, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0
 push!(bound_glob, Parameter(:(para[iarclt, ipclimb2:ipdescent4, 1]), 1.0, 2.0, 0.4, 0.15)) # Wing cl ratio of tip to root at cruise
 push!(bound_glob, Parameter(:(para[iaCL, ipclimb2:ipdescent4, 1]), 0.6, 1.00, 0.3, 0.07)) # Wing CL at cruise
 push!(bound_glob, Parameter(:(para[iaalt, ipcruise1, 1]), 10000.0, 20000.0, 4000.0, 1600.0)) # [m] Cruise altitude
-push!(bound_glob, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2)) # Fan PR at cruise 
-push!(bound_glob, Parameter(:(pare[iepilc, ipclimb2:ipdescent4, 1]), 3.0, 10.0, 1.25, 0.4)) # LPC PR at cruise
+push!(bound_glob, Parameter(:(pare[iepif, ipclimb2:ipdescent4, 1]), 2.0, 4.0, 1.25, 0.2)) # Fan PR at cruise
 push!(bound_glob, Parameter(:(pare[iepihc,ipclimb2:ipdescent4, 1]), 10.0, 50.0, 1.25, 1.0)) # HPC PR at cruise
 push!(bound_glob, Parameter(:(pare[ieBPR, ipclimb2:ipdescent4, 1]), 8.0, 30.0, 1.0, 2.0)) # Fan BPR at cruise
 push!(bound_glob, Parameter(:(pare[ieTt4, ipclimb2:ipdescent4, 1]), 1500.0, 2000.0, 1000.0, 100.0)) #[K] Turbine inlet temperature  at cruise
@@ -116,22 +139,30 @@ mkpath(save_dir_actual)
 #### Load the mission information
 miss_off_des = Extract.read_oag(miss_dir)
 seat_cap_keys = sort(collect(keys(miss_off_des)))
+msk = (seat_cap_keys .>= min(seat_capacity_start,seat_capacity_end)) .& (seat_cap_keys .<= max(seat_capacity_start,seat_capacity_end))
+seat_cap_keys = seat_cap_keys[msk]
+if seat_capacity_start >= seat_capacity_end
+    seat_cap_keys = reverse(seat_cap_keys)
+end
+
+# Load an intial aircraft model to be updated later
+ac_bak = quickload_aircraft(par_path_base_ini)
 
 #### Optimization
-for i in task_id:num_tasks:length(seat_cap_keys)
+for i in 1:1:length(seat_cap_keys)
     #### Create inidividual log file for each task
     status_log = joinpath(save_dir_actual, "$(save_key)_$(round(Int,seat_cap_keys[i]))_OptLog.txt")
     open(status_log, "w") do io
         println(io, "seat_capacity,Status")
     end
 
-    #### Make copies for each task
+    #### Make copies for each task (Fresh copy for additional parameters to be pushed into)
     mis_opt_cur = deepcopy(mis_opt)
     con_opt_cur = deepcopy(con_opt)
     bound_glob_cur = deepcopy(bound_glob)
 
-    #### Load a sized default model regardless warm start or not
-    ac = quickload_aircraft(par_path_base_prefix*"$(round(Int,range_warm_start_miss)).jld2") #Not yet implemented the multi-warm-start setup
+    #### Load a sized default model regardless depending on warm start or not
+    ac = deepcopy(ac_bak)
     @assert ac.is_sized[1] #Make sure mission 1 is sized
     
     #### Load off-design missions
@@ -141,7 +172,7 @@ for i in task_id:num_tasks:length(seat_cap_keys)
     #### Update the fueselage radius and layout
     ac.parm[imWperpax,:] .= wei_per_pass_N #Per-passenger weight update (N)
     ac.parg[igWpaymax] = wei_per_pass_N*seat_cap_keys[i] #Maximum payload setup (N)
-    ac.parm[imWpay,:] .= ac.parg[igWpaymax] #This will force the sizing mission to be R1 of the aircraft
+    ac.parm[imWpay,:] .= ac.parg[igWpaymax]*(1-1e-10) #This will force the sizing mission to be R1 of the aircraft
     ac.fuselage.cabin.exit_limit = seat_cap_keys[i] #Exit limit same as the maximum single-class seat layout (num pass)
     ac.fuselage.APU.W = 0.035*ac.parg[igWpaymax]
     ac.fuselage.seat.W = 0.10*ac.parg[igWpaymax]
@@ -158,12 +189,19 @@ for i in task_id:num_tasks:length(seat_cap_keys)
     push!(mis_opt_cur, Requirement(:(parg[igdxeng2wbox]), fuse_radius)) # [m] Corresponding to above for wing box location scaling
     # Optimization parameters
     push!(bound_glob_cur, Parameter(:(parg[igyeng]), 3.0*fuse_radius, 10.0*fuse_radius, 1.75*fuse_radius, 0.2*fuse_radius)) # [m] Span wise engine location
+    # Compute special global bounds for the adaptive design mission
     range_max_off_nmi = maximum(ranges_off_nmi)
     range_min_off_nmi = minimum(ranges_off_nmi)
     (range_max_off_nmi>10.0 && range_min_off_nmi>10.0 && range_max_off_nmi>range_min_off_nmi) || error("OAG minimum input range is required to be larger than 10 nmi")
     range_span_off_nmi = range_max_off_nmi-range_min_off_nmi
     push!(bound_glob_cur, Parameter(:(parm[imRange,1]), range_max_off_nmi*1852.0, (range_max_off_nmi+0.4*range_span_off_nmi)*1852.0, max(10.0,(range_min_off_nmi-0.2*range_span_off_nmi))*1852.0, 0.1*range_span_off_nmi*1852.0)) #[m]
-    ac.parm[imRange,:] .= range_max_off_nmi*1852.0 # This is setup so that if use warm start, the sizing mission still stay with the sepecified starting point above
+    # If first iteration and skip global search and want to overwrite R1 sizing mission
+    if (i != 1)
+        global flag_skip_global = true
+    end
+    if i == 1 && flag_skip_global && overwri_ini_des_ran
+        ac.parm[imRange,:] .= range_max_off_nmi*1852.0 # This is setup so that if use warm start, the sizing mission still stay with the sepecified starting point above
+    end
 
     #### If not running global search, then fetch the warm start variables from the initial aircraft model
     par_opt_cur = deepcopy(bound_glob_cur) #Use directly global bound if starting from global search
@@ -239,4 +277,9 @@ for i in task_id:num_tasks:length(seat_cap_keys)
     end
     save_vec_struct_csv(joinpath(save_dir_actual, "$(save_key)_$(round(Int,seat_cap_keys[i]))_optimized_parameters.csv"), par_opt_found)
     save_jld2(joinpath(save_dir_actual, "$(save_key)_$(round(Int,seat_cap_keys[i]))_optimization_history.jld2"), hist_found)
+
+    #### select whether to update the initial guess for the next round
+    if status_found in success_statuses
+        global ac_bak = ac_copy #rebind, or else keep the unchanged initial inputs
+    end
 end
