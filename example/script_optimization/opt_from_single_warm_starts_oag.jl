@@ -24,12 +24,12 @@ const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
 # Prefix to read warm start data files
-par_path_base_ini = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_3000.jld2") #Also the prefixed for aircraft model
+par_path_base_ini = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_OAGLog230Down_6Seats_TypeC_24Field_V1_/Opti_Jet_NoACT_OAGLog230Down_6Seats_TypeC_24Field_V1_230.jld2") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
 save_key = "Opti_Jet_NoACT_OAGLog230Down_6Seats_TypeC_24Field"
 # Mission extraction directory
-miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OAG_Data_2024/OAG_Data_2024_Refit/OffDesignMissions_50_300_300.csv")
+miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OAG_Data_2024/OAG_Data_2024_Refit_Tail/OffDesignMissions_50_300_300_Tail.csv")
 # Optimization configuration parameters
 flag_skip_global = false #Switch on to skip the global search. Only effective for first iteration.
 overwri_ini_des_ran = false #overwrite the R1 initial guess? Matter to first iteration with skip global search. default to the ac's original sizing mission as intial guess.
@@ -45,6 +45,7 @@ seat_capacity_end = 50
 num_seats_per_row = 6
 wei_per_pass_N = 956.36773 #Weight per passenger [N] (Assume a constant APU, seat, and added weight fractions)
 pass_load_frac_off = 0.825 #Load factor of passengers
+pass_load_frac_tail = 0.825 #The farthest mission payload fraction overwrite
 ### Fuel setup
 idx_fuel = 24 #Eth: 32, Jet: 24 #Assume off-design use the same fuel
 rho_fuel_kgm3 = 817.0 #Eth: 789.0, Jet: 817.0 #kg/m3
@@ -241,6 +242,8 @@ for i in 1:1:length(seat_cap_keys)
     num_miss_off = length(ranges_off_nmi)
     range_off_des_nmi = ranges_off_nmi #[nmi]
     wei_pay_off_des_N = fill(ac.parg[igWpaymax]*pass_load_frac_off, num_miss_off) #[N]
+    idx_max_range = argmax(ranges_off_nmi)
+    wei_pay_off_des_N[idx_max_range] = ac.parg[igWpaymax]*pass_load_frac_tail
     idx_fuel_off_des = fill(Int(idx_fuel), num_miss_off)
     rho_fuel_off_des_kgm3 = fill(rho_fuel_kgm3, num_miss_off)
     hvap_fuel_off_des_Jkg = fill(hvap_fuel_Jkg, num_miss_off)
