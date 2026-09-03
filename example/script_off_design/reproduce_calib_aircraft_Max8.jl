@@ -52,6 +52,10 @@ end
 
 #### Base warm-start airframe
 ac_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_/Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_2400.jld2")
+miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/reference_engine_cycle_CFM5B/Target_Leap1B.csv")
+save_key = "Opti_Jet_NoACT_FixRatio_Max8_210S_M078_Ori"
+
+### Load base aircraft
 ac = quickload_aircraft(ac_dir)
 
 #### Swap the structural material from the generic "TASOPT-Al" placeholder to a real, sourced alloy
@@ -93,10 +97,10 @@ ac.para[iaMach, ipclimbn:ipdescent1, 1] .= 0.78
 #### hard_lpc_hpc_stage_ratio=true, numStageLC=3, numStageHC=10 (matching that calibration).
 numStageLC = 3
 numStageHC = 10
-x_tec = [0.9571535292136226, 0.9331574934539477, 0.9136980491713441, 0.9184146215257285,
-         0.9430533154646358, 0.9366603425373006, 0.9861806122272915, 1318.6185276152835]
-x_eng = [7.695662307091953, 1.7210560910842305, 1.3265929460449386, 1521.6527309810594,
-         0.6297346656329174, 24.797020200249143, 10.009251611881295]
+x_tec = [0.9571535600320473, 0.9331575190947989, 0.9136979092725429, 0.9184147262516498,
+         0.9430534237993433, 0.9366604732362671, 0.9861805387928644, 1318.6189617045563]
+x_eng = [7.681294272995342, 1.7262336411053938, 1.3267208051419304, 1521.9267628050366,
+         0.6305943522572761, 24.806958734955902, 10.025062026479326]
 
 #### Apply the technology level directly (matching UpdAcTecLvl!'s own unpacking)
 pib,epolf,epollc,epolhc,epolht,epollt,etab,Tmetal = x_tec
@@ -119,10 +123,12 @@ println("WMTO (Ton): ", ac.parg[igWMTO]/gee/1000.0)
 println("Wing AR: ", ac.wing.layout.AR)
 
 #### EEDB off-design convergence check (log only, not part of any objective/penalty here)
-miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/reference_engine_cycle_CFM5B/Target_Leap1B.csv")
 df_eedb = CSV.read(miss_dir, DataFrame)
 Fn_N_eedb = Float64.(df_eedb[:, "Thrust (kN)"] .* 1000.0)
-M0 = 0.0; P0 = 101320.0; T0 = 288.2; a0 = 340.2074661144284
+M0 = 0.0
+P0 = 101320.0
+T0 = 288.2
+a0 = 340.2074661144284
 
 println()
 println("--- EEDB off-design convergence check ---")
@@ -134,7 +140,6 @@ end
 
 #### Save the resulting aircraft model
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_V4_CalibReproduced_Max8"
 save_dir_actual = joinpath(save_dir,save_key*"_")
 mkpath(save_dir_actual)
 save_path = joinpath(save_dir_actual, "$(save_key)_$(round(Int,range_R1_nmi)).jld2")
