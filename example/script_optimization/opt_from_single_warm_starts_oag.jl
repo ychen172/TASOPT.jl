@@ -24,14 +24,14 @@ const success_statuses = ObjectiveFactory.success_statuses
 
 #### Optimization parameters
 # Prefix to read warm start data files
-par_path_base_ini = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_OAGLog230Down_6Seats_TypeC_24Field_V1_/Opti_Jet_NoACT_OAGLog230Down_6Seats_TypeC_24Field_V1_230.jld2") #Also the prefixed for aircraft model
+par_path_base_ini = joinpath(__TASOPTroot__,"../example/ModelSaved/Opti_Jet_NoACT_OAGLog230_210_6Seats_TypeC_24Field_Tail085_/Opti_Jet_NoACT_OAGLog230_210_6Seats_TypeC_24Field_Tail085_230.jld2") #Also the prefixed for aircraft model
 # Path to save the models from optimization
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-save_key = "Opti_Jet_NoACT_OAGLog230Down_6Seats_TypeC_24Field"
+save_key = "Opti_Jet_NoACT_OAG_Ml230Dn_6Se_TyC_24Bf_Tail_V1"
 # Mission extraction directory
-miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OAG_Data_2024/OAG_Data_2024_Refit_Tail/OffDesignMissions_50_300_300_Tail.csv")
+miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
 # Optimization configuration parameters
-flag_skip_global = false #Switch on to skip the global search. Only effective for first iteration.
+flag_skip_global = true #Switch on to skip the global search. Only effective for first iteration.
 overwri_ini_des_ran = false #overwrite the R1 initial guess? Matter to first iteration with skip global search. default to the ac's original sizing mission as intial guess.
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
 optimizers = [:GN_CRS2_LM, :LN_NELDERMEAD] # Optimizer choice. [Global,Local]
@@ -45,7 +45,7 @@ seat_capacity_end = 50
 num_seats_per_row = 6
 wei_per_pass_N = 956.36773 #Weight per passenger [N] (Assume a constant APU, seat, and added weight fractions)
 pass_load_frac_off = 0.825 #Load factor of passengers
-pass_load_frac_tail = 0.825 #The farthest mission payload fraction overwrite
+pass_load_frac_tail = 0.850 #The farthest mission payload fraction overwrite
 ### Fuel setup
 idx_fuel = 24 #Eth: 32, Jet: 24 #Assume off-design use the same fuel
 rho_fuel_kgm3 = 817.0 #Eth: 789.0, Jet: 817.0 #kg/m3
@@ -100,7 +100,7 @@ push!(mis_opt, Requirement(:(fuselage.cone.material), mat_2_0))
 
 # Constraints for this optimization
 con_opt = Constraint[]
-push!(con_opt, Constraint(:(wing.layout.span); pen_sca=pen_scale_constraints, lim_up=35.814)) # [m] Type C wing span constraint
+push!(con_opt, Constraint(:(wing.layout.span); pen_sca=pen_scale_constraints, lim_up=35.814)) # [m] Type C wing span constraint Type D: 52.0
 push!(con_opt, Constraint(:(parm[imlBF, 1]); pen_sca=pen_scale_constraints, lim_up=2400.0)) # [m] Maximum balanced field length for takeoff
 push!(con_opt, Constraint(:(para[iagamV, ipclimbn, 1]); pen_sca=pen_scale_constraints, lim_lo=0.015)) # [rad] Minimum cruise climb angle at TOC
 push!(con_opt, Constraint(:(pare[ieTt3, :, 1]); pen_sca=pen_scale_constraints, lim_up=900.0)) # [K] Maximum compressor outlet temperature
