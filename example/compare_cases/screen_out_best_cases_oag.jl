@@ -26,8 +26,9 @@ idx_fuel_case      = 32        # Eth: 32, Jet: 24
 rho_fuel_case_kgm3 = 789.0     # Eth: 789.0, Jet: 817.0 kg/m3
 hvap_fuel_case_Jkg = 918187.9  # Eth: 918187.9, Jet: 358694.0 J/kg
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
+pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_single_warm_starts_oag.jl
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
-miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
+miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
 # Output directory
 save_name     = "Opti_Eth_NoACT_OAG_6Seats_TypeC_V2P_" #sub_folder will be created
 
@@ -70,6 +71,8 @@ for (j, caseKey) in enumerate(caseKeys)
         ranges_off_nmi = miss_off_des[sc].ranges_nmi
         weights_off    = miss_off_des[sc].weights
         wei_pay_off_N  = fill(ac.parg[igWpaymax]*pass_load_frac_off, length(ranges_off_nmi))
+        idx_max_range  = argmax(ranges_off_nmi)
+        wei_pay_off_N[idx_max_range] = ac.parg[igWpaymax]*pass_load_frac_tail
         out = off_design_specified!(ac, idx_fuel_case, rho_fuel_case_kgm3, hvap_fuel_case_Jkg,
                                     ranges_off_nmi, wei_pay_off_N;
                                     mod_ac_inplace=false, itermax=150, constraints=[:WPay,:MWTO,:VolFuel], save_model=false)
@@ -131,26 +134,35 @@ end
 for (idx,idx_best) in enumerate(idx_col_best)
     sc = round(Int, seat_cap_keys_all[idx])
     #
+    try
     src = joinpath(model_dir,
                    caseKeys[idx_best],
                    caseKeys[idx_best] * "$(sc)_design_constraints.csv")
     dst = joinpath(save_dir,
                    save_name * "$(sc)_design_constraints.csv")
     cp(src, dst; force=true)
+    catch
+    end
     #
+    try
     src = joinpath(model_dir,
                    caseKeys[idx_best],
                    caseKeys[idx_best] * "$(sc)_global_bounds.csv")
     dst = joinpath(save_dir,
                    save_name * "$(sc)_global_bounds.csv")
     cp(src, dst; force=true)
+    catch
+    end
     #
+    try
     src = joinpath(model_dir,
                    caseKeys[idx_best],
                    caseKeys[idx_best] * "$(sc)_mission_requirements.csv")
     dst = joinpath(save_dir,
                    save_name * "$(sc)_mission_requirements.csv")
     cp(src, dst; force=true)
+    catch
+    end
     #
     try
         src = joinpath(model_dir,
@@ -172,12 +184,15 @@ for (idx,idx_best) in enumerate(idx_col_best)
     catch
     end
     #
+    try
     src = joinpath(model_dir,
                    caseKeys[idx_best],
                    caseKeys[idx_best] * "$(sc)_OptLog.txt")
     dst = joinpath(save_dir,
                    save_name * "$(sc)_OptLog.txt")
     cp(src, dst; force=true)
+    catch
+    end
     #
     try
         src = joinpath(model_dir,

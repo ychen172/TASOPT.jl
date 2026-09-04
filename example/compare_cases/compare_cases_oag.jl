@@ -26,9 +26,10 @@ idx_fuel_case      = [24       ,32       ,24       ,32       ] # Jet, Eth ,32   
 rho_fuel_case_kgm3 = [817.0    ,789.0    ,817.0    ,789.0    ] # kg/m3.   ,789.0    ,817.0
 hvap_fuel_case_Jkg = [358694.0 ,918187.9 ,358694.0 ,918187.9 ] # J/kg     ,918187.9 ,358694.0
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
+pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_single_warm_starts_oag.jl
 constraints        = [[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel]] #Constraints for off-design
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
-miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
+miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
 # Output directory
 save_dir      = "../ModelProcessed"
 save_name     = "OAG_Jet_Eth_WingSpanE" #sub_folder will be created
@@ -90,6 +91,8 @@ for (j, caseKey) in enumerate(caseKeys)
         ranges_off_nmi = miss_off_des[sc].ranges_nmi
         weights_off    = miss_off_des[sc].weights
         wei_pay_off_N  = fill(ac.parg[igWpaymax]*pass_load_frac_off, length(ranges_off_nmi))
+        idx_max_range  = argmax(ranges_off_nmi)
+        wei_pay_off_N[idx_max_range] = ac.parg[igWpaymax]*pass_load_frac_tail
         out = off_design_specified!(ac, idx_fuel_case[j], rho_fuel_case_kgm3[j], hvap_fuel_case_Jkg[j],
                                     ranges_off_nmi, wei_pay_off_N;
                                     mod_ac_inplace=false, itermax=iter_max, constraints=constraints[j], save_model=false)
