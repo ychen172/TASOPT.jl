@@ -30,3 +30,5 @@ example/Movie/*.csv
 *.bak
 *.zip
 *.sh
+
+temp_*.jl
