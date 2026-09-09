@@ -19,20 +19,21 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Jet_NoACT_OAG_6Seats_TypeC_V2_","Opti_Eth_NoACT_OAG_6Seats_TypeC_V3P_","Opti_Jet_NoACT_OAG_6Seats_TypeE_V1_","Opti_Eth_NoACT_OAG_6Seats_TypeE_V1_"]
-caseNames  = ["Jet Fuel"                           ,"Ethanol"                             ,"Jet Fuel with Type E Span"          ,"Ethanol with Type E Span"           ]
+caseKeys   = ["Opti_Eth_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_","Opti_Eth_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_","Opti_Eth_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V3_"]
+caseNames  = ["Ethanol 4 seats"                            ,"Ethanol 6 seats"                            ,"Ethanol 8 seats"                            ,"Jet Fuel 4 seats"                           ,"Jet Fuel 6 seats"                           ,"Jet Fuel 8 seats"                           ]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
-idx_fuel_case      = [24       ,32       ,24       ,32       ] # Jet, Eth ,32       ,24
-rho_fuel_case_kgm3 = [817.0    ,789.0    ,817.0    ,789.0    ] # kg/m3.   ,789.0    ,817.0
-hvap_fuel_case_Jkg = [358694.0 ,918187.9 ,358694.0 ,918187.9 ] # J/kg     ,918187.9 ,358694.0
+idx_fuel_case      = [32       ,32       ,32       ,24       ,24       ,24       ] # Jet, Eth ,32       ,24
+rho_fuel_case_kgm3 = [789.0    ,789.0    ,789.0    ,817.0    ,817.0    ,817.0    ] # kg/m3.   ,789.0    ,817.0
+hvap_fuel_case_Jkg = [918187.9 ,918187.9 ,918187.9 ,358694.0 ,358694.0 ,358694.0 ] # J/kg     ,918187.9 ,358694.0
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
 pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_single_warm_starts_oag.jl
-constraints        = [[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel],[:WPay,:MWTO,:VolFuel]] #Constraints for off-design
+constraints        = fill([:WPay,:MWTO,:VolFuel],6) #Constraints for off-design
+case_range_lst     = []#[[50,140] ,[150,230],[240,240],[50,140],[150,250],[260,300]]
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
 miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
 # Output directory
 save_dir      = "../ModelProcessed"
-save_name     = "OAG_Jet_Eth_WingSpanE" #sub_folder will be created
+save_name     = "OAG_Jet_Eth_StillFull_Compare" #sub_folder will be created
 iter_max      = 150 #max iteration for off-design calculation
 # Fields to read out for the design (R1) mission
 const fields = [:(parm[imRange,1]),:(parm[imPFEI,1]),:(parm[imVfuel,1]),:(parg[igVfmax]),
@@ -70,6 +71,13 @@ end
 println("Available seat capacities per case:")
 for (caseName,avail) in zip(caseNames,seat_caps_avail)
     println("  $(caseName): $(avail)")
+end
+if length(case_range_lst)>0
+    for idx_case in eachindex(caseKeys)
+        seat_temp = seat_caps_avail[idx_case]
+        msk = (seat_temp .>= case_range_lst[idx_case][1]) .& (seat_temp .<= case_range_lst[idx_case][2])
+        seat_caps_avail[idx_case] = seat_temp[msk]
+    end
 end
 
 #### Initialization
