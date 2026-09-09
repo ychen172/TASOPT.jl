@@ -13,12 +13,13 @@ using .Extract: read_oag,extract_combustion_inputs
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = joinpath(__TASOPTroot__,"../example/ModelSaved")
-caseKey   = "Opti_Jet_NoACT_OAG_6Seats_TypeC_V4_"
+caseKey   = "Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_"
 idx_fuel_case      = 24
 rho_fuel_case_kgm3 = 817.0
 hvap_fuel_case_Jkg = 358694.0
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
-miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024.csv")
+pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_multi_warm_starts_para_oag_Rerun.jl
+miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
 # Output folder name (within model_dir)
 save_name     = "Combustor_$(caseKey)" #sub_folder will be created
 
@@ -47,9 +48,10 @@ for (i, sc) in enumerate(seat_caps_avail)
 
     # Run the OAG-weighted off-design missions (2nd mission) for this seat capacity
     ranges_off_nmi = miss_off_des[sc].ranges_nmi
-    weights_off    = miss_off_des[sc].weights # This is the statistic weighting between missions instead of any physical weight
     wei_pay_off_N  = fill(ac.parg[igWpaymax]*pass_load_frac_off, length(ranges_off_nmi))
-    
+    idx_max_range  = argmax(ranges_off_nmi)
+    wei_pay_off_N[idx_max_range] = ac.parg[igWpaymax]*pass_load_frac_tail
+
     # Test the off-design range one by one
     for idx_off in eachindex(ranges_off_nmi)
         ac_cur = deepcopy(ac)
