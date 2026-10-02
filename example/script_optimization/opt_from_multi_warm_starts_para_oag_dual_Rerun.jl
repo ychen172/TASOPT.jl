@@ -44,11 +44,11 @@ const success_statuses = ObjectiveFactory.success_statuses
 # Previous generation to warm-start from, and the key for this generation's output.
 # For the very first rerun, prev_save_key should point at the original opt_from_multi_warm_starts_para_oag.jl output.
 save_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/")
-prev_save_key = "Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V1" # Bump these two by hand each invocation
-this_save_key = "Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V2P"
+prev_save_key = "Opti_Eth_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3" # Bump these two by hand each invocation
+this_save_key = "Opti_Du31_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V1"
 flag_cross_warm_start = false # true: adjacent-neighbor cross warm-start. false: self warm-start (own previous result)
 # Mission extraction directory
-miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
+miss_dir = joinpath(__TASOPTroot__,"../example/ModelSaved/OffDesignMissions_50_300_300_Tail.csv")
 # Optimization configuration parameters
 flag_skip_global = true #Switch on to skip the global search if confident that warm start model can converge
 max_iter_sizing = 150 # Maximum iterations for TASOPT sizing
@@ -61,9 +61,12 @@ num_seats_per_row = 6
 wei_per_pass_N = 956.36773 #Weight per passenger [N] (Assume a constant APU, seat, and added weight fractions)
 pass_load_frac_off = 0.825 #Load factor of passengers
 pass_load_frac_tail = 0.850 #The farthest mission payload fraction overwrite
-idx_fuel = 24 #Eth: 32, Jet: 24 #Assume off-design use the same fuel
-rho_fuel_kgm3 = 817.0 #Eth: 789.0, Jet: 817.0 #kg/m3
-hvap_fuel_Jkg = 358694.0 #Eth: 918187.9, Jet: 358694.0 #J/kg
+idx_fuel = 322431 #C2H5OHJetA31Blend (primary fuel, used throughout climb/cruise; off-design uses the same fuel too)
+rho_fuel_kgm3 = 805.368 #kg/m3, 40.7% ethanol / 59.3% Jet-A by mass
+hvap_fuel_Jkg = 586408.0 #J/kg, 40.7% ethanol / 59.3% Jet-A by mass
+idx_fuel_2nd = 32 #Secondary fuel (pure ethanol), switched to for descent (D1-D5) only
+rho_fuel_2nd_kgm3 = 789.0 #kg/m3, pure ethanol
+hvap_fuel_2nd_Jkg = 918187.9 #J/kg, pure ethanol
 objVar_des=ObjectiveVariable(:(parm[imWfuel,1]))
 objVar_off=ObjectiveVariable(:(parm[imWfuel,2]))
 pen_scale_PFEI = 2e5 #The scaling for penalty when using fuel burned per mission compared to the case that use PFEI
@@ -79,6 +82,11 @@ push!(mis_opt, Requirement(:(options.ifuel), Int(idx_fuel)))
 push!(mis_opt, Requirement(:(parg[igrhofuel]), rho_fuel_kgm3))
 push!(mis_opt, Requirement(:(pare[iehvap, :, 1]), hvap_fuel_Jkg))
 push!(mis_opt, Requirement(:(pare[iehvapcombustor, :, 1]), hvap_fuel_Jkg))
+push!(mis_opt, Requirement(:(options.ifuel2nd), Int(idx_fuel_2nd)))
+push!(mis_opt, Requirement(:(parg[igrhofuel2nd]), rho_fuel_2nd_kgm3))
+push!(mis_opt, Requirement(:(parg[ighvap2nd]), hvap_fuel_2nd_Jkg))
+push!(mis_opt, Requirement(:(pare[iePhases2ndFuel, ipstatic:ipcruise2, 1]), 0.0)) # Reset: primary (blend) fuel everywhere by default
+push!(mis_opt, Requirement(:(pare[iePhases2ndFuel, ipdescent1:ipdescentn, 1]), 1.0)) # Switch to secondary (ethanol) fuel for D1-D5 only
 push!(mis_opt, Requirement(:(options.has_ACT_fuel), false)) # Whether to allow additional center fuel tank (ACT)
 push!(mis_opt, Requirement(:(options.compensate_ACT), false)) # Whether to increase the aircraft length to accmondate for the cargo space taken by ACT
 push!(mis_opt, Requirement(:(fuse_tank.ACT_eta_vol), 1.00)) # Volumetric efficiency of ACT fuel tank
