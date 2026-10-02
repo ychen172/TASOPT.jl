@@ -39,7 +39,8 @@ function tfwrap!(ac, case::String, imission::Int64, ip::Int64, initializes_engin
     pare[ierhofuel_driven,ip] = parg[igrhofuel] #(kg/m3)
 
     #Run engine
-    if case == "design"
+    try
+     if case == "design"
         opt_calc_call = CalcMode.Sizing
         opt_cooling = CoolingOpt.FixedCoolingFlowRatio
         if (iterw == 1 || (initializes_engine))
@@ -107,12 +108,13 @@ function tfwrap!(ac, case::String, imission::Int64, ip::Int64, initializes_engin
             pare[iefc, jp] = pare[iefc, ip]
         end
     end
-
-    #Conditionally assign back the base/primary fuel before exit
-    if (flagSwitchFuel>0.5)
-        options.ifuel = ifuelBase #Switch back
-        parg[igrhofuel] = rhoFuelBase
-        pare[iehvap,ip] = hvapBase
-        pare[iehvapcombustor,ip] = hvapcombustorBase
+    finally
+        #Conditionally assign back the base/primary fuel before exit (always runs, even if tfcalc! throws)
+        if (flagSwitchFuel>0.5)
+            options.ifuel = ifuelBase #Switch back
+            parg[igrhofuel] = rhoFuelBase
+            pare[iehvap,ip] = hvapBase
+            pare[iehvapcombustor,ip] = hvapcombustorBase
+        end
     end
 end
