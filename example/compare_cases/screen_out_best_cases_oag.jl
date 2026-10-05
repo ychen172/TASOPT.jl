@@ -20,17 +20,17 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Eth_NoACT_OAG_6Seats_TypeC_V1_","Opti_Eth_NoACT_OAG_6Seats_TypeC_V2_"]
+caseKeys   = ["Opti_Du31_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V1_","Opti_Du31_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V2P_"]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
-idx_fuel_case      = 32        # Eth: 32, Jet: 24
-rho_fuel_case_kgm3 = 789.0     # Eth: 789.0, Jet: 817.0 kg/m3
-hvap_fuel_case_Jkg = 918187.9  # Eth: 918187.9, Jet: 358694.0 J/kg
+idx_fuel_case      = 322431    # Eth: 32, Jet: 24
+rho_fuel_case_kgm3 = 805.368   # Eth: 789.0, Jet: 817.0 kg/m3
+hvap_fuel_case_Jkg = 586408.0  # Eth: 918187.9, Jet: 358694.0 J/kg
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
 pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_single_warm_starts_oag.jl
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
-miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
+miss_dir = joinpath(@__DIR__,"../ModelSaved/OffDesignMissions_50_300_300_Tail.csv")
 # Output directory
-save_name     = "Opti_Eth_NoACT_OAG_6Seats_TypeC_V2P_" #sub_folder will be created
+save_name     = "Opti_Du31_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V2_" #sub_folder will be created
 
 #### Create save directory
 save_dir  = joinpath(model_dir,save_name)

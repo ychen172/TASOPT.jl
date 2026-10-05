@@ -19,21 +19,21 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Eth_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_","Opti_Eth_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_","Opti_Eth_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V3_"]
-caseNames  = ["Ethanol 4 seats"                            ,"Ethanol 6 seats"                            ,"Ethanol 8 seats"                            ,"Jet Fuel 4 seats"                           ,"Jet Fuel 6 seats"                           ,"Jet Fuel 8 seats"                           ]
+caseKeys   = ["Opti_Du31_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V2_","Opti_Eth_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_"]
+caseNames  = ["Dual Fuel 40.7 Split"                        ,"Ethanol"]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
-idx_fuel_case      = [32       ,32       ,32       ,24       ,24       ,24       ] # Jet, Eth ,32       ,24
-rho_fuel_case_kgm3 = [789.0    ,789.0    ,789.0    ,817.0    ,817.0    ,817.0    ] # kg/m3.   ,789.0    ,817.0
-hvap_fuel_case_Jkg = [918187.9 ,918187.9 ,918187.9 ,358694.0 ,358694.0 ,358694.0 ] # J/kg     ,918187.9 ,358694.0
+idx_fuel_case      = [322431   ,32       ] # Eth,Jet,D40_7: 32       ,24       ,322431 
+rho_fuel_case_kgm3 = [805.368  ,789.0    ] # kg/m3.       : 789.0    ,817.0    ,805.368
+hvap_fuel_case_Jkg = [586408.0 ,918187.9 ] # J/kg         : 918187.9 ,358694.0 ,586408.0
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
 pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_single_warm_starts_oag.jl
-constraints        = fill([:WPay,:MWTO,:VolFuel],6) #Constraints for off-design
+constraints        = fill([:WPay,:MWTO,:VolFuel],2) #Constraints for off-design
 case_range_lst     = []#[[50,140] ,[150,230],[240,240],[50,140],[150,250],[260,300]]
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
-miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
+miss_dir = joinpath(@__DIR__,"../ModelSaved/OffDesignMissions_50_300_300_Tail.csv")
 # Output directory
 save_dir      = "../ModelProcessed"
-save_name     = "OAG_Jet_Eth_StillFull_Compare" #sub_folder will be created
+save_name     = "OAG_Dual_Compare4" #sub_folder will be created
 iter_max      = 150 #max iteration for off-design calculation
 # Fields to read out for the design (R1) mission
 const fields = [:(parm[imRange,1]),:(parm[imPFEI,1]),:(parm[imVfuel,1]),:(parg[igVfmax]),
