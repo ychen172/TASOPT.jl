@@ -33,6 +33,11 @@ P0 = 101320.0 #Pa
 T0 = 288.2 #K
 a0 = 340.2074661144284 #m/s
 num_SLS_points = 50 # Number of sea-level-static, no-offtake points to sweep between the min and max off-design thrust
+# Specified SLS fuel case. Not used for determining off-design thrust range, but specifically for SLS sweep run given an engine design.
+# Overwrite fuel for copied ac model. Just enough to get the engine run using that fuel.
+sls_fuel_name = "Eth" #Used only to tag the output filename
+sls_idx_fuel = 32 #Pure ethanol. C2H5OHJetA31Blend is 322431
+sls_hvap_fuel_Jkg = 918187.9 #Pure ethanol. C2H5OHJetA31Blend is 586408.0
 
 #### Function defintion
 """
@@ -111,11 +116,15 @@ for sc in seat_cap_keys_all
     ran_Lst_off_nmi = miss_off_des[sc].ranges_nmi
     #### Get the thrust variation
     Fn_min_N, Fn_max_N = extract_max_min_des_offdes_thrust(ac,ran_Lst_off_nmi,pass_bulk_frac,pass_tail_frac)
+    #### Override the fuel used for the SLS sweep itself (independent of the design/off-design primary fuel above)
+    ac_fuel = deepcopy(ac)
+    ac_fuel.options.ifuel = sls_idx_fuel
+    ac_fuel.pare[iehvapcombustor,ipcruise1,1] = sls_hvap_fuel_Jkg
     #### Get the off-design engine performance sweep at SLS
-    res_cur = sweep_engine_offdesign(Fn_min_N,Fn_max_N,num_SLS_points,ac,M0,P0,T0,a0;zero_offtake=true)
+    res_cur = sweep_engine_offdesign(Fn_min_N,Fn_max_N,num_SLS_points,ac_fuel,M0,P0,T0,a0;zero_offtake=true)
     WAR = fill(0.0, length(res_cur.Fn_Lst_Act_kN)) #Default water to air ratio
     #### Save the off-design engine performance
-    savePath = joinpath(saveDirFull, splitext(basename(matches[1]))[1]*"_CombSLS.csv")
+    savePath = joinpath(saveDirFull, splitext(basename(matches[1]))[1]*"_CombSLS_$(sls_fuel_name).csv")
     open(savePath, "w") do io
         println(io, "Thrust[kN],Pt3[psi],Pt4[psi],Tt3[R],Tt4[R],Wf[lbm/s],W3[lbm/s],WAR[m]")
         for idx in eachindex(res_cur.Fn_Lst_Act_kN)
