@@ -19,12 +19,12 @@ using Glob
 # Input case names - OAG seat-capacity sweep
 model_dir = joinpath(__TASOPTroot__,"../example/ModelSaved")
 # Sized Aircraft Model Directory
-caseDir = "Opti_Jet_NoACT_OAG_MI_Tail_V3_"
-caseKey = "Opti_Jet_NoACT_OAG_Ml_"
+caseDir = "Opti_Du31_NoACT_OAG_Ml_Tail_V2_"
+caseKey = "Opti_Du31_NoACT_OAG_Ml_"
 # Offdesign Mission Directory
-miss_dir = joinpath(model_dir,"OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
+miss_dir = joinpath(model_dir,"OffDesignMissions_50_300_300_Tail.csv")
 # Save Directory
-saveDir = "Combustor_opt_SLS/"
+saveDir = "Combustor_Opti_Du31_NoACT_OAG_MI_SLS_Du31_/"
 # Parameters
 pass_bulk_frac = 0.825 
 pass_tail_frac = 0.850 #For farthest distance
@@ -35,9 +35,9 @@ a0 = 340.2074661144284 #m/s
 num_SLS_points = 50 # Number of sea-level-static, no-offtake points to sweep between the min and max off-design thrust
 # Specified SLS fuel case. Not used for determining off-design thrust range, but specifically for SLS sweep run given an engine design.
 # Overwrite fuel for copied ac model. Just enough to get the engine run using that fuel.
-sls_fuel_name = "Eth" #Used only to tag the output filename
-sls_idx_fuel = 32 #Pure ethanol. C2H5OHJetA31Blend is 322431
-sls_hvap_fuel_Jkg = 918187.9 #Pure ethanol. C2H5OHJetA31Blend is 586408.0
+sls_fuel_name     = "Du31"   #"Eth"    , "Du31" for output filename
+sls_idx_fuel      = 322431   # 32      ,  322431
+sls_hvap_fuel_Jkg = 586408.0 # 918187.9,  586408.0
 
 #### Function defintion
 """

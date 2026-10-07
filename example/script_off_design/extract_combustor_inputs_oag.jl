@@ -13,13 +13,13 @@ using .Extract: read_oag,extract_combustion_inputs
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = joinpath(__TASOPTroot__,"../example/ModelSaved")
-caseKey   = "Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_"
-idx_fuel_case      = 24
-rho_fuel_case_kgm3 = 817.0
-hvap_fuel_case_Jkg = 358694.0
+caseKey   = "Opti_Du31_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V2_"
+idx_fuel_case      = 322431
+rho_fuel_case_kgm3 = 805.368
+hvap_fuel_case_Jkg = 586408.0
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
 pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_multi_warm_starts_para_oag_Rerun.jl
-miss_dir = joinpath(@__DIR__,"../ModelSaved/OAG_Data_2024/OAG_Data_2024_Tail/OffDesignMissions_50_300_300_Tail.csv")
+miss_dir = joinpath(@__DIR__,"../ModelSaved/OffDesignMissions_50_300_300_Tail.csv")
 # Output folder name (within model_dir)
 save_name     = "Combustor_$(caseKey)" #sub_folder will be created
 
