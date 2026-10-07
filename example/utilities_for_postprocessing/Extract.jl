@@ -326,6 +326,7 @@ function extract_combustion_inputs(ac,idx_miss::Int,save_name::AbstractString,sa
     #### Extract combustor input parameters
     phase_miss = ["C1","C2","C3","C4","C5","R1","R2","D1","D2","D3","D4","D5"]
     time_miss = ac.para[iatime, ipclimb1:ipdescentn, idx_miss]  #[s] Time of the phases
+    alt_miss = ac.para[iaalt, ipclimb1:ipdescentn, idx_miss] .* 3.28084 #[ft] Altitude of the phases
     thrust_miss = ac.pare[ieFe, ipclimb1:ipdescentn, idx_miss] ./ 1000.0 #[kN] Mission thrust
     Pt3_miss = ac.pare[iept3, ipclimb1:ipdescentn, idx_miss] ./ 6894.757 #[psi] combustor inlet pressure
     Pt4_miss = ac.pare[iept4, ipclimb1:ipdescentn, idx_miss] ./ 6894.757 #[psi] combustor outlet pressure
@@ -339,6 +340,7 @@ function extract_combustion_inputs(ac,idx_miss::Int,save_name::AbstractString,sa
     mission_param = DataFrame()
     mission_param[!, Symbol("Phase")] = phase_miss
     mission_param[!, Symbol("Time[s]")] = time_miss
+    mission_param[!, Symbol("Alt[ft]")] = alt_miss
     mission_param[!, Symbol("Thrust[kN]")] = thrust_miss
     mission_param[!, Symbol("Pt3[psi]")] = Pt3_miss
     mission_param[!, Symbol("Pt4[psi]")] = Pt4_miss
