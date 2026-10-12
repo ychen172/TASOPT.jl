@@ -29,7 +29,7 @@ function update_fuse!(ac, imission::Int64 = 1)
     dxshell2conend =fuse.layout.x_cone_end - fuse.layout.x_pressure_shell_aft
     dxshell2apu = fuse.APU.x - fuse.layout.x_pressure_shell_aft
     dxhbox2conend = fuse.layout.x_cone_end - htail.layout.box_x
-    dxvbox2conend = fuse.layout.x_cone_end - vtail.layout.box_x
+    dxvbox2conend = fuse.layout.x_cone_end - vtail.layout.box_x #Fallback offset, used only if root_chord isn't sized yet
 
     if parg[igxftankaft] == 0.0 #if there is not a rear tank
         dxcyl2shellaft = fuse.layout.x_pressure_shell_aft - fuse.layout.x_end_cylinder
@@ -48,7 +48,9 @@ function update_fuse!(ac, imission::Int64 = 1)
     fuse.HPE_sys.r = [fuse.layout.x_cone_end * 0.52484, 0.0,0.0]#TODO: address this
     
     htail.layout.box_x = fuse.layout.x_cone_end - dxhbox2conend
-    vtail.layout.box_x = fuse.layout.x_cone_end - dxvbox2conend
+    vtail.layout.box_x = (vtail.layout.root_chord == 0.0) ? 
+                         fuse.layout.x_cone_end - dxvbox2conend :
+                         fuse.layout.x_cone_end - 0.5*vtail.layout.root_chord # Place vtail as far aft as physically possible
     
     parg[igxeng    ] =  wing.layout.box_x - dxeng2wbox
 
@@ -127,7 +129,7 @@ function update_fuse_for_pax!(ac)
     dxshell2conend = fuse.layout.x_cone_end - fuse.layout.x_pressure_shell_aft #Distance from shell2 to conend
     dxshell2apu = fuse.APU.x - fuse.layout.x_pressure_shell_aft #Distance from shell2 to APU
     dxhbox2conend = fuse.layout.x_cone_end - htail.layout.box_x #Distance from conend to xhbox
-    dxvbox2conend = fuse.layout.x_cone_end - vtail.layout.box_x #Distance from conend to xvbox
+    dxvbox2conend = fuse.layout.x_cone_end - vtail.layout.box_x #Fallback offset, used only if root_chord isn't sized yet
     #Fraction of cabin length at which wing is located
     wbox_cabin_frac =  (wing.layout.box_x- fuse.layout.x_start_cylinder )/(fuse.layout.x_end_cylinder - fuse.layout.x_start_cylinder) 
 
@@ -157,7 +159,9 @@ function update_fuse_for_pax!(ac)
     fuse.HPE_sys.r = [fuse.layout.x_cone_end * 0.52484, 0.0, 0.0] #TODO: address this
     
     htail.layout.box_x = fuse.layout.x_cone_end - dxhbox2conend
-    vtail.layout.box_x = fuse.layout.x_cone_end - dxvbox2conend
+    vtail.layout.box_x = (vtail.layout.root_chord == 0.0) ? 
+                         fuse.layout.x_cone_end - dxvbox2conend :
+                         fuse.layout.x_cone_end - 0.5*vtail.layout.root_chord # Place vtail as far aft as physically possible
     
     parg[igxeng    ] =  wing.layout.box_x - dxeng2wbox #Move engine
 
@@ -209,7 +213,7 @@ function update_fuse_for_ACT!(ac, imission::Int64 = 1)
     dxapu2end = fuse.layout.x_end - fuse.APU.x #Distance from APU to end
     # Cone to tail box
     dxhbox2conend = fuse.layout.x_cone_end - htail.layout.box_x #Distance from conend to xhbox
-    dxvbox2conend = fuse.layout.x_cone_end - vtail.layout.box_x #Distance from conend to xvbox
+    dxvbox2conend = fuse.layout.x_cone_end - vtail.layout.box_x #Fallback offset, used only if root_chord isn't sized yet
     # Cylinder to wing box
     wbox_cabin_frac =  (wing.layout.box_x- fuse.layout.x_start_cylinder )/(fuse.layout.x_end_cylinder - fuse.layout.x_start_cylinder)
     # Wing box to engine
@@ -233,7 +237,9 @@ function update_fuse_for_ACT!(ac, imission::Int64 = 1)
     fuse.layout.x_end = fuse.APU.x + dxapu2end
     # Cone to tail box
     htail.layout.box_x = fuse.layout.x_cone_end - dxhbox2conend
-    vtail.layout.box_x = fuse.layout.x_cone_end - dxvbox2conend
+    vtail.layout.box_x = (vtail.layout.root_chord == 0.0) ? 
+                         fuse.layout.x_cone_end - dxvbox2conend :
+                         fuse.layout.x_cone_end - 0.5*vtail.layout.root_chord # Place vtail as far aft as physically possible
     # Cylinder to wing box
     wing.layout.box_x = fuse.layout.x_start_cylinder + wbox_cabin_frac * (fuse.layout.x_end_cylinder - fuse.layout.x_start_cylinder)
     # Wing box to engine

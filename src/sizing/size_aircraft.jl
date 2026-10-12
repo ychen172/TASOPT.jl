@@ -563,11 +563,8 @@ function _size_aircraft!(ac; itermax=35,
         vtail.layout.span = bv2
         vtail.layout.ηs = vtail.layout.ηo
 
-        # Correct the vertical tail location if the trailing edge of vertical tail were sitting behind the tail cone
-        dx_vtailEnd_to_coneEnd = vtail.layout.box_x + 0.5*vtail.layout.root_chord - fuse.layout.x_cone_end
-        if dx_vtailEnd_to_coneEnd > 0 #If your vtail were not physically attached to fuselage, there is gonna a problem
-            vtail.layout.box_x -= dx_vtailEnd_to_coneEnd #This will constrain how low AR for vtail can be. If too low, vtail moment arm has to decrease. 
-        end
+        # Place the vertical tail box as far aft as physically possible. Also catch the case where vertical tail stick out from the back of aircraft.
+        vtail.layout.box_x = fuse.layout.x_cone_end - 0.5*vtail.layout.root_chord
 
         # HT weight
         htail.weight, _ = wing_weights!(htail, poh, htail.outboard.λ, htail.inboard.λ,
