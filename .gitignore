@@ -31,4 +31,6 @@ example/Movie/*.csv
 *.zip
 *.sh
 
+literature/
+
 temp_*.jl
