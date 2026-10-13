@@ -42,13 +42,14 @@ function eta_at_phase(ac, ip::Int)
 end
 
 #### Helper: extract cycle diagnostics (overall pressure ratio, Tt4/Tt2 temperature ratio,
-#### total turbine cooling air fraction, bypass ratio) at a given flight phase index
+#### total turbine cooling air fraction, bypass ratio, combustion-gas specific heat) at a given flight phase index
 function cycle_diag_at_phase(ac, ip::Int)
     OPR     = ac.pare[iepid, ip, 1]*ac.pare[iepif, ip, 1]*ac.pare[iepilc, ip, 1]*ac.pare[iepihc, ip, 1]
     Tt4_Tt2 = ac.pare[ieTt4, ip, 1]/ac.pare[ieTt2, ip, 1]
     cool_frac = ac.pare[ieepsc1, ip, 1] + ac.pare[ieepsc2, ip, 1] + ac.pare[ieepsc3, ip, 1] + ac.pare[ieepsc4, ip, 1]
     BPR = ac.pare[ieBPR, ip, 1]
-    return OPR, Tt4_Tt2, cool_frac, BPR
+    cpt4 = ac.pare[iecpt4, ip, 1]
+    return OPR, Tt4_Tt2, cool_frac, BPR, cpt4
 end
 
 #### Pre-allocate per-case result containers (one vector per case, filled over available ranges)
@@ -69,6 +70,8 @@ coolfrac_TO_per_case    = [Float64[] for _ in case_keys]
 BPR_TO_per_case         = [Float64[] for _ in case_keys]
 specpow_per_case        = [Float64[] for _ in case_keys] #Specific power: P_Jet per unit total mass flow, [kW/(kg/s)]
 specpow_TO_per_case     = [Float64[] for _ in case_keys]
+cpt4_per_case           = [Float64[] for _ in case_keys] #Combustion-gas specific heat at Tt4, [J/(kg*K)]
+cpt4_TO_per_case        = [Float64[] for _ in case_keys]
 
 #### Loop through each case to extract engine performance over cruise and takeoff
 for (j, key_j) in enumerate(case_keys)
@@ -92,10 +95,10 @@ for (j, key_j) in enumerate(case_keys)
         println("$(key_j)*$(ran_i) loaded")
         # Extract engine performance at cruise 1 condition
         eta_thermal, eta_propulsion, eta_total, specpow = eta_at_phase(ac, ipcruise1)
-        OPR, Tt4Tt2, coolfrac, BPR = cycle_diag_at_phase(ac, ipcruise1)
+        OPR, Tt4Tt2, coolfrac, BPR, cpt4 = cycle_diag_at_phase(ac, ipcruise1)
         # Extract engine performance at rotate condition
         eta_thermal_TO, eta_propulsion_TO, eta_total_TO, specpow_TO = eta_at_phase(ac, iprotate)
-        OPR_TO, Tt4Tt2_TO, coolfrac_TO, BPR_TO = cycle_diag_at_phase(ac, iprotate)
+        OPR_TO, Tt4Tt2_TO, coolfrac_TO, BPR_TO, cpt4_TO = cycle_diag_at_phase(ac, iprotate)
         # Process and collect engine efficiencies and cycle diagnostics
         push!(rans_per_case[j], ran_i)
         push!(eta_thermal_per_case[j], eta_thermal)
@@ -114,6 +117,8 @@ for (j, key_j) in enumerate(case_keys)
         push!(BPR_TO_per_case[j], BPR_TO)
         push!(specpow_per_case[j], specpow/1000.0) #[kW/(kg/s)]
         push!(specpow_TO_per_case[j], specpow_TO/1000.0)
+        push!(cpt4_per_case[j], cpt4)
+        push!(cpt4_TO_per_case[j], cpt4_TO)
     end
 
 end
@@ -182,3 +187,11 @@ plot_cases_specified("Design/R1 Range [nmi]", "Specific Power at Cruise [kW/(kg/
 plot_cases_specified("Design/R1 Range [nmi]", "Specific Power at Rotate [kW/(kg/s)]",
                      rans_per_case, specpow_TO_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_SpecificPower_Rotate.png"))
+
+# Combustion-gas specific heat (cpt4) against specific power, at cruise and rotate
+plot_cases_specified("Specific Power at Cruise [kW/(kg/s)]", "cpt4 at Cruise [J/(kg*K)]",
+                     specpow_per_case, cpt4_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_cpt4_vs_SpecificPower.png"))
+plot_cases_specified("Specific Power at Rotate [kW/(kg/s)]", "cpt4 at Rotate [J/(kg*K)]",
+                     specpow_TO_per_case, cpt4_TO_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_cpt4_vs_SpecificPower_Rotate.png"))

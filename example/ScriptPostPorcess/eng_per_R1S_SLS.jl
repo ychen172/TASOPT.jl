@@ -40,6 +40,7 @@ eta_thermal_per_case = [Float64[] for _ in case_keys]
 OPR_per_case          = [Float64[] for _ in case_keys]
 BPR_per_case          = [Float64[] for _ in case_keys]
 specpowPJet_per_case  = [Float64[] for _ in case_keys] #Specific power: P_Jet per unit TOTAL (core+bypass) mass flow, [kW/(kg/s)]
+cpt4_per_case         = [Float64[] for _ in case_keys] #Combustion-gas specific heat at Tt4, [J/(kg*K)]
 
 #### Loop through each case to extract engine performance for SLS
 for (j, key_j) in enumerate(case_keys)
@@ -92,6 +93,7 @@ for (j, key_j) in enumerate(case_keys)
         push!(OPR_per_case[j], res.OPR)
         push!(BPR_per_case[j], res.BPR)
         push!(specpowPJet_per_case[j], specific_power/1000.0) #[kW/(kg/s)], P_Jet per unit total mass flow
+        push!(cpt4_per_case[j], res.cpt4)
     end
 end
 
@@ -121,3 +123,8 @@ plot_cases_specified("Specific Power [kW/(kg/s)]", "Engine Thermal Efficiency at
 plot_cases_specified("Specific Power [kW/(kg/s)]", "Bypass Ratio",
                      specpowPJet_per_case, BPR_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_BPR_vs_SpecificPower.png"))
+
+# Combustion-gas specific heat (cpt4) as a function of specific power P_Jet/(mcore(1+BPR))
+plot_cases_specified("Specific Power [kW/(kg/s)]", "cpt4 [J/(kg*K)]",
+                     specpowPJet_per_case, cpt4_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_cpt4_vs_SpecificPower.png"))
