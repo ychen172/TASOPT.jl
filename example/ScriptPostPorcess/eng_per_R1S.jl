@@ -89,10 +89,10 @@ for (j, key_j) in enumerate(case_keys)
         ac = quickload_aircraft(joinpath(model_dir,key_j,key_j*"$(round(Int,ran_i)).jld2"))
         println("$(key_j)*$(ran_i) loaded")
         # Extract engine performance at cruise 1 condition
-        eta_thermal, eta_propulsion, eta_total = eta_at_phase(ac, ipcruise1)
+        eta_thermal, eta_propulsion, eta_total, _ = eta_at_phase(ac, ipcruise1)
         OPR, Tt4Tt2, coolfrac, BPR = cycle_diag_at_phase(ac, ipcruise1)
         # Extract engine performance at rotate condition
-        eta_thermal_TO, eta_propulsion_TO, eta_total_TO = eta_at_phase(ac, iprotate)
+        eta_thermal_TO, eta_propulsion_TO, eta_total_TO, _ = eta_at_phase(ac, iprotate)
         OPR_TO, Tt4Tt2_TO, coolfrac_TO, BPR_TO = cycle_diag_at_phase(ac, iprotate)
         # Process and collect engine efficiencies and cycle diagnostics
         push!(rans_per_case[j], ran_i)

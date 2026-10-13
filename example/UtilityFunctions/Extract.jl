@@ -378,6 +378,7 @@ Extract the engine effciencies and other parameters
         - eta_thermal: Themral efficnecy
         - eta_propulsion: Propulsive efficiency
         - eta_total: Total efficiency
+        - specific_power: Jet power per unit TOTAL (core+bypass) mass flow, P_Jet/(mdot_core*(1+BPR))
     **Behavior**
         - Use all SI unit inputs
         - Be careful of whether the value put in is single engine or double engines
@@ -401,7 +402,9 @@ function extract_engine_performance(;mdot_core,mdotf_mdotc,mdot_offtak,vel_core_
     eta_propulsion = power_propulsion ./ power_net_to_flow
     #### Total Efficiency
     eta_total = eta_thermal .* eta_propulsion
-    return eta_thermal, eta_propulsion, eta_total
+    #### Specific power (jet power per unit total mass flow, core+bypass)
+    specific_power = power_net_to_flow ./ (mdot_core .* (1.0 .+ BPR))
+    return eta_thermal, eta_propulsion, eta_total, specific_power
 end
 
 end #module
