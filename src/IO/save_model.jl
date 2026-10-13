@@ -638,6 +638,17 @@ function savemodel(fname, parg, parm, para, pare)
     end #open() io
 end #savemodel()
 
+#Returns the Julia source expression (e.g. "TailSizing.FixedVh") that reconstructs this TailSizing value,
+#as opposed to Base.string(::TailSizing.T)'s TOML-display form (e.g. "fixed_Vh"), which isn't valid Julia
+#syntax to assign back into an opt_sizing::TailSizing.T field.
+function tailsizing_julia_repr(sizing::TailSizing.T)
+    sizing == TailSizing.FixedVh    && return "TailSizing.FixedVh"
+    sizing == TailSizing.CLmaxFwdCG && return "TailSizing.CLmaxFwdCG"
+    sizing == TailSizing.FixedVv    && return "TailSizing.FixedVv"
+    sizing == TailSizing.OEI        && return "TailSizing.OEI"
+    error("Unknown TailSizing value: $sizing")
+end
+
 #TODO: Update to output ac.options (now that pari is dead)
 function reset_regression_test(ac)
     options = ac.options
@@ -869,7 +880,7 @@ function reset_regression_test(ac)
         @printf(io, "htail.outboard.cross_section.thickness_to_chord = %20.20f \n", htail.outboard.cross_section.thickness_to_chord)
         # @printf(io, "htail.opt_move_wing = %20.20f \n", htail.opt_move_wing) #moved to options
         @printf(io, "htail.CL_CLmax = %20.20f \n", htail.CL_CLmax)
-        @printf(io, "htail.opt_sizing = \"%s\" \n", htail.opt_sizing)
+        @printf(io, "htail.opt_sizing = %s \n", tailsizing_julia_repr(htail.opt_sizing))
         @printf(io, "htail.volume = %20.20f \n", htail.volume)
         @printf(io, "htail.outboard.GJ = %20.20f \n", htail.outboard.GJ)
         @printf(io, "htail.outboard.EI[4] = %20.20f \n", htail.outboard.EI[4])
@@ -922,7 +933,7 @@ function reset_regression_test(ac)
         @printf(io, "vtail.layout.span = %20.20f \n", vtail.layout.span)
         @printf(io, "vtail.layout.AR = %20.20f \n", vtail.layout.AR)
         @printf(io, "vtail.layout.S = %20.20f \n", vtail.layout.S)
-        @printf(io, "vtail.opt_sizing = \"%s\" \n", vtail.opt_sizing)
+        @printf(io, "vtail.opt_sizing = %s \n", tailsizing_julia_repr(vtail.opt_sizing))
         @printf(io, "vtail.dxW = %20.20f \n", vtail.dxW)
         @printf(io, "vtail.outboard.cross_section.width_to_chord = %20.20f \n", vtail.outboard.cross_section.width_to_chord)
         @printf(io, "vtail.outboard.cross_section.web_to_box_height = %20.20f \n", vtail.outboard.cross_section.web_to_box_height)
