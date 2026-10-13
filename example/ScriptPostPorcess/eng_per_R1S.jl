@@ -1,6 +1,7 @@
 """
 This script compares and plots the engine performance between ethanol and jet fuel aircraft from R1 sizing process
     - Compare cruise phase engine efficiencies from the R1 sizing mission
+    - Compare rotate-phase engine efficiencies
 """
 
 using TASOPT
@@ -21,13 +22,53 @@ save_prefi = "R1_Size_Flight_Engine_Compare"
 #### Create save directory if not exist
 mkpath(save_dir)
 
-#### Pre-allocate per-case result containers (one vector per case, filled over available ranges)
-rans_per_case        = [Int[] for _ in case_keys]
-eta_thermal_per_case = [Float64[] for _ in case_keys]
-eta_propu_per_case   = [Float64[] for _ in case_keys]
-eta_total_per_case   = [Float64[] for _ in case_keys]
+#### Helper: extract engine efficiencies at a given flight phase index
+function eta_at_phase(ac, ip::Int)
+    return extract_engine_performance(
+        mdot_core     = ac.pare[iemcore, ip, 1],
+        mdotf_mdotc   = ac.pare[ieff, ip, 1],
+        mdot_offtak   = ac.pare[iemofft, ip, 1],
+        vel_core_exh  = ac.pare[ieu6, ip, 1],
+        vel_fan_exh   = ac.pare[ieu8, ip, 1],
+        vel_inlet     = ac.pare[ieu0, ip, 1],
+        BPR           = ac.pare[ieBPR, ip, 1],
+        area_core_exh = ac.pare[ieA6, ip, 1],
+        area_fan_exh  = ac.pare[ieA8, ip, 1],
+        P_core_exh    = ac.pare[iep6, ip, 1],
+        P_fan_exh     = ac.pare[iep8, ip, 1],
+        P_inlet       = ac.pare[iep0, ip, 1],
+        LHV_fuel      = ac.pare[iehfuel, ip, 1],
+        thrust        = ac.pare[ieFe, ip, 1])
+end
 
-#### Loop through each case to extract engine performance over cruise
+#### Helper: extract cycle diagnostics (overall pressure ratio, Tt4/Tt2 temperature ratio,
+#### total turbine cooling air fraction, bypass ratio) at a given flight phase index
+function cycle_diag_at_phase(ac, ip::Int)
+    OPR     = ac.pare[iepid, ip, 1]*ac.pare[iepif, ip, 1]*ac.pare[iepilc, ip, 1]*ac.pare[iepihc, ip, 1]
+    Tt4_Tt2 = ac.pare[ieTt4, ip, 1]/ac.pare[ieTt2, ip, 1]
+    cool_frac = ac.pare[ieepsc1, ip, 1] + ac.pare[ieepsc2, ip, 1] + ac.pare[ieepsc3, ip, 1] + ac.pare[ieepsc4, ip, 1]
+    BPR = ac.pare[ieBPR, ip, 1]
+    return OPR, Tt4_Tt2, cool_frac, BPR
+end
+
+#### Pre-allocate per-case result containers (one vector per case, filled over available ranges)
+rans_per_case           = [Int[] for _ in case_keys]
+eta_thermal_per_case    = [Float64[] for _ in case_keys]
+eta_propu_per_case      = [Float64[] for _ in case_keys]
+eta_total_per_case      = [Float64[] for _ in case_keys]
+eta_thermal_TO_per_case = [Float64[] for _ in case_keys]
+eta_propu_TO_per_case   = [Float64[] for _ in case_keys]
+eta_total_TO_per_case   = [Float64[] for _ in case_keys]
+OPR_per_case            = [Float64[] for _ in case_keys]
+Tt4Tt2_per_case         = [Float64[] for _ in case_keys]
+coolfrac_per_case       = [Float64[] for _ in case_keys]
+BPR_per_case            = [Float64[] for _ in case_keys]
+OPR_TO_per_case         = [Float64[] for _ in case_keys]
+Tt4Tt2_TO_per_case      = [Float64[] for _ in case_keys]
+coolfrac_TO_per_case    = [Float64[] for _ in case_keys]
+BPR_TO_per_case         = [Float64[] for _ in case_keys]
+
+#### Loop through each case to extract engine performance over cruise and takeoff
 for (j, key_j) in enumerate(case_keys)
     # Idenfity available ranges within the case
     case_dir = joinpath(model_dir,key_j)
@@ -48,26 +89,27 @@ for (j, key_j) in enumerate(case_keys)
         ac = quickload_aircraft(joinpath(model_dir,key_j,key_j*"$(round(Int,ran_i)).jld2"))
         println("$(key_j)*$(ran_i) loaded")
         # Extract engine performance at cruise 1 condition
-        eta_thermal, eta_propulsion, eta_total = extract_engine_performance(
-            mdot_core     = ac.pare[iemcore, ipcruise1, 1],
-            mdotf_mdotc   = ac.pare[ieff, ipcruise1, 1],
-            mdot_offtak   = ac.pare[iemofft, ipcruise1, 1],
-            vel_core_exh  = ac.pare[ieu6, ipcruise1, 1],
-            vel_fan_exh   = ac.pare[ieu8, ipcruise1, 1],
-            vel_inlet     = ac.pare[ieu0, ipcruise1, 1],
-            BPR           = ac.pare[ieBPR, ipcruise1, 1],
-            area_core_exh = ac.pare[ieA6, ipcruise1, 1],
-            area_fan_exh  = ac.pare[ieA8, ipcruise1, 1],
-            P_core_exh    = ac.pare[iep6, ipcruise1, 1],
-            P_fan_exh     = ac.pare[iep8, ipcruise1, 1],
-            P_inlet       = ac.pare[iep0, ipcruise1, 1],
-            LHV_fuel      = ac.pare[iehfuel, ipcruise1, 1],
-            thrust        = ac.pare[ieFe, ipcruise1, 1])
-        # Process and collect engine efficiencies at cruise 1 condition
+        eta_thermal, eta_propulsion, eta_total = eta_at_phase(ac, ipcruise1)
+        OPR, Tt4Tt2, coolfrac, BPR = cycle_diag_at_phase(ac, ipcruise1)
+        # Extract engine performance at rotate condition
+        eta_thermal_TO, eta_propulsion_TO, eta_total_TO = eta_at_phase(ac, iprotate)
+        OPR_TO, Tt4Tt2_TO, coolfrac_TO, BPR_TO = cycle_diag_at_phase(ac, iprotate)
+        # Process and collect engine efficiencies and cycle diagnostics
         push!(rans_per_case[j], ran_i)
         push!(eta_thermal_per_case[j], eta_thermal)
         push!(eta_propu_per_case[j], eta_propulsion)
         push!(eta_total_per_case[j], eta_total)
+        push!(eta_thermal_TO_per_case[j], eta_thermal_TO)
+        push!(eta_propu_TO_per_case[j], eta_propulsion_TO)
+        push!(eta_total_TO_per_case[j], eta_total_TO)
+        push!(OPR_per_case[j], OPR)
+        push!(Tt4Tt2_per_case[j], Tt4Tt2)
+        push!(coolfrac_per_case[j], coolfrac)
+        push!(BPR_per_case[j], BPR)
+        push!(OPR_TO_per_case[j], OPR_TO)
+        push!(Tt4Tt2_TO_per_case[j], Tt4Tt2_TO)
+        push!(coolfrac_TO_per_case[j], coolfrac_TO)
+        push!(BPR_TO_per_case[j], BPR_TO)
     end
 
 end
@@ -77,12 +119,54 @@ end
 eta_thermal_pct_per_case = [100.0 .* v for v in eta_thermal_per_case]
 eta_propu_pct_per_case   = [100.0 .* v for v in eta_propu_per_case]
 eta_total_pct_per_case   = [100.0 .* v for v in eta_total_per_case]
-plot_cases_specified("Design/R1 Range [nmi]", "Engine Thermal Efficiency at Cruise 1 [%]",
+plot_cases_specified("Design/R1 Range [nmi]", "Engine Thermal Efficiency at Cruise [%]",
                      rans_per_case, eta_thermal_pct_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_ThermalEff.png"))
-plot_cases_specified("Design/R1 Range [nmi]", "Engine Propulsive Efficiency at Cruise 1 [%]",
+plot_cases_specified("Design/R1 Range [nmi]", "Engine Propulsive Efficiency at Cruise [%]",
                      rans_per_case, eta_propu_pct_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_PropulsiveEff.png"))
-plot_cases_specified("Design/R1 Range [nmi]", "Engine Total Efficiency at Cruise 1 [%]",
+plot_cases_specified("Design/R1 Range [nmi]", "Engine Total Efficiency at Cruise [%]",
                      rans_per_case, eta_total_pct_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_TotalEff.png"))
+
+# Engine thermal, propulsive, and total efficiency at rotate, each as its own plot, in percent
+eta_thermal_TO_pct_per_case = [100.0 .* v for v in eta_thermal_TO_per_case]
+eta_propu_TO_pct_per_case   = [100.0 .* v for v in eta_propu_TO_per_case]
+eta_total_TO_pct_per_case   = [100.0 .* v for v in eta_total_TO_per_case]
+plot_cases_specified("Design/R1 Range [nmi]", "Engine Thermal Efficiency at Rotate [%]",
+                     rans_per_case, eta_thermal_TO_pct_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_ThermalEff_Rotate.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Engine Propulsive Efficiency at Rotate [%]",
+                     rans_per_case, eta_propu_TO_pct_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_PropulsiveEff_Rotate.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Engine Total Efficiency at Rotate [%]",
+                     rans_per_case, eta_total_TO_pct_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_TotalEff_Rotate.png"))
+
+# Overall pressure ratio, Tt4/Tt2 temperature ratio, and turbine cooling air fraction, at cruise and rotate
+plot_cases_specified("Design/R1 Range [nmi]", "Overall Pressure Ratio at Cruise [-]",
+                     rans_per_case, OPR_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_OPR.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Tt4/Tt2 at Cruise [-]",
+                     rans_per_case, Tt4Tt2_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_Tt4Tt2.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Turbine Cooling Air Fraction at Cruise [-]",
+                     rans_per_case, coolfrac_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_CoolAirFrac.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Overall Pressure Ratio at Rotate [-]",
+                     rans_per_case, OPR_TO_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_OPR_Rotate.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Tt4/Tt2 at Rotate [-]",
+                     rans_per_case, Tt4Tt2_TO_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_Tt4Tt2_Rotate.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Turbine Cooling Air Fraction at Rotate [-]",
+                     rans_per_case, coolfrac_TO_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_CoolAirFrac_Rotate.png"))
+
+# Bypass ratio, at cruise and rotate
+plot_cases_specified("Design/R1 Range [nmi]", "Bypass Ratio at Cruise [-]",
+                     rans_per_case, BPR_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_BPR.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Bypass Ratio at Rotate [-]",
+                     rans_per_case, BPR_TO_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_BPR_Rotate.png"))
