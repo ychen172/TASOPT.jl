@@ -9,7 +9,7 @@ include(TASOPT.__TASOPTindices__)
 include(joinpath(TASOPT.__TASOPTroot__, "../src/IO/save_model.jl"))
 
 #### Change for current reset
-name_change_for_this_update = "change_rfmax_Jun5_26"
+name_change_for_this_update = "vtail_coneend_fix_etas_yeng_Oct12_26"
 
 #### Load the run using the current model
 ac = load_default_model()
