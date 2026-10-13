@@ -354,4 +354,54 @@ function extract_combustion_inputs(ac,idx_miss::Int,save_name::AbstractString,sa
     CSV.write(joinpath(save_dir,save_name*".csv"), mission_param)
 end
 
+"""
+    extract_engine_performance(;mdot_core,mdotf_mdotc,mdot_offtak,vel_core_exh,vel_fan_exh,vel_inlet,BPR,area_core_exh,area_fan_exh,P_core_exh,P_fan_exh,P_inlet,LHV_fuel,thrust)
+
+Extract the engine effciencies and other parameters
+
+    **Inputs**
+        - mdot_core: Core Mass Flow Rate: Ex.pare[iemcore]
+        - mdotf_mdotc: Fuel Flow Rate/Core Flow Rate: Ex.pare[ieff]
+        - mdot_offtak: Air Offtake Mass Flow Rate (Extracted out of core flow): Ex.pare[iemofft]
+        - vel_core_exh: Core exhaust flow velocity: Ex.pare[ieu6]
+        - vel_fan_exh: Fan exhaust flow velocity: Ex.pare[ieu8]
+        - vel_inlet: Far inlet flow velocity: Ex.pare[ieu0]
+        - BPR: Bypass Ratio (mdot_bypass/mdot_core): Ex.pare[ieBPR]
+        - area_core_exh: Core exhaust area: Ex. pare[ieA6]
+        - area_fan_exh: Bypass exhaust area: Ex. pare[ieA8]
+        - P_core_exh: Core exhaust pressure: Ex. pare[iep6]
+        - P_fan_exh: Bypass exhaust pressure: Ex. pare[iep8]
+        - P_inlet: Far inlet pressure: Ex. pare[iep0]
+        - LHV_fuel: lower heating value of fuel: Ex. user input or pare[iehfuel]
+        - thrust: net thrust of engine: Ex. pare[ieFe]
+    **Ouputs**
+        - eta_thermal: Themral efficnecy
+        - eta_propulsion: Propulsive efficiency
+        - eta_total: Total efficiency
+    **Behavior**
+        - Use all SI unit inputs
+        - Be careful of whether the value put in is single engine or double engines
+"""
+function extract_engine_performance(;mdot_core,mdotf_mdotc,mdot_offtak,vel_core_exh,vel_fan_exh,vel_inlet,BPR,area_core_exh,area_fan_exh,P_core_exh,P_fan_exh,P_inlet,LHV_fuel,thrust)
+    #### Thermal Efficiency
+    power_core_out = 0.5 .* (mdot_core .* (1.0 .+ mdotf_mdotc) .- mdot_offtak) .* vel_core_exh .^ 2 #Core kinetic energy out
+    power_fan_out = 0.5 .* mdot_core .* BPR .* vel_fan_exh .^ 2 #Bypass stream kinetic energy out
+    power_inlet = 0.5 .* mdot_core .* (1.0 .+ BPR) .* vel_inlet .^ 2 #Inlet kinetic energy
+    power_press_core_net = (P_core_exh .- P_inlet) .* area_core_exh .* vel_core_exh
+    power_press_fan_net = (P_fan_exh .- P_inlet) .* area_fan_exh .* vel_fan_exh #Additional pressure power given to the exhaust due to underexpansion
+    power_net_to_flow = power_core_out .+ power_fan_out .- power_inlet .+
+                        power_press_core_net .+ power_press_fan_net #Net power given to the work fluid
+    # fuel power
+    power_fuel = mdot_core .* mdotf_mdotc .* LHV_fuel #Fuel power release
+    # efficiency
+    eta_thermal = power_net_to_flow ./ power_fuel
+    #### Propulsion Efficiency
+    power_propulsion = vel_inlet .* thrust
+    # efficiency
+    eta_propulsion = power_propulsion ./ power_net_to_flow
+    #### Total Efficiency
+    eta_total = eta_thermal .* eta_propulsion
+    return eta_thermal, eta_propulsion, eta_total
+end
+
 end #module
