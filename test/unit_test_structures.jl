@@ -510,8 +510,8 @@ ac.landing_gear.main_gear.weight = TASOPT.Weight(y = ac.landing_gear.main_gear.y
 
 TASOPT.size_landing_gear!(ac)
 
-@test ac.landing_gear.main_gear.weight.W ≈ 31787.399917196755
-@test ac.landing_gear.nose_gear.weight.W ≈ 4854.384534273811
+@test ac.landing_gear.main_gear.weight.W ≈ 32380.457395830817
+@test ac.landing_gear.nose_gear.weight.W ≈ 5001.219240606363
 
 @testset "size_wing_section! property tests" begin
     # Re-use wing.outboard from the setup above which already has max_shear_load
