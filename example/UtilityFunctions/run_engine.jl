@@ -186,6 +186,8 @@ mutable struct TFOperRes{T<:AbstractFloat}
     mburner::T
 
     Lconv::Bool
+
+    Tmrow::Vector{T} #Metal temperature for each cooled blade row [K] (output when opt_cooling=FixedCoolingFlowRatio)
 end
 
 """
@@ -322,7 +324,9 @@ function runOffDes(ac,M0_test,p0_test,T0_test,a0_test,Fe_test; zero_offtake::Boo
     Δh_PreC, Δh_InterC, Δh_Regen, Δh_TurbC,
     Δp_PreC, Δp_InterC, Δp_Regen)
 
-    return TFOperRes(out...)
+    #Tmrow is mutated in-place by tfoper! above (it's passed in as epsrow/Tmrow at line 321);
+    #not part of tfoper!'s own return tuple `out`, so appended here explicitly.
+    return TFOperRes(out..., Tmrow)
 end
 
 end #RunEngine

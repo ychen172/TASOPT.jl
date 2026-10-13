@@ -22,14 +22,14 @@ a0 = 340.2074661144284 #m/s
 #### Input case names - Retrofit
 model_dir  = joinpath(__TASOPTroot__,"../example/ModelSaved")
 save_dir   = joinpath(__TASOPTroot__,"../example/OutputAndPlots")
-case_keys  = ["Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_","Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_"]
-case_Nams  = ["Jet Fuel"                         ,"Ethanol"                          ]
-fuel_index = [24                                 ,32                                 ]
-rho_fuel   = [817.0                              ,789.0                              ]
-hvap_fuel  = [358694.0                           ,918187.9                           ]
+case_keys  = ["Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_","Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_","Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_","Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_"]
+case_Nams  = ["Jet Engine + Jet Fuel"             ,"Jet Engine + Eth Fuel"           ,"Eth Engine + Eth Fuel"            ,"Eth Engine + Jet Fuel"            ]
+fuel_index = [24                                 ,32                                 ,32                                 ,24                                 ]
+rho_fuel   = [817.0                              ,789.0                              ,789.0                              ,817.0                              ]
+hvap_fuel  = [358694.0                           ,918187.9                           ,918187.9                           ,358694.0                           ]
 R1_range   = 2000 #Selected range for SLS comparison (exist in all cases)
 n_Thr_ref  = 50 #Number of refinement between max and min thrust to sweep
-save_prefi = "R1_Size_SLS_Engine_Compare_$(R1_range)nmi"
+save_prefi = "R1_Size_SLS_Engine_Compare_$(R1_range)nmi_Swap"
 
 #### Create save directory if not exist
 mkpath(save_dir)
