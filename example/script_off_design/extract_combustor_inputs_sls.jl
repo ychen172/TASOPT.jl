@@ -9,9 +9,9 @@ include(__TASOPTindices__)
 using Plots
 include(joinpath(__TASOPTroot__,"../example/utilities_for_optimization/objective_factory.jl"))
 off_design_specified! = ObjectiveFactory.off_design_specified!
-include(joinpath(__TASOPTroot__,"../example/utilities_for_postprocessing/Extract.jl"))
+include(joinpath(__TASOPTroot__,"../example/UtilityFunctions/Extract.jl"))
 using .Extract: read_oag,extract_combustion_inputs
-include(joinpath(__TASOPTroot__,"../example/utilities_engines/run_engine.jl"))
+include(joinpath(__TASOPTroot__,"../example/UtilityFunctions/run_engine.jl"))
 using .RunEngine: runOffDes
 using Glob
 

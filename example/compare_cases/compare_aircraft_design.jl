@@ -5,7 +5,7 @@ This script compares parameters across multiple cases
 using TASOPT
 include(__TASOPTindices__)
 using Plots
-include(joinpath(@__DIR__,"../utilities_for_postprocessing/Extract.jl"))
+include(joinpath(@__DIR__,"../UtilityFunctions/Extract.jl"))
 using .Extract: extract_acModel, init_results_2Layers, fill_results!, plot_cases
 using Glob
 

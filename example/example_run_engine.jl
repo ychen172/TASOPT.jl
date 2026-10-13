@@ -5,7 +5,7 @@ This script intends to probe the sea-level static operation performance of engin
 using TASOPT
 include(__TASOPTindices__)
 using CSV, DataFrames
-include(joinpath(__TASOPTroot__,"../example/utilities_engines/run_engine.jl"))
+include(joinpath(__TASOPTroot__,"../example/UtilityFunctions/run_engine.jl"))
 using .RunEngine:runOffDes
 
 #### IO

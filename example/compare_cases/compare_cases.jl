@@ -5,7 +5,7 @@ This script compares parameters across multiple cases
 using TASOPT
 include(__TASOPTindices__)
 using Plots
-include(joinpath(@__DIR__,"../utilities_for_postprocessing/Extract.jl"))
+include(joinpath(@__DIR__,"../UtilityFunctions/Extract.jl"))
 using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_specified
 include(joinpath(@__DIR__,"../Breguet_range_solve_offdes.jl"))
 using .Breguet: Bre_off_des

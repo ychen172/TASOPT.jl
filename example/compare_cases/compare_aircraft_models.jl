@@ -8,7 +8,7 @@ using Plots
 using CSV, DataFrames
 using Printf
 include(__TASOPTindices__)
-include(joinpath(__TASOPTroot__, "../example/utilities_engines/run_engine.jl"))
+include(joinpath(__TASOPTroot__, "../example/UtilityFunctions/run_engine.jl"))
 include(joinpath(__TASOPTroot__, "../example/utilities_for_offdesign/offdesign.jl"))
 using .PRD: findR1R2R3
 

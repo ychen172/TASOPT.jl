@@ -17,7 +17,7 @@ include(joinpath(__TASOPTroot__,"utils/sensitivity.jl"))
 include(joinpath(__TASOPTroot__, "../example/utilities_for_optimization/objective_factory.jl"))
 using .ObjectiveFactory: Constraint, Parameter, OptHistory, Requirement, optimize_singlePt_PFEI!, optimizer_wrapper_global_local, size_aircraft_w_param!,
                          save_vec_struct_csv, load_csv_constraints, load_csv_parameters, load_csv_requirements, save_jld2, load_jld2, OffDesMission, ObjectiveVariable
-include(joinpath(__TASOPTroot__,"../example/utilities_for_postprocessing/Extract.jl"))
+include(joinpath(__TASOPTroot__,"../example/UtilityFunctions/Extract.jl"))
 const min_fuse_radius = TASOPT.structures.find_minimum_radius_for_seats_per_row
 const upd_fuse_pax! = TASOPT.structures.update_fuse_for_pax!
 const success_statuses = ObjectiveFactory.success_statuses

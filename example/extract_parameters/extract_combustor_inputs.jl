@@ -4,7 +4,7 @@ This script extract the input cycle parameters for Pycaso combustor emissions si
 
 using TASOPT
 include(__TASOPTindices__)
-include(joinpath(@__DIR__,"../utilities_for_postprocessing/Extract.jl"))
+include(joinpath(@__DIR__,"../UtilityFunctions/Extract.jl"))
 using .Extract: extract_combustion_inputs
 
 #### Setup IO

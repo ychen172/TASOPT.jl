@@ -6,7 +6,7 @@ using Glob
 using TASOPT
 include(__TASOPTindices__)
 using Plots
-include(joinpath(@__DIR__,"../utilities_for_postprocessing/Extract.jl"))
+include(joinpath(@__DIR__,"../UtilityFunctions/Extract.jl"))
 using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_specified
 
 #### Setup IO
