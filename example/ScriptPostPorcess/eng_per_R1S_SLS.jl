@@ -23,7 +23,7 @@ a0 = 340.2074661144284 #m/s
 model_dir  = joinpath(__TASOPTroot__,"../example/ModelSaved")
 save_dir   = joinpath(__TASOPTroot__,"../example/OutputAndPlots")
 case_keys  = ["Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_","Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_","Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_","Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_"]
-case_Nams  = ["Jet Engine + Jet Fuel"             ,"Jet Engine + Eth Fuel"           ,"Eth Engine + Eth Fuel"            ,"Eth Engine + Jet Fuel"            ]
+case_Nams  = ["Jet Engine + Jet Fuel"             ,"Jet Engine + Ethanol"            ,"Ethanol Engine + Ethanol"         ,"Ethanol Engine + Jet Fuel"        ]
 fuel_index = [24                                 ,32                                 ,32                                 ,24                                 ]
 rho_fuel   = [817.0                              ,789.0                              ,789.0                              ,817.0                              ]
 hvap_fuel  = [358694.0                           ,918187.9                           ,918187.9                           ,358694.0                           ]
@@ -103,21 +103,21 @@ plot_cases_specified("Thrust [kN]", "Engine Thermal Efficiency at SLS [%]",
                      joinpath(save_dir,"$(save_prefi)_ThermalEff_vs_Thrust.png"))
 
 # Engine thermal efficiencies as a function of pressure ratio
-plot_cases_specified("Overall Pressure Ratio [-]", "Engine Thermal Efficiency at SLS [%]",
+plot_cases_specified("Overall Pressure Ratio", "Engine Thermal Efficiency at SLS [%]",
                      OPR_per_case, eta_thermal_pct_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_ThermalEff_vs_OPR.png"))
 
 # Overall pressure ratio as a function of specific power P_Jet/(mcore(1+BPR))
-plot_cases_specified("Specific Power, P_Jet/[mcore(1+BPR)] [kW/(kg/s)]", "Overall Pressure Ratio [-]",
+plot_cases_specified("Specific Power [kW/(kg/s)]", "Overall Pressure Ratio",
                      specpowPJet_per_case, OPR_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_OPR_vs_SpecificPower.png"))
 
 # Engine thermal efficiencies as a function of specific power P_Jet/(mcore(1+BPR))
-plot_cases_specified("Specific Power, P_Jet/[mcore(1+BPR)] [kW/(kg/s)]", "Engine Thermal Efficiency at SLS [%]",
+plot_cases_specified("Specific Power [kW/(kg/s)]", "Engine Thermal Efficiency at SLS [%]",
                      specpowPJet_per_case, eta_thermal_pct_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_ThermalEff_vs_SpecificPower.png"))
 
 # Bypass ratio as a function of specific power P_Jet/(mcore(1+BPR))
-plot_cases_specified("Specific Power, P_Jet/[mcore(1+BPR)] [kW/(kg/s)]", "Bypass Ratio [-]",
+plot_cases_specified("Specific Power [kW/(kg/s)]", "Bypass Ratio",
                      specpowPJet_per_case, BPR_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_BPR_vs_SpecificPower.png"))
