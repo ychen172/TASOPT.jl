@@ -1,5 +1,5 @@
 """
-This script compares PRD performance between various cases at a single design range
+This script compares payload-range performance between various cases at a single design range
 """
 
 using Glob
