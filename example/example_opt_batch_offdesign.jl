@@ -6,7 +6,7 @@ using CSV
 using DataFrames
 using TASOPT
 include(__TASOPTindices__)
-include(joinpath(__TASOPTroot__, "../example/utilities_for_optimization/objective_factory.jl"))
+include(joinpath(__TASOPTroot__, "../example/UtilityFunctions/objective_factory.jl"))
 using .ObjectiveFactory: Constraint, Parameter, OptHistory, Requirement, optimize_singlePt_PFEI!, optimizer_wrapper_global_local, size_aircraft_w_param!,
                          save_vec_struct_csv, load_csv_constraints, load_csv_parameters, load_csv_requirements, save_jld2, load_jld2, OffDesMission
 const success_statuses = ObjectiveFactory.success_statuses

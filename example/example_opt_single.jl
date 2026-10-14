@@ -1,5 +1,5 @@
 using TASOPT, NLopt
-include(joinpath(@__DIR__, "objective_factory.jl"))
+include(joinpath(@__DIR__, "UtilityFunctions/objective_factory.jl"))
 using .ObjectiveFactory: OptHistory, make_obj, best_feasible
 include(__TASOPTindices__)
 

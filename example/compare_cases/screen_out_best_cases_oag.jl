@@ -12,7 +12,7 @@ Assume all model folders contain the same set of files regardless whether some c
 using TASOPT
 include(__TASOPTindices__)
 using Plots
-include(joinpath(@__DIR__,"../utilities_for_optimization/objective_factory.jl"))
+include(joinpath(@__DIR__,"../UtilityFunctions/objective_factory.jl"))
 off_design_specified! = ObjectiveFactory.off_design_specified!
 include(joinpath(@__DIR__,"../UtilityFunctions/Extract.jl"))
 using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_specified, read_oag

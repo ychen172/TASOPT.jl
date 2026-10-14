@@ -2,7 +2,7 @@ using TASOPT
 using CSV, DataFrames
 include(__TASOPTindices__)
 include(joinpath(__TASOPTroot__, "../example/UtilityFunctions/run_engine.jl"))
-include(joinpath(__TASOPTroot__, "../example/utilities_for_optimization/objective_factory.jl"))
+include(joinpath(__TASOPTroot__, "../example/UtilityFunctions/objective_factory.jl"))
 include(joinpath(__TASOPTroot__, "../example/utilities_engines/calibrate_engine.jl"))
 include(joinpath(__TASOPTroot__, "utils/sensitivity.jl"))
 

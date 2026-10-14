@@ -5,7 +5,7 @@ This script extract the combustor operating condtitions for oag off-design missi
 using TASOPT
 include(__TASOPTindices__)
 using Plots
-include(joinpath(__TASOPTroot__,"../example/utilities_for_optimization/objective_factory.jl"))
+include(joinpath(__TASOPTroot__,"../example/UtilityFunctions/objective_factory.jl"))
 off_design_specified! = ObjectiveFactory.off_design_specified!
 include(joinpath(__TASOPTroot__,"../example/UtilityFunctions/Extract.jl"))
 using .Extract: read_oag,extract_combustion_inputs

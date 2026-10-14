@@ -2,7 +2,7 @@ module OptimizeRangeFuel
 export MissionReq, BoundsOpt, ConstraintsOpt, optimize_rangefuel_fun!, clip_loc_bound!, adjust_bounds!, extract_opt_para
 
 using TASOPT, NLopt
-include(joinpath(@__DIR__, "objective_factory.jl"))
+include(joinpath(@__DIR__, "UtilityFunctions/objective_factory.jl"))
 using .ObjectiveFactory: OptHistory, make_obj, best_feasible
 include(__TASOPTindices__)
 
