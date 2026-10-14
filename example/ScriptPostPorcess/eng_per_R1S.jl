@@ -72,6 +72,8 @@ specpow_per_case        = [Float64[] for _ in case_keys] #Specific power: P_Jet 
 specpow_TO_per_case     = [Float64[] for _ in case_keys]
 cpt4_per_case           = [Float64[] for _ in case_keys] #Combustion-gas specific heat at Tt4, [J/(kg*K)]
 cpt4_TO_per_case        = [Float64[] for _ in case_keys]
+thrust_TO_per_case      = [Float64[] for _ in case_keys] #Takeoff (rotate) thrust, [kN]
+dfan_per_case           = [Float64[] for _ in case_keys] #Fan diameter, [m]
 
 #### Loop through each case to extract engine performance over cruise and takeoff
 for (j, key_j) in enumerate(case_keys)
@@ -119,6 +121,8 @@ for (j, key_j) in enumerate(case_keys)
         push!(specpow_TO_per_case[j], specpow_TO/1000.0)
         push!(cpt4_per_case[j], cpt4)
         push!(cpt4_TO_per_case[j], cpt4_TO)
+        push!(thrust_TO_per_case[j], ac.pare[ieFe, iprotate, 1]/1000.0) #[kN]
+        push!(dfan_per_case[j], ac.parg[igdfan]) #[m]
     end
 
 end
@@ -195,3 +199,11 @@ plot_cases_specified("Specific Power at Cruise [kW/(kg/s)]", "cpt4 at Cruise [J/
 plot_cases_specified("Specific Power at Rotate [kW/(kg/s)]", "cpt4 at Rotate [J/(kg*K)]",
                      specpow_TO_per_case, cpt4_TO_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_cpt4_vs_SpecificPower_Rotate.png"))
+
+# Takeoff (rotate) thrust and fan diameter, as a function of design range
+plot_cases_specified("Design/R1 Range [nmi]", "Thrust at Rotate [kN]",
+                     rans_per_case, thrust_TO_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_Thrust_Rotate.png"))
+plot_cases_specified("Design/R1 Range [nmi]", "Fan Diameter [m]",
+                     rans_per_case, dfan_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_FanDiameter.png"))
