@@ -272,3 +272,11 @@ p4 = plot(ranges_common_all, WingDensity_jet, label="Jet", color=BASE_COLORS[1],
 plot!(p4, ranges_common_all, WingDensity_eth, label="Ethanol", color=BASE_COLORS[2], lw=2.5, marker=:circle, markersize=3)
 vline!(p4, [DFAN_CLIP_RANGE], line=(:dash, 2, :gray40), label="Max DiaFan Lim (Eth)")
 savefig(p4, joinpath(save_dir, "$(save_prefi)_WingDensity_vs_Range.png"))
+
+#### Empty weight only (not broken down by component), Jet vs Ethanol, across each case's own full range sweep
+p5 = plot(rans_per_case[jet_idx], Wempty_per_case[jet_idx], label="Jet", color=BASE_COLORS[1], lw=2.5, marker=:circle, markersize=3,
+          xlabel="Design/R1 Range [nmi]", ylabel="Empty Weight [metric ton]", dpi=800,
+          legend=:topleft, size=(1400, 900), titlefontsize=21, guidefontsize=24, tickfontsize=18, legendfontsize=18, left_margin=16Plots.mm, bottom_margin=12Plots.mm)
+plot!(p5, rans_per_case[eth_idx], Wempty_per_case[eth_idx], label="Ethanol", color=BASE_COLORS[2], lw=2.5, marker=:circle, markersize=3)
+vline!(p5, [DFAN_CLIP_RANGE], line=(:dash, 2, :gray40), label="Max DiaFan Lim (Eth)")
+savefig(p5, joinpath(save_dir, "$(save_prefi)_EmptyWeight_vs_Range.png"))
