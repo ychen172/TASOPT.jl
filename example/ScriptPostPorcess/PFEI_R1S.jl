@@ -127,9 +127,9 @@ savefig(p1, joinpath(save_dir, "$(save_prefi)_PFEI.png"))
 #### PFEI difference comparison: actual (optimized) penalty vs the pure-fuel-chemistry-only
 #### Breguet-based penalty, to show how much of Ethanol's PFEI penalty is pure chemistry vs the
 #### optimizer's compensating airframe redesign (the rest of this conversation's main finding)
-p2 = plot(ranges_common, PFEIEthPenalty_Opt, label="Optimized Parameters", color=BASE_COLORS[1], lw=2.5, marker=:circle, markersize=3,
+p2 = plot(ranges_common, PFEIEthPenalty_Opt, label="TASOPT Optimized Design", color=BASE_COLORS[1], lw=2.5, marker=:circle, markersize=3,
           xlabel="Design/R1 Range [nmi]", ylabel="Ethanol Flight PFEI Penalty [%]", dpi=800,
           legend=:topleft, size=(1400, 900), titlefontsize=21, guidefontsize=24, tickfontsize=18, legendfontsize=18,
           left_margin=16Plots.mm, bottom_margin=12Plots.mm)
-plot!(p2, ranges_common, PFEIEthPenalty_Breguet, label="Constant Efficiencies (Breguet)", color=BASE_COLORS[2], lw=2.5, marker=:circle, markersize=3)
+plot!(p2, ranges_common, PFEIEthPenalty_Breguet, label="Breguet Range Analysis with Fixed Parameters", color=BASE_COLORS[2], lw=2.5, marker=:circle, markersize=3)
 savefig(p2, joinpath(save_dir, "$(save_prefi)_EthPFEIPenalty.png"))
