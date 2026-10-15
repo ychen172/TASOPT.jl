@@ -506,7 +506,10 @@ function _mission_iteration!(ac, imission, Ldebug; opt_prescribed_cruise_paramet
       dAlt_Des = alt_req - para[iaalt, ipcruise1] #(-) desire to fly lower (+) desire to fly higher
 
       # Judge for converge
-      if (dAlt_Lim > 0.0) && (!climb_infeasible) #The positive cruise range limit is not violated
+      if !climb_infeasible && (abs(dAlt_Lim) < climb_clip_tol)
+            # Converged onto the range-limit boundary; dAlt_Lim < 0 below has no exit path, so catch it here too
+            break
+      elseif (dAlt_Lim > 0.0) && (!climb_infeasible) #The positive cruise range limit is not violated
             if dAlt_Des > 0.0
                   if min(dAlt_Lim,dAlt_Des) < climb_clip_tol
                         break
