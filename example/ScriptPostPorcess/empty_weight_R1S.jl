@@ -34,6 +34,9 @@ Wtails_per_case  = [Float64[] for _ in case_keys] #Htail + Vtail combined
 Minn_per_case    = [Float64[] for _ in case_keys] #Wing inboard root bending moment [kN*m]
 WingS_per_case   = [Float64[] for _ in case_keys] #Wing planform area [m^2]
 RootChord_per_case = [Float64[] for _ in case_keys] #Wing root chord [m]
+WTO_per_case     = [Float64[] for _ in case_keys] #Takeoff weight [metric ton]
+thrust_TO_per_case = [Float64[] for _ in case_keys] #Takeoff (rotate) thrust [kN]
+dfan_per_case    = [Float64[] for _ in case_keys] #Fan diameter [m]
 
 #### Loop through each case to extract weights over ranges
 for (j, key_j) in enumerate(case_keys)
@@ -93,6 +96,9 @@ for (j, key_j) in enumerate(case_keys)
         push!(Minn_per_case[j], Minn/1000.0)
         push!(WingS_per_case[j], WingS)
         push!(RootChord_per_case[j], RootChord)
+        push!(WTO_per_case[j], WTO/TASOPT.gee/1000.0)
+        push!(thrust_TO_per_case[j], ac.pare[ieFe, iprotate, 1]/1000.0) #[kN]
+        push!(dfan_per_case[j], ac.parg[igdfan]) #[m]
     end
 
 end
@@ -280,3 +286,19 @@ p5 = plot(rans_per_case[jet_idx], Wempty_per_case[jet_idx], label="Jet", color=B
 plot!(p5, rans_per_case[eth_idx], Wempty_per_case[eth_idx], label="Ethanol", color=BASE_COLORS[2], lw=2.5, marker=:circle, markersize=3)
 vline!(p5, [DFAN_CLIP_RANGE], line=(:dash, 2, :gray40), label="Max DiaFan Lim (Eth)")
 savefig(p5, joinpath(save_dir, "$(save_prefi)_EmptyWeight_vs_Range.png"))
+
+#### Relative Ethanol-vs-Jet difference in takeoff weight, engine thrust (at rotate), and fan area
+Afan_per_case = [(pi/4) .* d.^2 for d in dfan_per_case] #[m^2], derived from the fan diameter already extracted above
+
+pct_WTO    = pct_diff(WTO_per_case[jet_idx], WTO_per_case[eth_idx])
+pct_Thrust = pct_diff(thrust_TO_per_case[jet_idx], thrust_TO_per_case[eth_idx])
+pct_Afan   = pct_diff(Afan_per_case[jet_idx], Afan_per_case[eth_idx])
+
+p6 = plot(ranges_common_all, pct_WTO, label="Takeoff Weight", color=:teal, lw=2.5, marker=:circle, markersize=3,
+         xlabel="Design/R1 Range [nmi]", ylabel="Ethanol vs Jet Difference [%]", dpi=800,
+         legend=:topleft, size=(1400, 900), titlefontsize=21, guidefontsize=24, tickfontsize=18, legendfontsize=18, left_margin=16Plots.mm, bottom_margin=12Plots.mm)
+plot!(p6, ranges_common_all, pct_Thrust, label="Takeoff Thrust", color=:crimson, lw=2.5, marker=:circle, markersize=3)
+plot!(p6, ranges_common_all, pct_Afan, label="Fan Area", color=:royalblue, lw=2.5, marker=:circle, markersize=3)
+hline!(p6, [0.0], line=(:dash, 1, :black), label="")
+vline!(p6, [DFAN_CLIP_RANGE], line=(:dash, 2, :gray40), label="Max DiaFan Lim (Eth)")
+savefig(p6, joinpath(save_dir, "$(save_prefi)_WTO_Thrust_FanArea_PctDiff.png"))
