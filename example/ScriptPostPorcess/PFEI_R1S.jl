@@ -8,6 +8,7 @@ using TASOPT
 include(__TASOPTindices__)
 using Plots
 using Glob
+using Statistics: median
 include(joinpath(@__DIR__,"../UtilityFunctions/Breguet_range_solve_offdes.jl"))
 using .Breguet: Bre_off_des
 
@@ -133,3 +134,119 @@ p2 = plot(ranges_common, PFEIEthPenalty_Opt, label="TASOPT Optimized Design", co
           left_margin=16Plots.mm, bottom_margin=12Plots.mm)
 plot!(p2, ranges_common, PFEIEthPenalty_Breguet, label="Breguet Range Analysis with Fixed Parameters", color=BASE_COLORS[2], lw=2.5, marker=:circle, markersize=3)
 savefig(p2, joinpath(save_dir, "$(save_prefi)_EthPFEIPenalty.png"))
+
+#### Isolate each of 4 effects (fuel energy density, engine efficiency, LD ratio, empty weight) INDEPENDENTLY
+# from the SAME Jet baseline by individually perturbing each effect.
+# Initialize container for percentage PFEI change with isolate effect from each component
+per_dPFEI_fuel = zeros(length(ranges_common))
+per_dPFEI_eta  = zeros(length(ranges_common))
+per_dPFEI_LD   = zeros(length(ranges_common))
+per_dPFEI_wEmp = zeros(length(ranges_common))
+# Collect effect
+for (i, ran_i) in enumerate(ranges_common)
+    # Load model
+    ac_jet_i = quickload_aircraft(joinpath(model_dir, jet_key, jet_key*"$(ran_i).jld2"))
+    ac_eth_i = quickload_aircraft(joinpath(model_dir, eth_key, eth_key*"$(ran_i).jld2"))
+    # Load cruise properties from jet(Reference) and ethanol(Perturbated)
+    LD_jet_i   = ac_jet_i.para[iaCL, ipcruise1, 1] / ac_jet_i.para[iaCD, ipcruise1, 1]
+    LD_eth_i   = ac_eth_i.para[iaCL, ipcruise1, 1] / ac_eth_i.para[iaCD, ipcruise1, 1]
+    eta_jet_i  = (1.0/(ac_jet_i.pare[ieTSFC, ipcruise1, 1]/gee)) *
+                 ((cos(ac_jet_i.para[iagamV, ipcruise1, 1])*ac_jet_i.pare[ieu0, ipcruise1, 1])/ac_jet_i.pare[iehfuel, ipcruise1, 1])
+    eta_eth_i  = (1.0/(ac_eth_i.pare[ieTSFC, ipcruise1, 1]/gee)) *
+                 ((cos(ac_eth_i.para[iagamV, ipcruise1, 1])*ac_eth_i.pare[ieu0, ipcruise1, 1])/ac_eth_i.pare[iehfuel, ipcruise1, 1])
+    wEmp_jet_i = ac_jet_i.parm[imWTO,1] - ac_jet_i.parm[imWfuel,1] - ac_jet_i.parm[imWpay,1]
+    wEmp_eth_i = ac_eth_i.parm[imWTO,1] - ac_eth_i.parm[imWfuel,1] - ac_eth_i.parm[imWpay,1]
+    LHV_jet_i     = ac_jet_i.pare[iehfuel, ipcruise1, 1]
+    LHV_eth_i     = ac_eth_i.pare[iehfuel, ipcruise1, 1]
+    rhofuel_jet_i = ac_jet_i.parg[igrhofuel]
+    rhofuel_eth_i = ac_eth_i.parg[igrhofuel]
+    # Load constant parameters (unperturbed)
+    frac_rese_i   = ac_jet_i.parg[igfreserve] #Held fixed at Jet's own value - not one of the 4 swapped variables
+    # Load mission requirement
+    range_m = ac_jet_i.parm[imRange,1]
+    wPay_N  = ac_jet_i.parm[imWpay,1]
+    # Default Breguet range setup
+    common_kwargs = (wTO_Max_N=4e10, wPay_Max_N=1e10, volFuel_Max_m3=1e10/1e5) #Not considering physical limitations
+    # Get a baseline jet fuel PFEI
+    baseline = Bre_off_des(range_m, wPay_N; LD=LD_jet_i, eta=eta_jet_i, LHV_Jkg=LHV_jet_i, wEmp_N=wEmp_jet_i,
+                           rhoFuel_kgm3=rhofuel_jet_i, frac_rese=frac_rese_i, common_kwargs...)
+    PFEI_base = baseline["PFEI_JJ_out"]
+    # Get peturbed PFEIs
+    # Fuel only
+    PFEI_Fuel = Bre_off_des(range_m, wPay_N; LD=LD_jet_i, eta=eta_jet_i, LHV_Jkg=LHV_eth_i, wEmp_N=wEmp_jet_i,
+                            rhoFuel_kgm3=rhofuel_eth_i, frac_rese=frac_rese_i, common_kwargs...)
+    # Combustor efficiency only
+    PFEI_Eta  = Bre_off_des(range_m, wPay_N; LD=LD_jet_i, eta=eta_eth_i, LHV_Jkg=LHV_jet_i, wEmp_N=wEmp_jet_i,
+                            rhoFuel_kgm3=rhofuel_jet_i, frac_rese=frac_rese_i, common_kwargs...)
+    # LD ratio only
+    PFEI_LD   = Bre_off_des(range_m, wPay_N; LD=LD_eth_i, eta=eta_jet_i, LHV_Jkg=LHV_jet_i, wEmp_N=wEmp_jet_i,
+                            rhoFuel_kgm3=rhofuel_jet_i, frac_rese=frac_rese_i, common_kwargs...)
+    # Empty weight only
+    PFEI_WEmp = Bre_off_des(range_m, wPay_N; LD=LD_jet_i, eta=eta_jet_i, LHV_Jkg=LHV_jet_i, wEmp_N=wEmp_eth_i,
+                            rhoFuel_kgm3=rhofuel_jet_i, frac_rese=frac_rese_i, common_kwargs...)
+    # Get percentage effect
+    per_dPFEI_fuel[i] = 100.0*(PFEI_Fuel["PFEI_JJ_out"]-PFEI_base)/PFEI_base
+    per_dPFEI_eta[i]  = 100.0*(PFEI_Eta["PFEI_JJ_out"]-PFEI_base)/PFEI_base
+    per_dPFEI_LD[i]   = 100.0*(PFEI_LD["PFEI_JJ_out"]-PFEI_base)/PFEI_base
+    per_dPFEI_wEmp[i] = 100.0*(PFEI_WEmp["PFEI_JJ_out"]-PFEI_base)/PFEI_base
+end
+
+#### Two-column bar plot, grouped by sign at each range. Left bar stacks the penalty (positive)
+# components upward from 0; right bar stacks the benefit (negative) components downward from there.
+const WATERFALL_COLORS = [:crimson, :royalblue, :seagreen, :purple]
+waterfall_labels     = ["Fuel Energy Density", "Engine Efficiency", "Aircraft L/D Ratio", "Aircraft Empty Weight"]
+waterfall_components = [per_dPFEI_fuel       , per_dPFEI_eta      , per_dPFEI_LD        , per_dPFEI_wEmp         ]
+nk = length(waterfall_components)
+nran = length(ranges_common)
+
+#### Bar geometry: two bars (penalty, benefit) side by side per range point.
+spacing  = nran > 1 ? median(diff(sort(ranges_common))) : 100.0
+bar_gap  = spacing*0.04 # Gap between the penalty/benefit bars within one group
+bar_w    = spacing*0.28 # Width of each individual bar
+rect(xc,w,y0,y1) = Shape([xc-w/2,xc+w/2,xc+w/2,xc-w/2],[y0,y0,y1,y1])
+
+p3 = plot(xlabel="Design/R1 Range [nmi]", ylabel="Ethanol PFEI Penalty [%]", dpi=800,
+          legend=:topleft, size=(1800, 900), titlefontsize=21, guidefontsize=24, tickfontsize=18,
+          legendfontsize=18, left_margin=16Plots.mm, bottom_margin=12Plots.mm)
+
+labeled = falses(nk) #Only the first rectangle drawn for a given component gets a (non-empty) label,
+                      #so it shows up exactly once in the legend no matter how many ranges/bars it appears in
+function draw_rect!(k, xc, y0, y1)
+    lbl = labeled[k] ? "" : waterfall_labels[k]
+    plot!(p3, rect(xc, bar_w, y0, y1), color=WATERFALL_COLORS[k], linecolor=WATERFALL_COLORS[k], label=lbl)
+    labeled[k] = true
+end
+
+sum4_bottom = zeros(nran) #Bottom of the benefit bar's final (last-drawn) segment = the 4-component
+                           #isolated sum, i.e. the real TASOPT curve minus the nonlinear residual
+for i in 1:nran
+    x = ranges_common[i]
+    xL = x - bar_w/2 - bar_gap/2 #Penalty bar (left)
+    xR = x + bar_w/2 + bar_gap/2 #Benefit bar (right)
+    vals = [comp[i] for comp in waterfall_components]
+    penalty_idx = findall(>=(0.0), vals)
+    benefit_idx = findall(<(0.0), vals)
+
+    cum = 0.0
+    for k in penalty_idx #Stack upward from 0
+        y0 = cum
+        cum += vals[k]
+        draw_rect!(k, xL, y0, cum)
+    end
+    total_penalty = cum
+
+    cum2 = total_penalty
+    for k in benefit_idx #Stack downward from the penalty bar's total
+        y1 = cum2
+        cum2 += vals[k]
+        draw_rect!(k, xR, cum2, y1)
+    end
+    sum4_bottom[i] = cum2
+end
+
+plot!(p3, ranges_common, sum4_bottom, label="Linear Model", color=:gray50, lw=2.5,
+      linestyle=:dash, marker=:circle, markersize=4)
+plot!(p3, ranges_common, PFEIEthPenalty_Opt, label="TASOPT Model", color=:black, lw=2.5,
+      linestyle=:solid, marker=:diamond, markersize=4)
+hline!(p3, [0.0], line=(:solid, 1, :black), label="")
+savefig(p3, joinpath(save_dir, "$(save_prefi)_Composition.png"))
