@@ -33,7 +33,7 @@ missdir_or_rangelst = collect(300:100:3000) #joinpath(model_dir,"OffDesignMissio
 pass_bulk_frac = 0.825 
 pass_tail_frac = 0.850 #For farthest distance
 # Save Directory
-saveDir = "Combustor_Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_/"
+saveDir = "Combustor_Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_SLS_/"
 # Parameters
 M0 = 0.0
 P0 = 101320.0 #Pa
