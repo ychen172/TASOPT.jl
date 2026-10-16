@@ -13,10 +13,10 @@ using .Extract: read_oag,extract_combustion_inputs
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = joinpath(__TASOPTroot__,"../example/ModelSaved")
-caseKey   = "Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_"
+caseKey   = "Opti_Jet_NoACT_V4_4_R1Sz_EtasEng_"
 seat_ranges = collect(300:100:3000)
 # Output folder name (within model_dir)
-save_name     = "Combustor_$(caseKey)_FLI" #sub_folder will be created
+save_name     = "Combustor_$(caseKey)FLI_" #sub_folder will be created
 
 #### Create save directory
 save_dir_sub  = joinpath(model_dir,save_name)
