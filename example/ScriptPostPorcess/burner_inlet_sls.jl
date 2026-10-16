@@ -1,7 +1,13 @@
 """
-This script extract the combustor SLS operating condtitions.
-Using the maximum recorded oag off-design missions's thrust.(Typically at static)
-Then Sweep from that maximum thrust to minimum thrust like in typical LTO cycle.
+This script extract the combustor SLS operating condtitions for both R1Size and OAG case.
+Using the maximum recorded oag off-design missions's thrust or R1 sizing mission thrust.
+Then Sweep from that maximum thrust to minimum thrust like in typical LTO cycle with no engine offtake.
+Example for R1 Size:
+    Data in: Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_/Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_300.jld2
+    Case Dir: "Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_" and caseKey = "Opti_Eth_NoACT_V4_3_R1Sz_EtasEng" and missdir_or_rangelst = collect(300:100:3000)
+Example for OAG Size:
+    Data in: Opti_Eth_NoACT_OAG_MI_Tail_V3_/Opti_Eth_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_50.jld2
+    Case Dir: caseDir = "Opti_Eth_NoACT_OAG_MI_Tail_V3_" and caseKey = "Opti_Eth_NoACT_OAG_Ml_" and miss_dir = joinpath(model_dir,"OffDesignMissions_50_300_300_Tail.csv")
 """
 
 using TASOPT
@@ -19,15 +25,16 @@ using Glob
 # Input case names - OAG seat-capacity sweep
 model_dir = joinpath(__TASOPTroot__,"../example/ModelSaved")
 # Sized Aircraft Model Directory
-caseDir = "Opti_Du31_NoACT_OAG_Ml_Tail_V2_"
-caseKey = "Opti_Du31_NoACT_OAG_Ml_"
-# Offdesign Mission Directory
-miss_dir = joinpath(model_dir,"OffDesignMissions_50_300_300_Tail.csv")
-# Save Directory
-saveDir = "Combustor_Opti_Du31_NoACT_OAG_MI_SLS_Du31_/"
-# Parameters
+caseDir = "Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_"
+caseKey = "Opti_Eth_NoACT_V4_3_R1Sz_EtasEng"
+# Offdesign Mission Directory (oag seat mode) or range list (R1size range mode)
+missdir_or_rangelst = collect(300:100:3000) #joinpath(model_dir,"OffDesignMissions_50_300_300_Tail.csv")
+# Seat parameters only used for oag extraction
 pass_bulk_frac = 0.825 
 pass_tail_frac = 0.850 #For farthest distance
+# Save Directory
+saveDir = "Combustor_Opti_Eth_NoACT_V4_3_R1Sz_EtasEng_/"
+# Parameters
 M0 = 0.0
 P0 = 101320.0 #Pa
 T0 = 288.2 #K
@@ -35,9 +42,9 @@ a0 = 340.2074661144284 #m/s
 num_SLS_points = 50 # Number of sea-level-static, no-offtake points to sweep between the min and max off-design thrust
 # Specified SLS fuel case. Not used for determining off-design thrust range, but specifically for SLS sweep run given an engine design.
 # Overwrite fuel for copied ac model. Just enough to get the engine run using that fuel.
-sls_fuel_name     = "Du31"   #"Eth"    , "Du31" for output filename
-sls_idx_fuel      = 322431   # 32      ,  322431
-sls_hvap_fuel_Jkg = 586408.0 # 918187.9,  586408.0
+sls_fuel_name     = "Eth"    #"Eth"    , "Du31" for output filename
+sls_idx_fuel      = 32       # 32      ,  322431
+sls_hvap_fuel_Jkg = 918187.9 # 918187.9,  586408.0
 
 #### Function defintion
 """
@@ -102,8 +109,12 @@ saveDirFull  = joinpath(model_dir,saveDir)
 mkpath(saveDirFull)
 
 #### Load OAG off-design mission data (ranges/weights per seat capacity)
-miss_off_des = read_oag(miss_dir)
-seat_cap_keys_all = sort(collect(keys(miss_off_des)))
+if !(missdir_or_rangelst isa AbstractVector)
+    miss_off_des = read_oag(missdir_or_rangelst)
+    seat_cap_keys_all = sort(collect(keys(miss_off_des)))
+else
+    seat_cap_keys_all = missdir_or_rangelst
+end
 
 #### Process the seat groups based on the cycle data provided one at a time. (Skip the one with no aircraft model)
 for sc in seat_cap_keys_all
@@ -111,11 +122,17 @@ for sc in seat_cap_keys_all
     matches = glob(caseKey*"*_$(sc).jld2",joinpath(model_dir,caseDir))
     length(matches) == 1 || continue
     ac = quickload_aircraft(matches[1])
-    println("Run Seat Capacity: $(sc)")
-    #### Load the corresponding missions
-    ran_Lst_off_nmi = miss_off_des[sc].ranges_nmi
-    #### Get the thrust variation
-    Fn_min_N, Fn_max_N = extract_max_min_des_offdes_thrust(ac,ran_Lst_off_nmi,pass_bulk_frac,pass_tail_frac)
+    println("Run Seat/Range: $(sc)")
+    #### Indentify the extreme thrust
+    if !(missdir_or_rangelst isa AbstractVector)
+        # Load the corresponding missions
+        ran_Lst_off_nmi = miss_off_des[sc].ranges_nmi
+        # Get the thrust variation
+        Fn_min_N, Fn_max_N = extract_max_min_des_offdes_thrust(ac,ran_Lst_off_nmi,pass_bulk_frac,pass_tail_frac)
+    else
+        Fn_max_N = maximum(ac.pare[ieFe,:,1])
+        Fn_min_N = minimum(ac.pare[ieFe,ipclimb1:ipdescentn,1])
+    end
     #### Override the fuel used for the SLS sweep itself (independent of the design/off-design primary fuel above)
     ac_fuel = deepcopy(ac)
     ac_fuel.options.ifuel = sls_idx_fuel
