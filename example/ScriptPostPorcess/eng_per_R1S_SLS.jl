@@ -37,12 +37,13 @@ ylim_EtaTh = (20,40) #only for thermal efficiency y axis (turned off by nothing)
 mkpath(save_dir)
 
 #### Pre-allocate per-case result containers (one vector per case, filled over the thrust sweep)
-thrust_per_case      = [Float64[] for _ in case_keys]
-eta_thermal_per_case = [Float64[] for _ in case_keys]
+thrust_per_case       = [Float64[] for _ in case_keys]
+eta_thermal_per_case  = [Float64[] for _ in case_keys]
 OPR_per_case          = [Float64[] for _ in case_keys]
 BPR_per_case          = [Float64[] for _ in case_keys]
 specpowPJet_per_case  = [Float64[] for _ in case_keys] #Specific power: P_Jet per unit TOTAL (core+bypass) mass flow, [kW/(kg/s)]
 cpt4_per_case         = [Float64[] for _ in case_keys] #Combustion-gas specific heat at Tt4, [J/(kg*K)]
+FAR_per_case          = [Float64[] for _ in case_keys] #Fuel air ratio
 
 #### Loop through each case to extract engine performance for SLS
 for (j, key_j) in enumerate(case_keys)
@@ -90,12 +91,18 @@ for (j, key_j) in enumerate(case_keys)
             P_inlet       = P0,
             LHV_fuel      = res.hfuel,
             thrust        = res.Fe)
+        
+        #### Compute Fuel Air Ratio
+        FAR = (res.mcore .* res.ff)/(res.mcore .- 0.0) # Fuel air ratio
+
+        #### Collection
         push!(thrust_per_case[j], res.Fe/1000.0) #[kN]
         push!(eta_thermal_per_case[j], eta_thermal)
         push!(OPR_per_case[j], res.OPR)
         push!(BPR_per_case[j], res.BPR)
         push!(specpowPJet_per_case[j], specific_power/1000.0) #[kW/(kg/s)], P_Jet per unit total mass flow
         push!(cpt4_per_case[j], res.cpt4)
+        push!(FAR_per_case[j], FAR)
     end
 end
 
@@ -130,3 +137,8 @@ plot_cases_specified("Specific Power [kW/(kg/s)]", "Bypass Ratio",
 plot_cases_specified("Specific Power [kW/(kg/s)]", "cpt4 [J/(kg*K)]",
                      specpowPJet_per_case, cpt4_per_case, case_Nams,
                      joinpath(save_dir,"$(save_prefi)_cpt4_vs_SpecificPower.png"))
+
+# Combustion fuel air ratio as a function of specific power P_Jet/(mcore(1+BPR))
+plot_cases_specified("Specific Power [kW/(kg/s)]", "Fuel Air Ratio",
+                     specpowPJet_per_case, FAR_per_case, case_Nams,
+                     joinpath(save_dir,"$(save_prefi)_FAR_vs_SpecificPower.png"))
