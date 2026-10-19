@@ -128,19 +128,23 @@ for (j, key_j) in enumerate(case_keys)
 end
 
 #### Plots
+#### Design-range onset of Ethanol's fan-diameter clipping 
+const DFAN_CLIP_RANGE = 2700.0 #nmi
+const CLIP_VLINE = [(x=DFAN_CLIP_RANGE, label="Max DiaFan Lim (Eth)", color=:gray40)]
+
 # Engine thermal, propulsive, and total effciency at cruise 1, each as its own plot, in percent
 eta_thermal_pct_per_case = [100.0 .* v for v in eta_thermal_per_case]
 eta_propu_pct_per_case   = [100.0 .* v for v in eta_propu_per_case]
 eta_total_pct_per_case   = [100.0 .* v for v in eta_total_per_case]
 plot_cases_specified("Design/R1 Range [nmi]", "Engine Thermal Efficiency at Cruise [%]",
                      rans_per_case, eta_thermal_pct_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_ThermalEff.png"))
+                     joinpath(save_dir,"$(save_prefi)_ThermalEff.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Engine Propulsive Efficiency at Cruise [%]",
                      rans_per_case, eta_propu_pct_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_PropulsiveEff.png"))
+                     joinpath(save_dir,"$(save_prefi)_PropulsiveEff.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Engine Total Efficiency at Cruise [%]",
                      rans_per_case, eta_total_pct_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_TotalEff.png"))
+                     joinpath(save_dir,"$(save_prefi)_TotalEff.png"); vlines=CLIP_VLINE)
 
 # Engine thermal, propulsive, and total efficiency at rotate, each as its own plot, in percent
 eta_thermal_TO_pct_per_case = [100.0 .* v for v in eta_thermal_TO_per_case]
@@ -148,49 +152,49 @@ eta_propu_TO_pct_per_case   = [100.0 .* v for v in eta_propu_TO_per_case]
 eta_total_TO_pct_per_case   = [100.0 .* v for v in eta_total_TO_per_case]
 plot_cases_specified("Design/R1 Range [nmi]", "Engine Thermal Efficiency at Rotate [%]",
                      rans_per_case, eta_thermal_TO_pct_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_ThermalEff_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_ThermalEff_Rotate.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Engine Propulsive Efficiency at Rotate [%]",
                      rans_per_case, eta_propu_TO_pct_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_PropulsiveEff_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_PropulsiveEff_Rotate.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Engine Total Efficiency at Rotate [%]",
                      rans_per_case, eta_total_TO_pct_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_TotalEff_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_TotalEff_Rotate.png"); vlines=CLIP_VLINE)
 
 # Overall pressure ratio, Tt4/Tt2 temperature ratio, and turbine cooling air fraction, at cruise and rotate
 plot_cases_specified("Design/R1 Range [nmi]", "Overall Pressure Ratio at Cruise",
                      rans_per_case, OPR_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_OPR.png"))
+                     joinpath(save_dir,"$(save_prefi)_OPR.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Tt4/Tt2 at Cruise",
                      rans_per_case, Tt4Tt2_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_Tt4Tt2.png"))
+                     joinpath(save_dir,"$(save_prefi)_Tt4Tt2.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Turbine Cooling Air Fraction at Cruise",
                      rans_per_case, coolfrac_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_CoolAirFrac.png"))
+                     joinpath(save_dir,"$(save_prefi)_CoolAirFrac.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Overall Pressure Ratio at Rotate",
                      rans_per_case, OPR_TO_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_OPR_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_OPR_Rotate.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Tt4/Tt2 at Rotate",
                      rans_per_case, Tt4Tt2_TO_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_Tt4Tt2_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_Tt4Tt2_Rotate.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Turbine Cooling Air Fraction at Rotate",
                      rans_per_case, coolfrac_TO_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_CoolAirFrac_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_CoolAirFrac_Rotate.png"); vlines=CLIP_VLINE)
 
 # Bypass ratio, at cruise and rotate
 plot_cases_specified("Design/R1 Range [nmi]", "Bypass Ratio at Cruise",
                      rans_per_case, BPR_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_BPR.png"))
+                     joinpath(save_dir,"$(save_prefi)_BPR.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Bypass Ratio at Rotate",
                      rans_per_case, BPR_TO_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_BPR_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_BPR_Rotate.png"); vlines=CLIP_VLINE)
 
 # Specific power, P_Jet/(mcore(1+BPR)), as a function of range, at cruise and rotate
 plot_cases_specified("Design/R1 Range [nmi]", "Specific Power at Cruise [kW/(kg/s)]",
                      rans_per_case, specpow_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_SpecificPower.png"))
+                     joinpath(save_dir,"$(save_prefi)_SpecificPower.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Specific Power at Rotate [kW/(kg/s)]",
                      rans_per_case, specpow_TO_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_SpecificPower_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_SpecificPower_Rotate.png"); vlines=CLIP_VLINE)
 
 # Combustion-gas specific heat (cpt4) against specific power, at cruise and rotate
 plot_cases_specified("Specific Power at Cruise [kW/(kg/s)]", "cpt4 at Cruise [J/(kg*K)]",
@@ -203,7 +207,7 @@ plot_cases_specified("Specific Power at Rotate [kW/(kg/s)]", "cpt4 at Rotate [J/
 # Takeoff (rotate) thrust and fan diameter, as a function of design range
 plot_cases_specified("Design/R1 Range [nmi]", "Thrust at Rotate [kN]",
                      rans_per_case, thrust_TO_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_Thrust_Rotate.png"))
+                     joinpath(save_dir,"$(save_prefi)_Thrust_Rotate.png"); vlines=CLIP_VLINE)
 plot_cases_specified("Design/R1 Range [nmi]", "Fan Diameter [m]",
                      rans_per_case, dfan_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_FanDiameter.png"))
+                     joinpath(save_dir,"$(save_prefi)_FanDiameter.png"); vlines=CLIP_VLINE)

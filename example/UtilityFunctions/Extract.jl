@@ -286,11 +286,14 @@ This function compare 1D data from various cases.
         - datalab: case labels [ncases], `nothing` to skip a label, all `nothing` leads to no label at all
         - savename: name for plot saving, full path + name plot + extension
         - dpi, lw, legend
+        - vlines: optional vector of (x=..., label=..., color=...) NamedTuples, one dashed vertical
+          line drawn per entry (e.g. to mark a design constraint's onset range) - defaults to none,
+          so existing call sites are unaffected
 """
-function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}}, 
-                              ydata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}}, datalab::AbstractVector{<:Union{Nothing,AbstractString}}, 
+function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}},
+                              ydata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}}, datalab::AbstractVector{<:Union{Nothing,AbstractString}},
                               savename::AbstractString;
-                              dpi::Real=800, lw::Real=2, legend::Symbol=:best)
+                              dpi::Real=800, lw::Real=2, legend::Symbol=:best, vlines=NamedTuple[])
     # size check
     ((length(xdata) == length(ydata)) && (length(ydata) == length(datalab))) || error("Length for xy data $(length(xdata)),$(length(ydata)) and data labels $(length(datalab)) should all equal")
     # set legend
@@ -304,6 +307,9 @@ function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata:
         marker = MARKERS[mod1(cld(i, length(LINECOLORS)), length(MARKERS))]
         linestyle = LINESTYLES[mod1(cld(i, length(LINECOLORS) * length(MARKERS)), length(LINESTYLES))]
         plot!(p, xdata[i], ydata[i], marker=marker, mc=color, msc=color, color=color, lw=lw, linestyle=linestyle, label=datalab[i])
+    end
+    for vl in vlines
+        vline!(p, [vl.x], line=(:dash, 2, vl.color), label=vl.label)
     end
     savefig(p,savename)
 end
