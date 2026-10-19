@@ -25,7 +25,7 @@ span_per_case = [Float64[] for _ in case_keys]
 AR_per_case   = [Float64[] for _ in case_keys]
 LD_per_case   = [Float64[] for _ in case_keys]
 S_per_case    = [Float64[] for _ in case_keys]
-frac_nace_fuse_drag = [Float64[] for _ in case_keys]
+induced_drag_frac = [Float64[] for _ in case_keys]
 
 #### Loop through each case to extract aero/geometry parameters over ranges
 for (j, key_j) in enumerate(case_keys)
@@ -67,7 +67,7 @@ for (j, key_j) in enumerate(case_keys)
         push!(AR_per_case[j], AR)
         push!(S_per_case[j], S)
         push!(LD_per_case[j], CL/CD)
-        push!(frac_nace_fuse_drag[j], (CDi+CDwing)/(CDi+CDwing+CDfuse+CDhtail+CDvtail+CDnace))
+        push!(induced_drag_frac[j], (CDi)/(CDi+CDwing+CDfuse+CDhtail+CDvtail+CDnace))
     end
 
 end
@@ -112,6 +112,6 @@ plot_two_curves(rans_per_case, S_per_case, case_Nams, "Wing Surface Area [m^2]",
                 joinpath(save_dir, "$(save_prefi)_WingSurfaceArea.png");
                 show_span_clip=true)
 
-plot_two_curves(rans_per_case, frac_nace_fuse_drag.*100, case_Nams, "Wing Drag Fraction [%]",
-                joinpath(save_dir, "$(save_prefi)_WingDragFraction.png");
+plot_two_curves(rans_per_case, induced_drag_frac.*100, case_Nams, "Induced Drag / Total Drag [%]",
+                joinpath(save_dir, "$(save_prefi)_InducedDragFraction.png");
                 show_span_clip=true)
