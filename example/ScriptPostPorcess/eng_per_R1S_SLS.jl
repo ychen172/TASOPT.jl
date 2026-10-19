@@ -27,9 +27,11 @@ case_Nams  = ["Jet Engine + Jet Fuel"             ,"Jet Engine + Ethanol"       
 fuel_index = [24                                 ,32                                 ,32                                 ,24                                 ]
 rho_fuel   = [817.0                              ,789.0                              ,789.0                              ,817.0                              ]
 hvap_fuel  = [358694.0                           ,918187.9                           ,918187.9                           ,358694.0                           ]
-R1_range   = 2000 #Selected range for SLS comparison (exist in all cases)
+R1_range   = 1600 #Selected range for SLS comparison (exist in all cases)
 n_Thr_ref  = 50 #Number of refinement between max and min thrust to sweep
 save_prefi = "R1_Size_SLS_Engine_Compare_$(R1_range)nmi_Swap"
+xlim_SP    = (20,51) #only for specific power x axis (turned off by nothing)
+ylim_EtaTh = (20,40) #only for thermal efficiency y axis (turned off by nothing)
 
 #### Create save directory if not exist
 mkpath(save_dir)
@@ -117,7 +119,7 @@ plot_cases_specified("Specific Power [kW/(kg/s)]", "Overall Pressure Ratio",
 # Engine thermal efficiencies as a function of specific power P_Jet/(mcore(1+BPR))
 plot_cases_specified("Specific Power [kW/(kg/s)]", "Engine Thermal Efficiency at SLS [%]",
                      specpowPJet_per_case, eta_thermal_pct_per_case, case_Nams,
-                     joinpath(save_dir,"$(save_prefi)_ThermalEff_vs_SpecificPower.png"))
+                     joinpath(save_dir,"$(save_prefi)_ThermalEff_vs_SpecificPower.png"),xlim=xlim_SP,ylim=ylim_EtaTh)
 
 # Bypass ratio as a function of specific power P_Jet/(mcore(1+BPR))
 plot_cases_specified("Specific Power [kW/(kg/s)]", "Bypass Ratio",

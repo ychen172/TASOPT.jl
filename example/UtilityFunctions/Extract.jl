@@ -289,11 +289,13 @@ This function compare 1D data from various cases.
         - vlines: optional vector of (x=..., label=..., color=...) NamedTuples, one dashed vertical
           line drawn per entry (e.g. to mark a design constraint's onset range) - defaults to none,
           so existing call sites are unaffected
+        - xlim, ylim: optional (lo, hi) tuples to clamp the axis ranges - default `nothing` (auto, unchanged behavior)
 """
 function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}},
                               ydata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}}, datalab::AbstractVector{<:Union{Nothing,AbstractString}},
                               savename::AbstractString;
-                              dpi::Real=800, lw::Real=2, legend::Symbol=:best, vlines=NamedTuple[])
+                              dpi::Real=800, lw::Real=2, legend::Symbol=:best, vlines=NamedTuple[],
+                              xlim::Union{Nothing,Tuple}=nothing, ylim::Union{Nothing,Tuple}=nothing)
     # size check
     ((length(xdata) == length(ydata)) && (length(ydata) == length(datalab))) || error("Length for xy data $(length(xdata)),$(length(ydata)) and data labels $(length(datalab)) should all equal")
     # set legend
@@ -301,6 +303,8 @@ function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata:
         legend = false
     end
     p = plot(xlabel=xlab, ylabel=ylab, dpi=dpi, legend=legend)
+    !isnothing(xlim) && xlims!(p, xlim)
+    !isnothing(ylim) && ylims!(p, ylim)
     for i in eachindex(xdata)
         length(xdata[i])==length(ydata[i]) || error("xy data for case $(i) dont have the same number of data points $(length(xdata[i])),$(length(ydata[i]))")
         color = LINECOLORS[mod1(i, length(LINECOLORS))]
