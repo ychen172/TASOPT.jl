@@ -257,9 +257,9 @@ function extract_acModel(ac_cur,idx_miss)
     return output
 end
 
-const LINESTYLES = [:solid, :dash, :dot, :dashdot, :dashdotdot]
+const LINESTYLES = [:solid, :dash, :dot, :dashdot, :dashdotdot, :solid]
 const LINECOLORS = [:blue, :red, :green, :orange, :purple, :brown, :black, :magenta, :cyan, :olive]
-const MARKERS    = [:rect, :circle, :diamond, :utriangle, :dtriangle]
+const MARKERS    = [:rect, :circle, :diamond, :utriangle, :dtriangle, :star6, :star7]
 function plot_cases(xlab::String,ylab::String,cases::AbstractVector{<:AbstractDict},xSym::Symbol,ySym::Symbol,datalab::AbstractVector{<:AbstractString},save_name::String,;dpi=800,lw=2,legend::Symbol=:best)
     @assert length(cases) == length(datalab) "cases and datalab length mismatch"
     p = plot(xlabel=xlab, ylabel=ylab, dpi=dpi, legend=legend)
@@ -290,9 +290,10 @@ This function compare 1D data from various cases.
           line drawn per entry (e.g. to mark a design constraint's onset range) - defaults to none,
           so existing call sites are unaffected
         - xlim, ylim: optional (lo, hi) tuples to clamp the axis ranges - default `nothing` (auto, unchanged behavior)
-        - linecolors, markers, linestyles: optional vectors overriding the default LINECOLORS/MARKERS/
-          LINESTYLES palettes used to style each case - default to the module-level constants, so
-          existing call sites are unaffected
+        - linecolors, markers, linestyles: optional flat vectors
+          Overriding the default LINECOLORS/MARKERS/LINESTYLES palettes
+          Each is matched to case index `linecolors[i]`, `markers[i]`, and `linestyles[i]` 
+          each wrapping around on its own once `i` exceeds that vector's own length.
 """
 function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}},
                               ydata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}}, datalab::AbstractVector{<:Union{Nothing,AbstractString}},
@@ -312,8 +313,8 @@ function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata:
     for i in eachindex(xdata)
         length(xdata[i])==length(ydata[i]) || error("xy data for case $(i) dont have the same number of data points $(length(xdata[i])),$(length(ydata[i]))")
         color = linecolors[mod1(i, length(linecolors))]
-        marker = markers[mod1(cld(i, length(linecolors)), length(markers))]
-        linestyle = linestyles[mod1(cld(i, length(linecolors) * length(markers)), length(linestyles))]
+        marker = markers[mod1(i, length(markers))]
+        linestyle = linestyles[mod1(i, length(linestyles))]
         plot!(p, xdata[i], ydata[i], marker=marker, mc=color, msc=color, color=color, lw=lw, linestyle=linestyle, label=datalab[i])
     end
     for vl in vlines

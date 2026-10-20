@@ -25,6 +25,9 @@ pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_mu
 pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_single_warm_starts_oag.jl
 constraints        = fill([:WPay,:MWTO,:VolFuel],length(idx_fuel_case)) #Constraints for off-design
 case_range_lst     = [[50,150],[140,240],[230,240],[50,150],[140,260],[250,300]]#[[50,140] ,[150,230],[240,240],[50,140],[150,250],[260,300]]
+plt_marker         = [:circle, :circle, :circle, :diamond, :diamond, :diamond]
+plt_linecolor      = [:blue  , :red   , :purple, :blue   , :red    , :purple ]
+plt_linestyle      = [:solid , :solid , :solid , :solid  , :solid  , :solid  ]
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
 miss_dir = joinpath(@__DIR__,"../ModelSaved/OffDesignMissions_50_300_300_Tail.csv")
 # Output directory
@@ -140,85 +143,84 @@ plot_cases_specified("Seat Capacity", "Design/R1 Flight PFEI [J/J]",
                      xdata_design,
                      [d[:(parm[imPFEI,1])] for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"Design_PFEI.png"))
+                     joinpath(save_dir_sub,"Design_PFEI.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Fuel Level [%]",
                      xdata_design,
                      [d[:(parm[imVfuel,1])] .* 100.0 ./ d[:(parg[igVfmax])] for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"Fuel_Level.png"))
+                     joinpath(save_dir_sub,"Fuel_Level.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Wingspan [m]",
                      xdata_design,
                      [d[:(wing.layout.span)] for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"Wingspan.png"))
+                     joinpath(save_dir_sub,"Wingspan.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Taper Ratio of Outer Wing Panel",
                      xdata_design,
                      [d[:(wing.outboard.λ)] for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"OuterTaperWing.png"))
+                     joinpath(save_dir_sub,"OuterTaperWing.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Wing Span Break Location [%]",
                      xdata_design,
                      [d[:(wing.layout.ηs)] .* 100.0 for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"SpanBreakWing.png"))
+                     joinpath(save_dir_sub,"SpanBreakWing.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Wing Aspect Ratio",
                      xdata_design,
                      [d[:(wing.layout.AR)]  for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"AspectRatioWing.png"))
+                     joinpath(save_dir_sub,"AspectRatioWing.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Lift-to-drag Ratio at Start of Cruise",
                      xdata_design,
                      [d[:(para[iaCL,ipcruise1,1])] ./ d[:(para[iaCD,ipcruise1,1])]  for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"LD_StartOfCruise.png"))
+                     joinpath(save_dir_sub,"LD_StartOfCruise.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Lift-to-drag Ratio at End of Cruise",
                      xdata_design,
                      [d[:(para[iaCL,ipcruise2,1])] ./ d[:(para[iaCD,ipcruise2,1])]  for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"LD_EndOfCruise.png"))
+                     joinpath(save_dir_sub,"LD_EndOfCruise.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Engine Total Efficiency at Start of Cruise [%]",
                      xdata_design,
                      [100.0 .* (1.0 ./ (d[:(pare[ieTSFC,ipcruise1,1])] ./ gee)) .* ((cos.(d[:(para[iagamV,ipcruise1,1])]) .* d[:(pare[ieu0,ipcruise1,1])]) ./ d[:(pare[iehfuel,ipcruise1,1])])  for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"TotEffEngine_StartOfCruise.png"))
+                     joinpath(save_dir_sub,"TotEffEngine_StartOfCruise.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Engine Total Efficiency at End of Cruise [%]",
                      xdata_design,
                      [100.0 .* (1.0 ./ (d[:(pare[ieTSFC,ipcruise2,1])] ./ gee)) .* ((cos.(d[:(para[iagamV,ipcruise2,1])]) .* d[:(pare[ieu0,ipcruise2,1])]) ./ d[:(pare[iehfuel,ipcruise2,1])])  for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"TotEffEngine_EndOfCruise.png"))
+                     joinpath(save_dir_sub,"TotEffEngine_EndOfCruise.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Aircraft Empty Weight [Ton]",
                      xdata_design,
                      [(d[:(parm[imWTO,1])] .- d[:(parm[imWfuel,1])] .- d[:(parm[imWpay,1])]) ./ gee ./ 1000.0  for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"EmptyWeight.png"))
+                     joinpath(save_dir_sub,"EmptyWeight.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Fuel Weight Fraction of Total Takeoff Weight [%]",
                      xdata_design,
                      [100.0 .* (d[:(parm[imWfuel,1])] ./ d[:(parm[imWTO,1])]) for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"FuelWeightFraction.png"))
+                     joinpath(save_dir_sub,"FuelWeightFraction.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 plot_cases_specified("Seat Capacity", "Wing Surface Area [m²]",
                      xdata_design,
                      [d[:(wing.layout.S)] for d in dataset],
                      caseNames,
-                     joinpath(save_dir_sub,"WingSurfaceArea.png"))
+                     joinpath(save_dir_sub,"WingSurfaceArea.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 
-#### Plotting: OAG route-frequency-weighted off-design PFEI comparison
 plot_cases_specified("Seat Capacity", "OAG-Weighted Off-Design PFEI [J/J]",
                      xdata_design,
                      oag_weighted_PFEI,
                      caseNames,
-                     joinpath(save_dir_sub,"OAG_Weighted_PFEI.png"))
+                     joinpath(save_dir_sub,"OAG_Weighted_PFEI.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
