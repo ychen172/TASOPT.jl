@@ -1,11 +1,7 @@
 """
-This script compares the OAG seat-capacity-swept optimization campaigns (Jet vs Ethanol)
-produced by opt_from_multi_warm_starts_para_oag.jl.
-
-Design/R1-mission metrics are compared directly across seat capacity.
-Off-design performance is compared via an OAG-weighted PFEI, computed over the same
-route-frequency-weighted mission set (OAG_Data_2024.csv) used to optimize each case,
-re-run here on the saved (2nd-mission) off-design missions.
+This script compares the OAG optimization results (Jet, Ethanol, Dual)
+    - Design/R1-mission metrics are compared directly across seat capacity.
+    - Off-design performance is compared via an OAG-weighted PFEI.
 """
 
 using TASOPT
@@ -18,22 +14,22 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
-model_dir  = "../ModelSaved"
-caseKeys   = ["Opti_Du31_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V2_","Opti_Eth_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_"]
-caseNames  = ["Dual Fuel 40.7 Split"                        ,"Ethanol"]
+model_dir  = joinpath(__TASOPTroot__,"../example/ModelSaved")
+caseKeys   = ["Opti_Eth_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_","Opti_Eth_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_","Opti_Eth_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V3_"]
+caseNames  = ["Ethanol, 2-2 Seat Layout"                   ,"Ethanol, 3-3 Seat Layout"                   ,"Ethanol, 2-4-2 Seat Layout"                 ,"Jet Fuel, 2-2 Seat Layout"                  ,"Jet Fuel, 3-3 Seat Layout"                  ,"Jet Fuel, 2-4-2 Seat Layout"                ]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
-idx_fuel_case      = [322431   ,32       ] # Eth,Jet,D40_7: 32       ,24       ,322431 
-rho_fuel_case_kgm3 = [805.368  ,789.0    ] # kg/m3.       : 789.0    ,817.0    ,805.368
-hvap_fuel_case_Jkg = [586408.0 ,918187.9 ] # J/kg         : 918187.9 ,358694.0 ,586408.0
+idx_fuel_case      = [32       ,32       ,32       ,24       ,24       ,24       ] # Eth,Jet,D40_7: 32       ,24       ,322431 
+rho_fuel_case_kgm3 = [789.0    ,789.0    ,789.0    ,817.0    ,817.0    ,817.0    ] # kg/m3.       : 789.0    ,817.0    ,805.368
+hvap_fuel_case_Jkg = [918187.9 ,918187.9 ,918187.9 ,358694.0 ,358694.0 ,358694.0 ] # J/kg         : 918187.9 ,358694.0 ,586408.0
 pass_load_frac_off = 0.825 # Off-design payload load factor, matches opt_from_multi_warm_starts_para_oag.jl
 pass_load_frac_tail = 0.850 # The farthest (tail) mission payload fraction overwrite, matches opt_from_single_warm_starts_oag.jl
-constraints        = fill([:WPay,:MWTO,:VolFuel],2) #Constraints for off-design
-case_range_lst     = []#[[50,140] ,[150,230],[240,240],[50,140],[150,250],[260,300]]
+constraints        = fill([:WPay,:MWTO,:VolFuel],length(idx_fuel_case)) #Constraints for off-design
+case_range_lst     = [[50,150],[140,240],[230,240],[50,150],[140,260],[250,300]]#[[50,140] ,[150,230],[240,240],[50,140],[150,250],[260,300]]
 # OAG route-frequency mission data (off-design ranges/weights, keyed by seat_capacity)
 miss_dir = joinpath(@__DIR__,"../ModelSaved/OffDesignMissions_50_300_300_Tail.csv")
 # Output directory
-save_dir      = "../ModelProcessed"
-save_name     = "OAG_Dual_Compare4" #sub_folder will be created
+save_dir      = joinpath(__TASOPTroot__,"../example/OutputAndPlots")
+save_name     = "OAG_Eth_Jet" #sub_folder will be created
 iter_max      = 150 #max iteration for off-design calculation
 # Fields to read out for the design (R1) mission
 const fields = [:(parm[imRange,1]),:(parm[imPFEI,1]),:(parm[imVfuel,1]),:(parg[igVfmax]),
@@ -226,21 +222,3 @@ plot_cases_specified("Seat Capacity", "OAG-Weighted Off-Design PFEI [J/J]",
                      caseNames,
                      joinpath(save_dir_sub,"OAG_Weighted_PFEI.png"))
 #
-
-# #### Ethanol OAG-weighted PFEI penalty vs Jet, restricted to seat capacities both cases have
-# iRJ = 1 #Index of the jet case
-# iRE = 2 #Index of the ethanol case
-# common_caps = sort(collect(intersect(Set(seat_caps_avail[iRJ]), Set(seat_caps_avail[iRE]))))
-# PFEIEthPenalty_OAG = Float64[]
-# for sc in common_caps
-#     iJ = findfirst(==(sc), seat_caps_avail[iRJ])
-#     iE = findfirst(==(sc), seat_caps_avail[iRE])
-#     push!(PFEIEthPenalty_OAG, 100.0*(oag_weighted_PFEI[iRE][iE]-oag_weighted_PFEI[iRJ][iJ])/oag_weighted_PFEI[iRJ][iJ])
-# end
-
-# plot_cases_specified("Seat Capacity", "Ethanol OAG-Weighted PFEI Penalty [%]",
-#                      [Float64.(common_caps)],
-#                      [PFEIEthPenalty_OAG],
-#                      [nothing],
-#                      joinpath(save_dir_sub,"OAG_Weighted_PFEI_Penalty.png"))
-# #
