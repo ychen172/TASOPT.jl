@@ -290,12 +290,16 @@ This function compare 1D data from various cases.
           line drawn per entry (e.g. to mark a design constraint's onset range) - defaults to none,
           so existing call sites are unaffected
         - xlim, ylim: optional (lo, hi) tuples to clamp the axis ranges - default `nothing` (auto, unchanged behavior)
+        - linecolors, markers, linestyles: optional vectors overriding the default LINECOLORS/MARKERS/
+          LINESTYLES palettes used to style each case - default to the module-level constants, so
+          existing call sites are unaffected
 """
 function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}},
                               ydata::AbstractVector{<:AbstractVector{<:Union{Missing,Real}}}, datalab::AbstractVector{<:Union{Nothing,AbstractString}},
                               savename::AbstractString;
                               dpi::Real=800, lw::Real=2, legend::Symbol=:best, vlines=NamedTuple[],
-                              xlim::Union{Nothing,Tuple}=nothing, ylim::Union{Nothing,Tuple}=nothing)
+                              xlim::Union{Nothing,Tuple}=nothing, ylim::Union{Nothing,Tuple}=nothing,
+                              linecolors=LINECOLORS, markers=MARKERS, linestyles=LINESTYLES)
     # size check
     ((length(xdata) == length(ydata)) && (length(ydata) == length(datalab))) || error("Length for xy data $(length(xdata)),$(length(ydata)) and data labels $(length(datalab)) should all equal")
     # set legend
@@ -307,9 +311,9 @@ function plot_cases_specified(xlab::AbstractString, ylab::AbstractString, xdata:
     !isnothing(ylim) && ylims!(p, ylim)
     for i in eachindex(xdata)
         length(xdata[i])==length(ydata[i]) || error("xy data for case $(i) dont have the same number of data points $(length(xdata[i])),$(length(ydata[i]))")
-        color = LINECOLORS[mod1(i, length(LINECOLORS))]
-        marker = MARKERS[mod1(cld(i, length(LINECOLORS)), length(MARKERS))]
-        linestyle = LINESTYLES[mod1(cld(i, length(LINECOLORS) * length(MARKERS)), length(LINESTYLES))]
+        color = linecolors[mod1(i, length(linecolors))]
+        marker = markers[mod1(cld(i, length(linecolors)), length(markers))]
+        linestyle = linestyles[mod1(cld(i, length(linecolors) * length(markers)), length(linestyles))]
         plot!(p, xdata[i], ydata[i], marker=marker, mc=color, msc=color, color=color, lw=lw, linestyle=linestyle, label=datalab[i])
     end
     for vl in vlines
