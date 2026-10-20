@@ -5,7 +5,7 @@ This script takes the R1 R2 R3 missions of another model, and offdesign the curr
 using Glob
 using TASOPT
 include(__TASOPTindices__)
-include(joinpath(__TASOPTroot__, "../example/utilities_for_offdesign/offdesign.jl"))
+include(joinpath(__TASOPTroot__, "../example/UtilityFunctions/offdesign.jl"))
 using .PRD: off_design_specified!
 
 #### Load model directory

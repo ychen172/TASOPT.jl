@@ -9,7 +9,7 @@ using JLD2
 using DataFrames
 include(__TASOPTindices__)
 include(joinpath(__TASOPTroot__,"utils","sensitivity.jl"))
-include(joinpath(__TASOPTroot__,"../example/utilities_for_offdesign/offdesign.jl"))
+include(joinpath(__TASOPTroot__,"../example/UtilityFunctions/offdesign.jl"))
 using .PRD:off_design_specified!, has_two_missions, create_duplicated_two_missions!
 
 """

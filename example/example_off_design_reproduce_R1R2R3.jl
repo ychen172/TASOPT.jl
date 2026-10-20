@@ -6,7 +6,7 @@ using CSV
 using DataFrames
 using TASOPT
 include(__TASOPTindices__)
-include(joinpath(@__DIR__,"utilities_for_offdesign/offdesign.jl"))
+include(joinpath(@__DIR__,"UtilityFunctions/offdesign.jl"))
 using .PRD:off_design_specified!
 
 #### Optimization parameters
