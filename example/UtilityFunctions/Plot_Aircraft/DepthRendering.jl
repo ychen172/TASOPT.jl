@@ -79,7 +79,7 @@ end
 #### same (az, el) space.
 
 function plot_view_by_part(components::Dict{Symbol,GeomLines}; xlabel::String, ylabel::String, title::String,
-    azimuth_deg::Float64, elevation_deg::Float64, part_colors=PART_COLORS)
+    azimuth_deg::Float64, elevation_deg::Float64, part_colors=PART_COLORS, p=nothing)
 
     entries = Tuple{Vector{Float64},Vector{Float64},Vector{Float64},Any}[]
     for (part, frame) in components
@@ -92,7 +92,9 @@ function plot_view_by_part(components::Dict{Symbol,GeomLines}; xlabel::String, y
     end
     segs = depth_sorted_segments(entries)
 
-    p = plot(xlabel=xlabel, ylabel=ylabel, title=title, aspect_ratio=:equal, legend=false, dpi=800)
+    if p === nothing
+        p = plot(xlabel=xlabel, ylabel=ylabel, title=title, aspect_ratio=:equal, legend=false, dpi=800)
+    end
     for (u, v, _, color) in segs
         plot!(p, u, v, color=color, lw=1)
     end
