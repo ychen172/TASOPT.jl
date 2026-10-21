@@ -917,12 +917,57 @@ function aircraft_frame(ac; dihedral_angle_override::Union{Nothing,Float64}=noth
 end
 
 """
-    project_view(components; view=:top)
+    axonometric_xy(xs, ys, zs; azimuth_deg=45.0, elevation_deg=45.0)
+
+Simple axonometric (parallel, non-perspective -- no vanishing point, no foreshortening with
+distance) projection onto 2D screen coordinates `(u, v)`: rotate the points `azimuth_deg` about
+z (turning the aircraft in plan view), then `elevation_deg` about the resulting x-axis (tipping
+the nose-on view up toward looking down from above), and take the rotated `(x, z)` as `(u, v)`
+(the rotated y, "depth" toward/away from the viewer, is dropped). `(45,45)` gives a generic 3/4
+"iso-ish" view -- not a true isometric projection (that needs a specific ~35.26° elevation to
+avoid foreshortening distortion), just a simple, recognizable 3D-ish angle for a wireframe.
+"""
+function axonometric_xy(xs::Vector{Float64}, ys::Vector{Float64}, zs::Vector{Float64};
+    azimuth_deg::Float64=45.0, elevation_deg::Float64=45.0)
+
+    az = azimuth_deg * π / 180
+    el = elevation_deg * π / 180
+    x1 = xs .* cos(az) .- ys .* sin(az)
+    y1 = xs .* sin(az) .+ ys .* cos(az)
+    z2 = y1 .* sin(el) .+ zs .* cos(el)
+    return x1, z2
+end
+
+"""
+    axonometric_depth(xs, ys, zs; azimuth_deg=45.0, elevation_deg=45.0)
+
+The companion "depth" coordinate that `axonometric_xy`'s parallel projection drops: distance
+along the viewing axis, orthogonal to the `(u, v)` screen plane it returns. Same rotation
+(`az` about z, then `el` about the resulting x-axis), but keeping `y2 = y1*cos(el) - zs*sin(el)`
+instead of discarding it. Smaller values are nearer the camera for the `(45, 45)` default;
+useful for depth-cueing a wireframe (e.g. shading lines by depth so near structure reads over
+far/hidden structure).
+"""
+function axonometric_depth(xs::Vector{Float64}, ys::Vector{Float64}, zs::Vector{Float64};
+    azimuth_deg::Float64=45.0, elevation_deg::Float64=45.0)
+
+    az = azimuth_deg * π / 180
+    el = elevation_deg * π / 180
+    y1 = xs .* sin(az) .+ ys .* cos(az)
+    y2 = y1 .* cos(el) .- zs .* sin(el)
+    return y2
+end
+
+"""
+    project_view(components; view=:top, azimuth_deg=45.0, elevation_deg=45.0)
 
 Flatten an `aircraft_frame(ac)` dict into a list of 2D `(u, v)` polylines for `view`
-in `(:top, :side, :front)`.
+in `(:top, :side, :front, :iso)`. `:iso` uses `axonometric_xy` with `azimuth_deg`/`elevation_deg`
+(ignored for the other three, which are plain orthographic drops of one coordinate).
 """
-function project_view(components::Dict{Symbol,GeomLines}; view::Symbol=:top)
+function project_view(components::Dict{Symbol,GeomLines}; view::Symbol=:top,
+    azimuth_deg::Float64=45.0, elevation_deg::Float64=45.0)
+
     lines2d = Tuple{Vector{Float64},Vector{Float64}}[]
     for frame in values(components), (xs, ys, zs) in frame
         if view == :top
@@ -931,8 +976,10 @@ function project_view(components::Dict{Symbol,GeomLines}; view::Symbol=:top)
             push!(lines2d, (xs, zs))
         elseif view == :front
             push!(lines2d, (ys, zs))
+        elseif view == :iso
+            push!(lines2d, axonometric_xy(xs, ys, zs; azimuth_deg=azimuth_deg, elevation_deg=elevation_deg))
         else
-            error("Unknown view $view, expected :top, :side, or :front")
+            error("Unknown view $view, expected :top, :side, :front, or :iso")
         end
     end
     return lines2d
