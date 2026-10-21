@@ -79,11 +79,11 @@ end
 #### same (az, el) space.
 
 function plot_view_by_part(components::Dict{Symbol,GeomLines}; xlabel::String, ylabel::String, title::String,
-    azimuth_deg::Float64, elevation_deg::Float64)
+    azimuth_deg::Float64, elevation_deg::Float64, part_colors=PART_COLORS)
 
     entries = Tuple{Vector{Float64},Vector{Float64},Vector{Float64},Any}[]
     for (part, frame) in components
-        color = get(PART_COLORS, part, :black)
+        color = get(part_colors, part, :black)
         for (xs, ys, zs) in frame
             u, v = axonometric_xy(xs, ys, zs; azimuth_deg=azimuth_deg, elevation_deg=elevation_deg)
             d = point_depth(xs, ys, zs; azimuth_deg=azimuth_deg, elevation_deg=elevation_deg)
