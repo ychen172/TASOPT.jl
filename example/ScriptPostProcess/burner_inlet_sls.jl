@@ -171,7 +171,7 @@ for (sc_cur,ac_name_cur) in zip(sc,ac_name)
     # Save the off-design engine performance
     savePath = joinpath(save_dir_sub, save_name*"$(sc_cur)$(case_label)_$(sls_fuel_name).csv")
     open(savePath, "w") do io
-        println(io, "Thrust[kN],Pt3[psi],Pt4[psi],Tt3[R],Tt4[R],Wf[lbm/s],W3[lbm/s],WAR[-]")
+        println(io, "Thrust[kN],Pt3[psi],Pt4[psi],Tt3[R],Tt4[R],Wf[lbm/s],W3[lbm/s],WAR[m]")
         for idx in eachindex(res_cur.Fn_Lst_Act_kN)
             println(io, "$(res_cur.Fn_Lst_Act_kN[idx]),$(res_cur.Pt3_Lst_psi[idx]),$(res_cur.Pt4_Lst_psi[idx]),$(res_cur.Tt3_Lst_R[idx]),$(res_cur.Tt4_Lst_R[idx]),$(res_cur.mdotF_Lst_lbms[idx]),$(res_cur.mdotA_Lst_lbms[idx]),$(WAR[idx])")
         end
