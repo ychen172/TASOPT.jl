@@ -15,7 +15,7 @@ using .Extract: extract_acModel_compact!, init_results_2Layers, plot_cases_speci
 #### Setup IO
 # Input case names - OAG seat-capacity sweep
 model_dir  = joinpath(__TASOPTroot__,"../example/ModelSaved")
-caseKeys   = ["Opti_Eth_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_","Opti_Eth_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_","Opti_Eth_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_4Se_TyC_24Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_Tail_V3_","Opti_Jet_NoACT_OAG_Ml_8Se_TyD_28Bf_Tail_V3_"]
+caseKeys   = ["Opti_Eth_NoACT_OAG_Ml_4Se_TyC_24Bf_TailCorr_V4_","Opti_Eth_NoACT_OAG_Ml_6Se_TyC_24Bf_TailCorr_V4_","Opti_Eth_NoACT_OAG_Ml_8Se_TyD_28Bf_TailCorr_V4_","Opti_Jet_NoACT_OAG_Ml_4Se_TyC_24Bf_TailCorr_V4_","Opti_Jet_NoACT_OAG_Ml_6Se_TyC_24Bf_TailCorr_V4_","Opti_Jet_NoACT_OAG_Ml_8Se_TyD_28Bf_TailCorr_V4_"]
 caseNames  = ["Ethanol, 2-2 Seat Layout"                   ,"Ethanol, 3-3 Seat Layout"                   ,"Ethanol, 2-4-2 Seat Layout"                 ,"Jet Fuel, 2-2 Seat Layout"                  ,"Jet Fuel, 3-3 Seat Layout"                  ,"Jet Fuel, 2-4-2 Seat Layout"                ]
 # Off-design fuel properties, aligned with caseKeys (must match what each campaign was optimized/run with)
 idx_fuel_case      = [32       ,32       ,32       ,24       ,24       ,24       ] # Eth,Jet,D40_7: 32       ,24       ,322431 
