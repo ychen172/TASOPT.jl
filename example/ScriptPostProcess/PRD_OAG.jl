@@ -19,14 +19,14 @@ case_folders    = ["Opti_Jet_NoACT_OAG_MI_Tail_V3_PRD", "Opti_Eth_NoACT_OAG_MI_T
 case_name_front = ["Opti_Jet_NoACT_OAG_Ml_*"          , "Opti_Eth_NoACT_OAG_Ml_*"          ] #"Use * for outside of pattern matching"
 case_name_back  = ["_PRD","_PRD"] #For subfolder name, after _Seat 
 caseNams        = ["Jet Fuel"                         , "Ethanol"                          ]
-seat_caps       = [50, 150, 240]
+seat_caps       = [100, 150, 200]
 save_prefi      = "OAG_PRD"
 # Required OAG mission set data
 mission_file    = "OffDesignMissions_50_300_300_Tail.csv"
 pass_load_frac_off = 0.825 #Load factor of passengers (lower 4 missions) (fraction of ac.parg[igWpaymax])
 pass_load_frac_tail = 0.850 #The farthest mission payload fraction (tail mission)
 # Plotting
-plt_marker      = [:diamond, :circle, :rect] #Apply to seats
+plt_marker      = [:diamond, :circle, :rect, :utriangle, :dtriangle, :star5, :hexagon, :pentagon, :xcross, :cross] #Apply to seats
 plt_linestyle   = [:solid  , :dash] #Apply to cases
 plt_linecolor   = [:red    , :purple] #Apply to cases
 
@@ -92,6 +92,30 @@ for (idxCase, case_folder) in enumerate(case_folders)
     end
 end
 
+#### Extract the R1 mission (max payload, max range) for every seat capacity with a PRD subfolder
+R1_seats_per_case = [Int[]     for _ in case_folders]
+R1_range_per_case = [Float64[] for _ in case_folders] # [m]
+R1_wpay_per_case  = [Float64[] for _ in case_folders] # [N]
+for (idxCase, case_folder) in enumerate(case_folders)
+    case_dir = joinpath(model_dir, case_folder)
+    seat_pattern = Regex("_(\\d+)" * case_name_back[idxCase] * "\$") #Seat capacity right before the subfolder suffix
+    for model_dir_sub in glob(case_name_front[idxCase]*case_name_back[idxCase], case_dir)
+        prefix = basename(model_dir_sub)
+        m = match(seat_pattern, prefix)
+        m === nothing && continue
+        ac = quickload_aircraft(only(glob(prefix*"R1_*.jld2", model_dir_sub)))
+        push!(R1_seats_per_case[idxCase], parse(Int, m.captures[1]))
+        push!(R1_range_per_case[idxCase], ac.parm[imRange,2])
+        push!(R1_wpay_per_case[idxCase], ac.parm[imWpay,2])
+    end
+    # Order by seat capacity so the curve runs from small to large aircraft
+    idx_sort = sortperm(R1_seats_per_case[idxCase])
+    permute!(R1_seats_per_case[idxCase], idx_sort)
+    permute!(R1_range_per_case[idxCase], idx_sort)
+    permute!(R1_wpay_per_case[idxCase], idx_sort)
+    println("$(caseNams[idxCase]) R1 seat capacities: $(R1_seats_per_case[idxCase])")
+end
+
 #### Plotting
 # Flatten the (case, seat-capacity) grid into parallel lists, one entry per curve
 case_combos = [(idxCase, idxSeat) for idxCase in eachindex(case_folders) for idxSeat in eachindex(seat_caps)]
@@ -120,3 +144,14 @@ end
 # xlims!(p, 0, 6000)
 ylims!(p, 0, 30)
 savefig(p,joinpath(save_dir,"$(save_prefi)_PRD.png"))
+
+# R1 payload vs range across all seat capacities, one curve per case
+p_R1 = plot(xlabel="R1 Range [nmi]", ylabel="R1 Payload Weight [Ton]", dpi=800, legend=:best)
+for idxCase in eachindex(case_folders)
+    color = plt_linecolor[idxCase]
+    plot!(p_R1, R1_range_per_case[idxCase] ./ 1852.0,
+                R1_wpay_per_case[idxCase] ./ 9.81 ./ 1000.0,
+                marker=:circle, mc=color, msc=color, color=color, lw=2,
+                linestyle=plt_linestyle[idxCase], label=caseNams[idxCase])
+end
+savefig(p_R1,joinpath(save_dir,"$(save_prefi)_R1.png"))
