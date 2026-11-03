@@ -124,7 +124,7 @@ println("Saved tail-mission L/D plot to $(joinpath(save_dir, save_name_LD))")
 #### Plotting: percentage OAG-weighted PFEI penalty of case 2 (Ethanol) relative to case 1 (Jet), common seat capacities
 scs_common = sort(collect(intersect(keys(results[1]), keys(results[2]))))
 penalty_pct = [100.0 * (results[2][sc].weighted_PFEI - results[1][sc].weighted_PFEI) / results[1][sc].weighted_PFEI for sc in scs_common]
-p_pen = plot(scs_common, penalty_pct, xlabel="Seat Capacity", ylabel="$(caseNames[2]) OAG-Weighted PFEI Penalty [%]",
+p_pen = plot(scs_common, penalty_pct, xlabel="Seat Capacity", ylabel="$(caseNames[2]) Mission-averaged PFEI Penalty [%]",
              dpi=800, legend=false, color=plt_linecolor[2], lw=2, marker=:circle, mc=plt_linecolor[2], msc=plt_linecolor[2])
 hline!(p_pen, [0.0], color=:black, lw=1)
 savefig(p_pen, joinpath(save_dir, save_name_penalty))

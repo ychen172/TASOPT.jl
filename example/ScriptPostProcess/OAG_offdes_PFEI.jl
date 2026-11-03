@@ -218,7 +218,7 @@ plot_cases_specified("Seat Capacity", "Wing Surface Area [m²]",
                      joinpath(save_dir_sub,"WingSurfaceArea.png");linecolors=plt_linecolor, markers=plt_marker, linestyles=plt_linestyle)
 #
 
-plot_cases_specified("Seat Capacity", "OAG-Weighted Off-Design PFEI [J/J]",
+plot_cases_specified("Seat Capacity", "Mission-averaged PFEI [J/J]",
                      xdata_design,
                      oag_weighted_PFEI,
                      caseNames,
